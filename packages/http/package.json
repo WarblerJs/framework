@@ -1,0 +1,25 @@
+{
+  "name": "@warbler/http",
+  "version": "0.1.0",
+  "type": "module",
+  "private": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./body": "./src/body/index.ts",
+    "./compiled": "./src/compiled/index.ts",
+    "./config": "./src/config/index.ts",
+    "./cookies": "./src/cookies/index.ts",
+    "./csrf": "./src/csrf/index.ts",
+    "./native": "./src/native/index.ts",
+    "./security": "./src/security/index.ts",
+    "./server": "./src/server/index.ts",
+    "./static": "./src/static/index.ts"
+  },
+  "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@warbler/config": "workspace:*",
+    "@warbler/core": "workspace:*",
+    "@warbler/transport": "workspace:*"
+  },
+  "devDependencies": { "typescript": "^5.9.2" }
+}

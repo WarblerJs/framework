@@ -1,0 +1,22 @@
+{
+  "name": "@warbler/config",
+  "version": "0.1.0",
+  "type": "module",
+  "private": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./discovery": "./src/discovery/index.ts",
+    "./parser": "./src/parser/index.ts",
+    "./validator": "./src/validator/index.ts",
+    "./normalize": "./src/normalize/index.ts",
+    "./types": "./src/types/index.ts",
+    "./errors": "./src/errors/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2"
+  }
+}
