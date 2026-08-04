@@ -63,6 +63,7 @@ describe("development", () => {
     let session: import("../src").DevSession | undefined;
     const launcher: DevelopmentRuntimeLauncher = {
       start(_root, compiler) {
+        expect(capture.lines.join("\n")).not.toContain("Runtime is running");
         starts++;
         expect(compiler.generatedApplication).toBeDefined();
         return { stop() { stops++; } };
@@ -75,9 +76,30 @@ describe("development", () => {
     });
     expect(code).toBe(0);
     expect(starts).toBe(1);
+    expect(capture.lines.join("\n")).toContain("Runtime is running");
+    expect(capture.lines.join("\n")).toContain("Executable bindings generated");
+    expect(capture.lines.join("\n")).toContain("Filesystem watcher disabled");
     expect(await Bun.file(join(project.root, ".warbler/generated/application.generated.ts")).exists()).toBe(true);
     await session?.stop();
     expect(stops).toBe(1);
+  });
+  test("dev JSON progress is structured and contains no ANSI escapes", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    let session: import("../src").DevSession | undefined;
+    const capture = captureOutput();
+    const code = await runCLI(["dev", "--json", "--verbose", "--no-watch", "--project", project.root], {
+      output: capture.output,
+      runtimeLauncher: { start() { return { stop() {} }; } },
+      waitForDevSession: false,
+      onDevSession(value) { session = value; },
+    });
+    expect(code).toBe(0);
+    expect(capture.lines.every((line) => {
+      JSON.parse(line);
+      return !line.includes("\u001b");
+    })).toBe(true);
+    expect(capture.lines.some((line) => line.includes('"stage":"compiler"'))).toBe(true);
+    await session?.stop();
   });
   test("watch path filtering ignores generated and dependency paths", () => {
     expect(isRelevantSourcePath("src/graphs/user.ts")).toBe(true);

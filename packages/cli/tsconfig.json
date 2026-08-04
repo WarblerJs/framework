@@ -3,6 +3,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
+      "@warbler/console": ["../console/src/index.ts"],
       "@warbler/compiler": ["../compiler/src/index.ts"],
       "@warbler/config": ["../config/src/index.ts"],
       "@warbler/config/validator": ["../config/src/validator/index.ts"],

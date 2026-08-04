@@ -1,0 +1,81 @@
+import type * as z from "zod";
+import type { TranslationParameters, ValidationMessage } from "@warbler/i18n";
+
+export type RuleShape = Readonly<Record<string, z.ZodType>>;
+export type ValidationSource = "body" | "query" | "path" | "headers" | "cookies" | "message" | "metadata";
+
+export interface RequestValidator<
+  TRules extends RuleShape = RuleShape,
+  TQuery extends RuleShape = RuleShape,
+  TPath extends RuleShape = RuleShape,
+  THeaders extends RuleShape = RuleShape,
+  TCookies extends RuleShape = RuleShape,
+  TMessage extends RuleShape = RuleShape,
+  TMetadata extends RuleShape = RuleShape,
+  TMapped = InferShape<TRules>,
+> {
+  readonly rules?: TRules;
+  readonly queryRules?: TQuery;
+  readonly pathRules?: TPath;
+  readonly headerRules?: THeaders;
+  readonly cookieRules?: TCookies;
+  readonly messageRules?: TMessage;
+  readonly metadataRules?: TMetadata;
+  readonly mapV?: (value: InferShape<TRules>) => TMapped;
+  readonly mapK?: Readonly<Record<string, string>>;
+}
+
+export interface ValidationInput {
+  readonly value?: unknown;
+  readonly query?: unknown;
+  readonly path?: unknown;
+  readonly headers?: unknown;
+  readonly cookies?: unknown;
+  readonly message?: unknown;
+  readonly metadata?: unknown;
+}
+
+export interface ValidationIssue {
+  readonly source: ValidationSource;
+  readonly path: readonly PropertyKey[];
+  readonly field: string;
+  readonly code: string;
+  readonly message: ValidationMessage;
+}
+export type ValidationErrors = Readonly<Record<string, readonly ValidationIssue[]>>;
+export type ValidationResult<TOutput = unknown> =
+  | Readonly<{
+    valid: true; value: TOutput; query?: unknown; path?: unknown; headers?: unknown;
+    cookies?: unknown; message?: unknown; metadata?: unknown;
+  }>
+  | Readonly<{ valid: false; errors: ValidationErrors }>;
+
+export interface CompiledValidator<TOutput = unknown> {
+  readonly id: number;
+  readonly flags: number;
+  readonly bodySchema?: z.ZodType;
+  readonly querySchema?: z.ZodType;
+  readonly pathSchema?: z.ZodType;
+  readonly headerSchema?: z.ZodType;
+  readonly cookieSchema?: z.ZodType;
+  readonly messageSchema?: z.ZodType;
+  readonly metadataSchema?: z.ZodType;
+  readonly mapValue?: (value: Readonly<Record<string, unknown>>) => unknown;
+  readonly keyMap?: Readonly<Record<string, string>>;
+  execute(input: ValidationInput): ValidationResult<TOutput>;
+}
+
+type InferShape<T> = T extends RuleShape ? z.output<z.ZodObject<T>> : unknown;
+type RulesOf<T, K extends PropertyKey> = T extends Readonly<Record<K, infer S>> ? S extends RuleShape ? InferShape<S> : unknown : unknown;
+type MapValueOutput<T> = T extends Readonly<{ mapV: (...input: readonly never[]) => infer O }> ? O : RulesOf<T, "rules">;
+type StringKeys<T> = Extract<keyof T, string>;
+type MapRecord<T> = T extends Readonly<{ mapK: infer M }> ? M extends Readonly<Record<string, string>> ? M : {} : {};
+type MapTargets<M> = M[keyof M] & string;
+type RenameKeys<T, M extends Readonly<Record<string, string>>> =
+  Omit<T, Extract<keyof M, keyof T>> & { readonly [K in MapTargets<M>]: T[Extract<{ [S in keyof M]: M[S] extends K ? S : never }[keyof M], keyof T>] };
+
+export type InferValidatorBody<T> = RulesOf<T, "rules">;
+export type InferValidatorQuery<T> = RulesOf<T, "queryRules">;
+export type InferValidatorPath<T> = RulesOf<T, "pathRules">;
+export type InferValidatorOutput<T> = RenameKeys<MapValueOutput<T>, MapRecord<T>>;
+export type ValidationTranslator = (key: string, parameters?: TranslationParameters) => string;

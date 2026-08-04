@@ -1,7 +1,7 @@
 export const httpConfig = {
-  host: "127.0.0.1",
+  host: "0.0.0.0",
   port: 3000,
-  allowedHosts: ["127.0.0.1", "localhost"],
+  allowedHosts: ["127.0.0.1","192.168.1.3", "localhost"],
   request: {
     body: {
       enabled: true,

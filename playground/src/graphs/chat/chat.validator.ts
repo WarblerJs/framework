@@ -1,30 +1,16 @@
-import type { SocketMessage, SocketValidationResult } from "@warbler/websocket";
+import { v, type InferValidatorOutput } from "@warbler/validators";
 
-export interface ChatMessageInput {
-  readonly roomId: string;
-  readonly content: string;
-}
+export const chatMessageValidator = {
+  rules: {
+    roomId: v.string("validators.invalid_room").trim().min(1, "validators.invalid_room"),
+    content: v.string("validators.invalid_content").trim().min(1, "validators.invalid_content").max(2_000, "validators.content_too_long"),
+  },
+} as const;
 
-function validData(value: unknown): value is ChatMessageInput {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const record = value as Readonly<Record<string, unknown>>;
-  return typeof record.roomId === "string" && record.roomId.trim().length > 0
-    && typeof record.content === "string" && record.content.trim().length > 0
-    && record.content.length <= 2_000;
-}
+export const roomJoinValidator = {
+  rules: {
+    roomId: v.string("validators.invalid_room").trim().min(1, "validators.invalid_room"),
+  },
+} as const;
 
-export function chatMessageValidator(input: unknown): SocketValidationResult {
-  if (typeof input !== "object" || input === null || !("message" in input)) return Object.freeze({ valid: false });
-  const message = input.message as SocketMessage<unknown>;
-  return validData(message.data) ? true : Object.freeze({ valid: false });
-}
-
-export function roomJoinValidator(input: unknown): SocketValidationResult {
-  if (typeof input !== "object" || input === null || !("message" in input)) return Object.freeze({ valid: false });
-  const message = input.message as SocketMessage<unknown>;
-  return typeof message.data === "object" && message.data !== null
-    && "roomId" in message.data && typeof message.data.roomId === "string"
-    && message.data.roomId.trim().length > 0
-    ? true
-    : Object.freeze({ valid: false });
-}
+export type ChatMessageInput = InferValidatorOutput<typeof chatMessageValidator>;

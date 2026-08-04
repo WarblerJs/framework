@@ -8,11 +8,11 @@ import { SourceWatcher } from "./source-watcher";
 /** Managed Runtime handle used by development orchestration. */
 export interface DevelopmentRuntimeHandle {
   stop(): void | Promise<void>;
-  reload?(compiler: CompilerContext): boolean | Promise<boolean>;
 }
 /** Runtime launcher abstraction consumed until Compiler emits executable bindings. */
 export interface DevelopmentRuntimeLauncher {
-  start(projectRoot: string, compiler: CompilerContext, overrides?: DevelopmentRuntimeOverrides): DevelopmentRuntimeHandle | Promise<DevelopmentRuntimeHandle>;
+  prepare?(projectRoot: string, overrides?: DevelopmentRuntimeOverrides, report?: DevelopmentReporter): unknown | Promise<unknown>;
+  start(projectRoot: string, compiler: CompilerContext, overrides?: DevelopmentRuntimeOverrides, report?: DevelopmentReporter, preparation?: unknown): DevelopmentRuntimeHandle | Promise<DevelopmentRuntimeHandle>;
 }
 /** Explicit development listener overrides. */
 export interface DevelopmentRuntimeOverrides {
@@ -20,6 +20,15 @@ export interface DevelopmentRuntimeOverrides {
   readonly port?: string;
   readonly mode?: string;
 }
+/** Structured development progress emitted by orchestration stages. */
+export interface DevelopmentEvent {
+  readonly stage: "project" | "config" | "compiler" | "bindings" | "runtime" | "transport" | "watcher" | "rebuild" | "reload" | "restart";
+  readonly status: "started" | "success" | "failure" | "skipped";
+  readonly message: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+/** Non-blocking observer for development progress and rebuild diagnostics. */
+export type DevelopmentReporter = (event: DevelopmentEvent) => void;
 /** Development session lifecycle state. */
 export type DevSessionState = "starting" | "running" | "compiling" | "reloading" | "restarting" | "failed" | "stopping" | "stopped";
 /** Typed managed development session. */
@@ -37,29 +46,39 @@ export class ManagedDevSession implements DevSession {
   readonly #launcher: DevelopmentRuntimeLauncher;
   readonly #watchEnabled: boolean;
   readonly #overrides: DevelopmentRuntimeOverrides;
+  readonly #report: DevelopmentReporter;
   readonly #closed = Promise.withResolvers<void>();
   #state: DevSessionState = "starting";
   #runtime: DevelopmentRuntimeHandle | undefined;
+  #activeCompiler: CompilerContext | undefined;
+  #activePreparation: unknown;
   #watcher: SourceWatcher | undefined;
-  #artifactSignature = "";
   #buildNumber = 0;
   readonly #pendingPaths = new Set<string>();
   #rebuildPromise: Promise<void> | undefined;
   #signalHandler: (() => void) | undefined;
   /** Creates an unstarted development session. */
-  public constructor(projectRoot: string, launcher: DevelopmentRuntimeLauncher, watchEnabled: boolean, overrides: DevelopmentRuntimeOverrides = {}) {
-    this.#projectRoot = projectRoot; this.#launcher = launcher; this.#watchEnabled = watchEnabled; this.#overrides = Object.freeze({ ...overrides });
+  public constructor(projectRoot: string, launcher: DevelopmentRuntimeLauncher, watchEnabled: boolean, overrides: DevelopmentRuntimeOverrides = {}, report: DevelopmentReporter = () => {}) {
+    this.#projectRoot = projectRoot; this.#launcher = launcher; this.#watchEnabled = watchEnabled; this.#overrides = Object.freeze({ ...overrides }); this.#report = report;
   }
   public get state(): DevSessionState { return this.#state; }
   public get projectRoot(): string { return this.#projectRoot; }
   public get buildNumber(): number { return this.#buildNumber; }
   /** Performs initial compilation and starts the Runtime abstraction. */
   public async start(): Promise<this> {
+    const preparation = await this.#launcher.prepare?.(this.#projectRoot, this.#overrides, this.#report);
     const compiler = await this.#compile();
-    this.#runtime = await this.#launcher.start(this.#projectRoot, compiler, this.#overrides);
+    this.#runtime = await this.#launcher.start(this.#projectRoot, compiler, this.#overrides, this.#report, preparation);
+    this.#activeCompiler = compiler;
+    this.#activePreparation = preparation;
+    this.#emit("runtime", "success", "Runtime is running.");
     if (this.#watchEnabled) {
+      this.#emit("watcher", "started", "Starting filesystem watcher.");
       this.#watcher = new SourceWatcher(this.#projectRoot, (paths) => this.notifyChanges(paths));
       this.#watcher.start();
+      this.#emit("watcher", "success", "Watching for source changes.");
+    } else {
+      this.#emit("watcher", "skipped", "Filesystem watching is disabled.");
     }
     this.#installSignals(); this.#state = "running"; return this;
   }
@@ -81,16 +100,30 @@ export class ManagedDevSession implements DevSession {
     this.#state = "stopped"; this.#closed.resolve();
   }
   async #compile(): Promise<CompilerContext> {
+    this.#emit("compiler", "started", "Compiling application.");
     const compiler = await compileProject(this.#projectRoot);
     const errors = compiler.diagnostics.filter((diagnostic) => diagnostic.category === "error");
     await atomicWrite(this.#projectRoot, ".warbler/diagnostics/compiler.json", `${JSON.stringify(compiler.diagnostics, null, 2)}\n`, true);
-    if (errors.length > 0) throw new CLIError("CLI2002", `Compilation failed with ${errors.length} error(s).`, ExitCode.FAILURE);
+    if (errors.length > 0) {
+      for (const diagnostic of errors) {
+        this.#emit("compiler", "failure", formatCompilerDiagnostic(diagnostic), Object.freeze({
+          code: diagnostic.code,
+          file: diagnostic.sourceFile,
+          line: diagnostic.line,
+          column: diagnostic.column,
+        }));
+      }
+      throw new CLIError("CLI2002", `Compilation failed with ${errors.length} error(s).`, ExitCode.FAILURE);
+    }
     if (compiler.generatedApplication === undefined || compiler.applicationEntry === undefined || compiler.fingerprint === undefined) {
       throw new CLIError("CLI2003", "Compiler did not emit executable application bindings.", ExitCode.FAILURE);
     }
-    const files = compiler.generatedApplication.files;
-    this.#artifactSignature = JSON.stringify(files);
     this.#buildNumber++;
+    this.#emit("compiler", "success", `Application compiled (build ${this.#buildNumber}).`, Object.freeze({ build: this.#buildNumber }));
+    this.#emit("bindings", "success", "Executable bindings generated.", Object.freeze({
+      entry: compiler.applicationEntry,
+      fingerprint: compiler.fingerprint,
+    }));
     return compiler;
   }
   async #drainChanges(): Promise<void> {
@@ -104,22 +137,53 @@ export class ManagedDevSession implements DevSession {
     if (this.#state !== "running") return;
     this.#state = "reloading";
     try {
-      if (paths.every((path) => path.startsWith("public/") || path.startsWith("resources/"))) return;
-      const previous = this.#artifactSignature;
+      this.#emit("rebuild", "started", `Change detected in ${paths.length} path(s).`, Object.freeze({ paths }));
+      if (paths.every((path) => path.startsWith("public/") || path.startsWith("resources/"))) {
+        this.#emit("rebuild", "skipped", "Static or resource change requires no Runtime restart.");
+        return;
+      }
       const configurationChange = paths.some((path) => path === "package.json" || path === "tsconfig.json" || path.includes("src/config/"));
+      const preparation = configurationChange
+        ? await this.#launcher.prepare?.(this.#projectRoot, this.#overrides, this.#report)
+        : this.#activePreparation;
       this.#state = "compiling";
       const compiler = await this.#compile();
-      this.#state = "reloading";
-      if (this.#artifactSignature === previous && !configurationChange) return;
-      const reloaded = !configurationChange && this.#runtime?.reload !== undefined && await this.#runtime.reload(compiler);
-      if (!reloaded) {
-        this.#state = "restarting";
-        await this.#runtime?.stop();
-        this.#runtime = await this.#launcher.start(this.#projectRoot, compiler, this.#overrides);
+      this.#emit("bindings", "success", "Generated bindings updated on disk.", {
+        build: this.#buildNumber,
+        fingerprint: compiler.fingerprint,
+      });
+      this.#state = "restarting";
+      const previousBuild = this.#buildNumber - 1;
+      this.#emit("restart", "started", `Stopping Runtime #${previousBuild}.`, { build: previousBuild });
+      const previousCompiler = this.#activeCompiler;
+      const previousPreparation = this.#activePreparation;
+      await this.#runtime?.stop();
+      this.#runtime = undefined;
+      this.#emit("runtime", "success", `Runtime #${previousBuild} disposed.`, { build: previousBuild });
+      try {
+        this.#emit("restart", "started", `Creating Runtime #${this.#buildNumber}.`, { build: this.#buildNumber });
+        this.#runtime = await this.#launcher.start(this.#projectRoot, compiler, this.#overrides, this.#report, preparation);
+        this.#activeCompiler = compiler;
+        this.#activePreparation = preparation;
+        this.#emit("restart", "success", `Runtime #${this.#buildNumber} ready.`, { build: this.#buildNumber });
+      } catch (cause) {
+        this.#emit("restart", "failure", "New Runtime failed; restoring the previous valid build.");
+        if (previousCompiler !== undefined) {
+          this.#runtime = await this.#launcher.start(this.#projectRoot, previousCompiler, this.#overrides, this.#report, previousPreparation);
+          this.#activeCompiler = previousCompiler;
+          this.#activePreparation = previousPreparation;
+          this.#emit("restart", "success", `Previous Runtime #${previousBuild} restored.`, { build: previousBuild });
+        }
+        throw cause;
       }
-    } catch {
-      // Compiler diagnostics were persisted; keep the last valid Runtime running.
-    } finally { if (!this.#isStopping()) this.#state = "running"; }
+    } catch (cause) {
+      this.#emit("rebuild", "failure", safeMessage(cause));
+    } finally {
+      if (!this.#isStopping()) {
+        this.#state = "running";
+        if (this.#watchEnabled) this.#emit("watcher", "success", "Watching for source changes.");
+      }
+    }
   }
   #installSignals(): void {
     this.#signalHandler = (): void => { void this.stop(); };
@@ -130,4 +194,12 @@ export class ManagedDevSession implements DevSession {
     process.off("SIGINT", this.#signalHandler); process.off("SIGTERM", this.#signalHandler); this.#signalHandler = undefined;
   }
   #isStopping(): boolean { return this.#state === "stopping" || this.#state === "stopped"; }
+  #emit(stage: DevelopmentEvent["stage"], status: DevelopmentEvent["status"], message: string, metadata?: Readonly<Record<string, unknown>>): void {
+    this.#report(Object.freeze({ stage, status, message, ...(metadata === undefined ? {} : { metadata }) }));
+  }
 }
+function formatCompilerDiagnostic(diagnostic: CompilerContext["diagnostics"][number]): string {
+  const location = diagnostic.sourceFile.length === 0 ? "" : `${diagnostic.sourceFile}:${diagnostic.line}:${diagnostic.column} `;
+  return `${location}${diagnostic.code} ${diagnostic.message}`;
+}
+function safeMessage(cause: unknown): string { return cause instanceof Error ? cause.message : "Unknown development failure."; }

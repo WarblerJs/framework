@@ -18,7 +18,7 @@ async function phase2Project(): Promise<string> {
   const packagesRoot = resolve(import.meta.dir, "..", "..");
   const scope = join(root, "node_modules", "@warbler");
   mkdirSync(scope, { recursive: true });
-  for (const name of ["config", "core", "http", "runtime", "transport", "websocket"]) {
+  for (const name of ["config", "console", "core", "http", "i18n", "runtime", "transport", "validators", "websocket"]) {
     symlinkSync(join(packagesRoot, name), join(scope, name));
   }
   const typesScope = join(root, "node_modules", "@types");
@@ -32,8 +32,9 @@ async function phase2Project(): Promise<string> {
     import { Graph, Service, ProviderScope, inject } from "@warbler/core";
     import { Controller, Get, Post } from "@warbler/http";
     import { SocketController, Subscribe, OnOpen } from "@warbler/websocket";
-    export const ValidateMessage = (value: unknown) => value;
-    export const ValidateRequest = (value: unknown) => value;
+    import { v } from "@warbler/validators";
+    export const ValidateMessage = { rules: { value: v.string("invalid_string") } };
+    export const ValidateRequest = { rules: { value: v.string("invalid_string") } };
     export class AuthGuard {}
     export const SocketAuthGuard = () => true;
     export class AuditMiddleware {}

@@ -10,7 +10,7 @@ import { pathToFileURL } from "node:url";
 import { loadCLIConfig, loadEnabledTransportConfigs, resolveEnabledTransports } from "../config";
 import { CLIError } from "../errors";
 import { ExitCode } from "../types";
-import type { DevelopmentRuntimeHandle, DevelopmentRuntimeLauncher, DevelopmentRuntimeOverrides } from "./dev-session";
+import type { DevelopmentReporter, DevelopmentRuntimeHandle, DevelopmentRuntimeLauncher, DevelopmentRuntimeOverrides } from "./dev-session";
 
 const TRANSPORT_PACKAGES: Readonly<Record<TransportName, Readonly<{ packageName: string; factory: string }>>> = Object.freeze({
   http: Object.freeze({ packageName: "@warbler/http", factory: "createHttpRuntimeLauncher" }),
@@ -23,16 +23,36 @@ const TRANSPORT_PACKAGES: Readonly<Record<TransportName, Readonly<{ packageName:
 
 /** In-process launcher consuming only Compiler-generated bindings and Runtime public APIs. */
 export class GeneratedBindingsRuntimeLauncher implements DevelopmentRuntimeLauncher {
-  public async start(projectRoot: string, compiler: CompilerContext, overrides: DevelopmentRuntimeOverrides = {}): Promise<DevelopmentRuntimeHandle> {
+  public async prepare(projectRoot: string, overrides: DevelopmentRuntimeOverrides = {}, report: DevelopmentReporter = () => {}): Promise<RuntimePreparation> {
+    report(event("config", "started", "Loading Runtime configuration."));
+    const runtimeConfig = applyOverrides(await loadCLIConfig(projectRoot), overrides);
+    const enabledTransports = resolveEnabledTransports(runtimeConfig);
+    report(event("config", "success", "Runtime configuration loaded."));
+    report(event("transport", "started", "Loading enabled transport configurations.", { transports: enabledTransports }));
+    const transportConfigs = await loadEnabledTransportConfigs(runtimeConfig, projectRoot);
+    report(event("transport", "success", "Enabled transport configurations loaded.", { transports: enabledTransports }));
+    return Object.freeze({ runtimeConfig, enabledTransports, transportConfigs });
+  }
+  public async start(projectRoot: string, compiler: CompilerContext, overrides: DevelopmentRuntimeOverrides = {}, report: DevelopmentReporter = () => {}, preparation?: unknown): Promise<DevelopmentRuntimeHandle> {
     if (compiler.applicationEntry === undefined || compiler.fingerprint === undefined) {
       throw new CLIError("CLI2003", "Compiler did not emit a generated application module.", ExitCode.FAILURE);
     }
-    const runtimeConfig = applyOverrides(await loadCLIConfig(projectRoot), overrides);
-    const transportConfigs = await loadEnabledTransportConfigs(runtimeConfig, projectRoot);
+    const prepared = isRuntimePreparation(preparation)
+      ? preparation
+      : await this.prepare(projectRoot, overrides, report);
+    const { runtimeConfig, enabledTransports, transportConfigs } = prepared;
+    report(event("bindings", "started", `Importing ${compiler.applicationEntry}?build=${compiler.fingerprint}.`, {
+      entry: compiler.applicationEntry,
+      fingerprint: compiler.fingerprint,
+    }));
     const application = await importGeneratedApplication(compiler.applicationEntry, compiler.fingerprint);
-    const transportLaunchers = await loadTransportLaunchers(resolveEnabledTransports(runtimeConfig), projectRoot);
+    report(event("bindings", "success", "Generated application bindings imported."));
+    report(event("transport", "started", "Creating enabled Runtime transport launchers.", { transports: enabledTransports }));
+    const transportLaunchers = await loadTransportLaunchers(enabledTransports, projectRoot);
+    report(event("transport", "success", "Runtime transport launchers created.", { transports: enabledTransports }));
     let runtime: RuntimeHandle;
     try {
+      report(event("runtime", "started", "Starting Runtime."));
       runtime = await startRuntime({
         application,
         runtimeConfig,
@@ -42,10 +62,25 @@ export class GeneratedBindingsRuntimeLauncher implements DevelopmentRuntimeLaunc
         transportConfigLoader: async (transport) => transportConfigs.get(transport),
       });
     } catch (cause) {
+      report(event("runtime", "failure", safeMessage(cause)));
       throw new CLIError("CLI2006", "Runtime failed to start from generated application bindings.", ExitCode.RUNTIME_FAILURE, safeMessage(cause));
     }
-    return Object.freeze({ stop: () => runtime.stop({ reason: "development-restart" }) });
+    report(event("transport", "success", "Enabled transports are running.", {
+      transports: runtime.transports.map((transport) => transport.kind),
+    }));
+    return Object.freeze({
+      stop: () => runtime.stop({
+        reason: "development-restart",
+        closeActiveConnections: true,
+        timeoutMs: 10_000,
+      }),
+    });
   }
+}
+interface RuntimePreparation {
+  readonly runtimeConfig: RuntimeConfig;
+  readonly enabledTransports: readonly TransportName[];
+  readonly transportConfigs: ReadonlyMap<TransportName, Readonly<unknown>>;
 }
 
 /** Backward-compatible class name now backed by generated bindings rather than src/main.ts. */
@@ -126,4 +161,18 @@ function isGeneratedApplicationBindings(value: unknown): value is GeneratedAppli
 function isRuntimeTransportLauncher(value: unknown): value is RuntimeTransportLauncher {
   return typeof value === "object" && value !== null && "kind" in value && typeof value.kind === "string" && "start" in value && typeof value.start === "function";
 }
+function isRuntimePreparation(value: unknown): value is RuntimePreparation {
+  return typeof value === "object" && value !== null
+    && "runtimeConfig" in value && typeof value.runtimeConfig === "object" && value.runtimeConfig !== null
+    && "enabledTransports" in value && Array.isArray(value.enabledTransports)
+    && "transportConfigs" in value && value.transportConfigs instanceof Map;
+}
 function safeMessage(cause: unknown): string { return cause instanceof Error ? cause.message : "Unknown failure"; }
+function event(
+  stage: Parameters<DevelopmentReporter>[0]["stage"],
+  status: Parameters<DevelopmentReporter>[0]["status"],
+  message: string,
+  metadata?: Readonly<Record<string, unknown>>,
+): Parameters<DevelopmentReporter>[0] {
+  return Object.freeze({ stage, status, message, ...(metadata === undefined ? {} : { metadata }) });
+}

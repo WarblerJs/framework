@@ -1,0 +1,8 @@
+{
+  "username_not_valid": "Username is invalid.",
+  "invalid_page": "Page must be a positive number.",
+  "invalid_id": "ID must be a positive number.",
+  "invalid_room": "Room is invalid.",
+  "invalid_content": "Message content is invalid.",
+  "content_too_long": "Message content is too long."
+}

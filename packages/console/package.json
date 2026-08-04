@@ -1,0 +1,9 @@
+{
+  "name": "@warbler/console",
+  "version": "0.1.0",
+  "type": "module",
+  "private": false,
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
+  "devDependencies": { "@types/bun": "latest", "typescript": "^5.9.2" }
+}

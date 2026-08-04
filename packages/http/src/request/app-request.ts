@@ -1,3 +1,5 @@
+import type { TranslationParameters } from "@warbler/i18n";
+
 /** Immutable request representation passed to Warbler controller handlers. */
 export interface AppRequest<
   TBody = unknown,
@@ -12,4 +14,6 @@ export interface AppRequest<
   readonly headers: Headers;
   readonly cookies: Readonly<Record<string, string>>;
   readonly context: TContext;
+  readonly locale: string;
+  tr(key: string, parameters?: TranslationParameters): string;
 }

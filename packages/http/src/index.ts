@@ -1,6 +1,6 @@
 export { Controller } from "./controller";
 export { Delete, Get, Head, Options, Patch, Post, Put, Sse } from "./route";
-export type { AppRequest, RequestContext } from "./request";
+export { prepareHttpValidationInput, type AppRequest, type RequestContext } from "./request";
 export {
   ArchiveRes,
   DownloadRes,

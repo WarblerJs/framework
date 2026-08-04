@@ -5,6 +5,8 @@ import {
   type RuntimeConfig,
   type TransportName,
 } from "@warbler/config";
+import { Console } from "@warbler/console";
+import { loadProjectTranslator, localizeRequest, type CatalogTranslator } from "@warbler/i18n";
 import { validateApplicationBindings, type ValidatedBindingIndexes } from "../bindings";
 import { RootProviderContainer, GraphProviderContainer } from "../container/generated-provider-containers";
 import { ControllerInstanceTable } from "../controllers";
@@ -74,6 +76,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
   #socketPipelines: Readonly<Record<string, (input: unknown) => unknown>> = Object.freeze({});
   #abortListener: (() => void) | undefined;
   #stopPromise: Promise<void> | undefined;
+  #translator: CatalogTranslator | undefined;
 
   public constructor(options: StartRuntimeOptions) { this.#options = Object.freeze({ ...options }); }
   public get state(): RuntimeStateValue { return this.#state; }
@@ -87,10 +90,13 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
 
   /** Validates, eagerly constructs, starts enabled transports, and reaches RUNNING. */
   public async start(): Promise<this> {
+    const timer = Console.timer("Runtime");
+    Console.runtime("starting");
     this.#transition(RuntimeState.CREATED, RuntimeState.VALIDATING);
     try {
       this.#indexes = validateApplicationBindings(this.application);
       this.#state = RuntimeState.BOOTSTRAPPING;
+      Console.debug("Loading providers.");
       this.#root = new RootProviderContainer(this.#indexes.providers);
       const graphIds = Object.values(this.application.application.graphIds).sort((left, right) => left - right);
       this.#graphs = Object.freeze(graphIds.map((graphId) => {
@@ -100,8 +106,11 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       }));
       await this.#root.initialize();
       for (const graph of this.#graphs) await graph.initialize();
+      Console.debug("Providers loaded.", { root: this.application.providers.filter((provider) => provider.scope === "root").length });
       this.#controllers = new ControllerInstanceTable(this.#indexes.controllers, this.#graphMap);
       await this.#controllers.initialize();
+      Console.debug("Controllers and handlers loaded.", { controllers: this.application.controllers.length, handlers: this.application.handlers.length });
+      this.#translator = await loadProjectTranslator(this.#options.workspaceRoot ?? process.cwd());
       this.#routes = this.#createHttpRoutes();
       this.#socketPipelines = this.#createSocketPipelines();
       const config = await this.#loadConfiguration();
@@ -116,8 +125,11 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
         }
       }
       this.#state = RuntimeState.RUNNING;
+      Console.runtime("ready", { duration: timer.end(), transports: this.#ownedTransports.map((item) => item.running.kind) });
       return this;
     } catch (cause) {
+      const duration = timer.end();
+      Console.error("Runtime startup failed.", { duration, error: safeError(cause) });
       this.#state = RuntimeState.FAILED;
       await this.#rollback();
       if (cause instanceof RuntimeError) throw cause;
@@ -148,6 +160,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     return this.#stopPromise;
   }
   async #performStop(options: RuntimeStopOptions): Promise<void> {
+    Console.runtime("stopping", { reason: sanitizeReason(options.reason) });
     this.#abortController.abort(sanitizeReason(options.reason));
     let failure: unknown;
     try { await withTimeout(this.#stopTransports(options), options.timeoutMs); } catch (cause) { failure ??= cause; }
@@ -158,6 +171,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     try { await this.#root?.dispose(); } catch (cause) { failure ??= cause; }
     this.#removeAbortListener();
     this.#state = RuntimeState.STOPPED;
+    Console.runtime("stopped");
     if (failure !== undefined) throw new RuntimeShutdownError(`${RuntimeDiagnosticCode.SHUTDOWN_FAILED}: Runtime shutdown completed with failures.`, { cause: failure });
   }
   async #loadConfiguration(): Promise<RuntimeConfig> {
@@ -185,8 +199,10 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
         signal: this.#abortController.signal,
       }) satisfies RuntimeTransportStartInput;
       try {
+        Console.debug(`Starting ${kind} transport.`);
         const handle = await launcher.start(input);
         this.#ownedTransports.push(Object.freeze({ launcher, running: Object.freeze({ kind, handle }) }));
+        Console.debug(`${kind} transport started.`);
       } catch (cause) {
         throw new RuntimeTransportError(`${RuntimeDiagnosticCode.TRANSPORT_START_FAILED}: Transport "${kind}" failed to start.`, { cause });
       }
@@ -209,10 +225,22 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     const http = this.application.http;
     if (http === undefined) return Object.freeze({});
     const pipelines = this.application.application.routeTable.map((record) => this.#compileRecordPipeline(record, true));
-    return http.createRoutes((routeId, request) => {
+    return http.createRoutes((routeId, request, validationInput) => {
       const pipeline = pipelines[routeId];
       if (pipeline === undefined) throw new RuntimeBootstrapError(`Generated HTTP route not found: ${routeId}`);
-      const result = pipeline(request);
+      const input = this.#translator === undefined
+        ? request
+        : localizeRequest(request, this.#translator, this.#translator.config);
+      const pipelineInput = validationInput === undefined
+        ? input
+        : Object.freeze({
+          ...(typeof validationInput === "object" && validationInput !== null ? validationInput : {}),
+          __request: input,
+          __translate: typeof input === "object" && input !== null && "tr" in input && typeof input.tr === "function"
+            ? ((translateRequest) => (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => translateRequest(key, parameters))(input.tr as (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => string)
+            : undefined,
+        });
+      const result = pipeline(pipelineInput);
       return normalizeHttpResult(result);
     });
   }
@@ -236,9 +264,13 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       this.invokeHandler(handlerId, http ? [validated] : socketInputs(validated, socketEvent)),
     );
     return (input: unknown): unknown => {
-      const guarded = executeGuardRange(this.#indexes!.guards, guardIds, input);
-      if (isThenable(guarded)) return guarded.then((allowed) => allowed ? runValidated(this.#indexes!.validators[validatorId], input, terminal) : http ? forbidden() : undefined);
-      return guarded ? runValidated(this.#indexes!.validators[validatorId], input, terminal) : http ? forbidden() : undefined;
+      const validationInput = http ? input : socketValidationInput(input, socketEvent);
+      return runValidated(this.#indexes!.validators[validatorId], validationInput, (validated) => {
+        const pipelineValue = http ? httpValidatedRequest(validationInput, validated) : socketValidatedEnvelope(input, validated);
+        const guarded = executeGuardRange(this.#indexes!.guards, guardIds, pipelineValue);
+        if (isThenable(guarded)) return guarded.then((allowed) => allowed ? terminal(pipelineValue) : http ? forbidden() : undefined);
+        return guarded ? terminal(pipelineValue) : http ? forbidden() : undefined;
+      }, (outcome) => http ? invalidValidationResponse(outcome.errors, validationInput) : socketValidationFailure(input, outcome.errors));
     };
   }
   async #stopTransports(options: RuntimeStopOptions): Promise<void> {
@@ -247,7 +279,11 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       const owned = this.#ownedTransports[index]!;
       const reason = sanitizeReason(options.reason);
       const stopOptions = Object.freeze({ ...options, ...(reason === undefined ? {} : { reason }) });
-      try { await owned.launcher.stop?.(owned.running.handle, stopOptions); }
+      try {
+        Console.debug(`Stopping ${owned.running.kind} transport.`);
+        await owned.launcher.stop?.(owned.running.handle, stopOptions);
+        Console.debug(`${owned.running.kind} transport stopped.`);
+      }
       catch (cause) { failure ??= cause; }
     }
     this.#ownedTransports.length = 0;
@@ -274,10 +310,15 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
 export async function startRuntime(options: StartRuntimeOptions): Promise<RuntimeHandle> {
   return new GeneratedRuntimeOwner(options).start();
 }
-function runValidated(validator: import("../generated/executable-bindings").ValidatorBinding | undefined, input: unknown, terminal: (input: unknown) => unknown): unknown {
+function runValidated(
+  validator: import("../generated/executable-bindings").ValidatorBinding | undefined,
+  input: unknown,
+  terminal: (input: unknown) => unknown,
+  onInvalid: (outcome: Readonly<{ valid: boolean; errors?: unknown }>) => unknown = () => invalidRequest(),
+): unknown {
   const result = executeValidator(validator, input);
-  if (isThenable(result)) return result.then((outcome) => outcome.valid ? terminal(outcome.value) : invalidRequest());
-  return result.valid ? terminal(result.value) : invalidRequest();
+  if (isThenable(result)) return result.then((outcome) => outcome.valid ? terminal(outcome.value) : onInvalid(outcome));
+  return result.valid ? terminal(result.value) : onInvalid(result);
 }
 function rangeIds(record: Readonly<Record<string, unknown>>, startKey: string, countKey: string, values: readonly number[] | undefined): readonly number[] {
   const start = numberField(record, startKey);
@@ -296,11 +337,88 @@ function socketInputs(value: unknown, event?: string): readonly unknown[] {
   }
   return [value];
 }
+function socketValidationInput(value: unknown, event?: string): Readonly<Record<string, unknown>> {
+  if (typeof value !== "object" || value === null || !("message" in value)) return Object.freeze({ value: undefined, metadata: Object.freeze({ event }) });
+  const message = value.message;
+  const data = typeof message === "object" && message !== null && "data" in message ? message.data : undefined;
+  return Object.freeze({ value: data, metadata: Object.freeze({ event }) });
+}
+function socketValidatedEnvelope(original: unknown, validated: unknown): unknown {
+  if (typeof original !== "object" || original === null || !("message" in original) || !("context" in original)) return original;
+  const message = original.message;
+  if (typeof message !== "object" || message === null) return original;
+  return Object.freeze({
+    message: Object.freeze({ ...message, data: validated }),
+    context: original.context,
+  });
+}
+function httpValidatedRequest(validationInput: unknown, body: unknown): unknown {
+  if (typeof validationInput !== "object" || validationInput === null || !("__request" in validationInput)) return body;
+  const request = validationInput.__request;
+  if (!(request instanceof Request)) return body;
+  const source = request as Request & Readonly<Record<string, unknown>>;
+  return Object.freeze({
+    native: request,
+    body,
+    params: source.params ?? Object.freeze({}),
+    query: source.query ?? Object.freeze({}),
+    headers: request.headers,
+    cookies: source.cookies ?? Object.freeze({}),
+    context: source.context,
+    locale: typeof source.locale === "string" ? source.locale : "en",
+    tr: typeof source.tr === "function" ? source.tr : (key: string) => key,
+  });
+}
 function isThenable<T>(value: T | Promise<T>): value is Promise<T> {
   return typeof value === "object" && value !== null && "then" in value && typeof value.then === "function";
 }
 function forbidden(): Response { return new Response("Forbidden", { status: 403 }); }
 function invalidRequest(): Response { return new Response("Invalid request", { status: 400 }); }
+function invalidValidationResponse(rawErrors: unknown, input: unknown): Response {
+  const errors = validationErrors(rawErrors);
+  const translate = translatorFromInput(input);
+  const output: Record<string, string> = Object.create(null);
+  for (const [group, issues] of Object.entries(errors)) {
+    const issue = issues[0];
+    if (issue === undefined) continue;
+    const field = group.includes(".") ? group.slice(group.indexOf(".") + 1) : group;
+    output[field] = translate(issue.key, issue.parameters);
+  }
+  return Response.json(output, { status: 400 });
+}
+function socketValidationFailure(input: unknown, rawErrors: unknown): undefined {
+  if (typeof input !== "object" || input === null || !("context" in input)) return undefined;
+  const context = input.context;
+  if (typeof context !== "object" || context === null || !("send" in context) || typeof context.send !== "function") return undefined;
+  const translate = "tr" in context && typeof context.tr === "function"
+    ? ((socketTranslate) => (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => socketTranslate(key, parameters))(context.tr as (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => string)
+    : (key: string) => key;
+  const data: Record<string, string> = Object.create(null);
+  for (const [group, issues] of Object.entries(validationErrors(rawErrors))) {
+    const issue = issues[0];
+    if (issue !== undefined) data[group.includes(".") ? group.slice(group.indexOf(".") + 1) : group] = translate(issue.key, issue.parameters);
+  }
+  context.send({ event: "validation.failed", data: Object.freeze(data) });
+  return undefined;
+}
+function validationErrors(input: unknown): Readonly<Record<string, readonly Readonly<{ key: string; parameters: Readonly<Record<string, string | number | boolean | bigint | null>> }>[]>> {
+  if (typeof input !== "object" || input === null) return Object.freeze({});
+  const output: Record<string, readonly Readonly<{ key: string; parameters: Readonly<Record<string, string | number | boolean | bigint | null>> }>[] > = Object.create(null);
+  for (const [group, value] of Object.entries(input)) {
+    if (!Array.isArray(value)) continue;
+    output[group] = Object.freeze(value.flatMap((issue): readonly Readonly<{ key: string; parameters: Readonly<Record<string, string | number | boolean | bigint | null>> }>[] => {
+      if (typeof issue !== "object" || issue === null || !("message" in issue)) return [];
+      const message = issue.message;
+      if (typeof message !== "object" || message === null || !("key" in message) || typeof message.key !== "string" || !("parameters" in message) || typeof message.parameters !== "object" || message.parameters === null) return [];
+      return [Object.freeze({ key: message.key, parameters: message.parameters as Readonly<Record<string, string | number | boolean | bigint | null>> })];
+    }));
+  }
+  return Object.freeze(output);
+}
+function translatorFromInput(input: unknown): (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => string {
+  if (typeof input === "object" && input !== null && "__translate" in input && typeof input.__translate === "function") return input.__translate as ReturnType<typeof translatorFromInput>;
+  return (key) => key;
+}
 function normalizeHttpResult(value: unknown): Response | Promise<Response> {
   if (value instanceof Response) return value;
   if (isThenable(value)) return value.then((result) => {
@@ -313,6 +431,7 @@ function sanitizeReason(reason: string | undefined): string | undefined {
   if (reason === undefined) return undefined;
   return reason.replace(/[\u0000-\u001f\u007f]/gu, "").slice(0, 123);
 }
+function safeError(cause: unknown): string { return cause instanceof Error ? cause.message : "Unknown Runtime failure"; }
 function launcherConfiguration(
   kind: KnownTransport,
   transport: Readonly<unknown>,

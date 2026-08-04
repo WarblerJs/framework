@@ -35,7 +35,7 @@ export type RuntimeMiddleware = (input: unknown, next: RuntimeMiddlewareNext) =>
 export type RuntimeValidator = (input: unknown) => unknown;
 export interface GuardBinding { readonly id: number; readonly execute: unknown }
 export interface MiddlewareBinding { readonly id: number; readonly execute: unknown }
-export interface ValidatorBinding { readonly id: number; readonly validate: unknown }
+export interface ValidatorBinding { readonly id: number; readonly flags?: number; readonly validate: unknown }
 export interface GeneratedApplicationDefinition {
   readonly strings: readonly string[];
   readonly graphIds: Readonly<Record<string, number>>;
@@ -48,7 +48,7 @@ export interface GeneratedApplicationDefinition {
   readonly socketGuards?: readonly number[];
   readonly socketMiddleware?: readonly number[];
 }
-export type HttpRouteExecutor = (routeId: number, request: Request) => Response | Promise<Response>;
+export type HttpRouteExecutor = (routeId: number, request: Request, validationInput?: unknown) => Response | Promise<Response>;
 export interface GeneratedHttpBindings {
   readonly routes: readonly Readonly<Record<string, unknown>>[];
   readonly createRoutes: (executor: HttpRouteExecutor) => Readonly<Record<string, Readonly<Record<string, RuntimeRouteHandler>>>>;

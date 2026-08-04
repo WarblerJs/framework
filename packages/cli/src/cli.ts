@@ -1,5 +1,7 @@
 import type { DevelopmentRuntimeLauncher } from "./dev/dev-session";
+import { Console } from "@warbler/console";
 import type { DevSession } from "./dev/dev-session";
+import type { DevelopmentEvent, DevelopmentReporter } from "./dev/dev-session";
 import { devCommand } from "./dev/dev-command";
 import { ApplicationEntryRuntimeLauncher } from "./dev/runtime-launcher";
 import { buildCommand } from "./build/build-command";
@@ -15,6 +17,7 @@ import { parseCLI } from "./parser";
 import { locateProject, validateProject } from "./project";
 import { startCommand } from "./start/start-command";
 import { ExitCode, type CLIContext } from "./types";
+import { basename } from "node:path";
 
 /** Injectable CLI orchestration services. */
 export interface CLIServices {
@@ -35,6 +38,16 @@ export async function runCLI(argv: readonly string[], services: CLIServices = {}
     if (parsed.flags.help === true) return runCLI(["help", ...(parsed.flags.json === true ? ["--json"] : [])], services);
     format = parsed.flags.json === true ? "json" : "human";
     verbose = parsed.flags.verbose === true;
+    Console.configure({
+      mode: format,
+      color: parsed.flags["no-color"] !== true,
+      unicode: true,
+      silent: parsed.flags.quiet === true,
+      verbose,
+      stdout: services.output === undefined ? process.stdout : { write: (message) => services.output!.write(message.trimEnd()), isTTY: false },
+      stderr: services.output === undefined ? process.stderr : { write: (message) => services.output!.error(message.trimEnd()), isTTY: false },
+      environment: process.env,
+    });
     const cwd = services.cwd ?? process.cwd();
     const needsProject = !["help", "version", "new"].includes(parsed.command);
     const projectRoot = needsProject ? await locateProject(cwd, stringFlag(parsed.flags.project)) : undefined;
@@ -87,6 +100,13 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
   switch (context.command) {
     case "dev": {
       assertArgs(context, 0);
+      const report: DevelopmentReporter = (event) => writeDevelopmentEvent(output, context.format, context.verbose, event);
+      report(Object.freeze({
+        stage: "project",
+        status: "success",
+        message: "Project discovered and structure validated.",
+        metadata: Object.freeze({ project: root }),
+      }));
       const session = await devCommand(
         root,
         services.runtimeLauncher ?? new ApplicationEntryRuntimeLauncher(),
@@ -96,9 +116,21 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
           ...(stringFlag(context.flags.port) === undefined ? {} : { port: stringFlag(context.flags.port)! }),
           ...(stringFlag(context.flags.mode) === undefined ? {} : { mode: stringFlag(context.flags.mode)! }),
         },
+        report,
       );
       services.onDevSession?.(session);
-      writeResult(output, context.format, { command: "dev", status: "success", project: root, watching: context.flags["no-watch"] !== true }, `Warbler development session started.\nProject: ${root}`);
+      Console.banner({
+        version: "0.1.0",
+        project: basename(root),
+        build: session.buildNumber,
+        ...(context.flags["no-watch"] === true ? {} : { watching: Object.freeze(["src", "resources", "public"]) }),
+      });
+      writeResult(
+        output,
+        context.format,
+        { command: "dev", status: "success", project: root, watching: context.flags["no-watch"] !== true, runtime: "running" },
+        `Warbler development Runtime is running.\nProject: ${root}\n${context.flags["no-watch"] === true ? "Filesystem watcher disabled." : "Watching for changes..."}`,
+      );
       if (services.waitForDevSession ?? true) await session.wait();
       return ExitCode.SUCCESS;
     }
@@ -134,6 +166,16 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
       return ExitCode.SUCCESS;
     default: throw new CLIError("CLI1001", `Unsupported command: ${context.command}`, ExitCode.INVALID_ARGUMENTS);
   }
+}
+function writeDevelopmentEvent(output: CLIOutput, format: "human" | "json", verbose: boolean, event: DevelopmentEvent): void {
+  if (!verbose && event.status === "started") return;
+  if (format === "json") {
+    output.write(JSON.stringify({ command: "dev", type: "stage", ...event }));
+    return;
+  }
+  const marker = event.status === "success" ? "✓" : event.status === "failure" ? "✗" : event.status === "skipped" ? "–" : "•";
+  const message = `${marker} ${event.message}`;
+  (event.status === "failure" ? output.error : output.write)(message);
 }
 function assertArgs(context: CLIContext, count: number): void {
   if (context.args.length !== count) throw new CLIError("CLI1009", `${context.command} expects ${count} positional argument(s).`, ExitCode.INVALID_ARGUMENTS);

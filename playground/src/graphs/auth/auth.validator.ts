@@ -1,23 +1,10 @@
-export interface LoginInput {
-  readonly username: string;
-  readonly password: string;
-}
+import { v, type InferValidatorOutput } from "@warbler/validators";
 
-function isLoginInput(value: unknown): value is LoginInput {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const record = value as Readonly<Record<string, unknown>>;
-  return typeof record.username === "string" && record.username.trim().length > 0
-    && typeof record.password === "string" && record.password.length > 0;
-}
+export const loginValidator = {
+  rules: {
+    username: v.string("validators.username_not_valid").trim().min(1, "validators.username_not_valid"),
+    password: v.string("invalid_string").min(1, "invalid_string"),
+  },
+} as const;
 
-export async function loginValidator(input: unknown): Promise<Readonly<{ valid: true; value: LoginInput }> | false> {
-  if (!(input instanceof Request)) return false;
-  const contentType = input.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
-  if (contentType !== "application/json") return false;
-  try {
-    const value: unknown = await input.json();
-    return isLoginInput(value) ? Object.freeze({ valid: true, value }) : false;
-  } catch {
-    return false;
-  }
-}
+export type LoginInput = InferValidatorOutput<typeof loginValidator>;

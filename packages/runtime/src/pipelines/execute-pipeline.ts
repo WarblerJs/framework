@@ -26,15 +26,16 @@ export function executeGuardRange(bindings: readonly (GuardBinding | undefined)[
 export function executeValidator(
   binding: ValidatorBinding | undefined,
   input: unknown,
-): Readonly<{ valid: boolean; value: unknown }> | Promise<Readonly<{ valid: boolean; value: unknown }>> {
+): Readonly<{ valid: boolean; value: unknown; errors?: unknown }> | Promise<Readonly<{ valid: boolean; value: unknown; errors?: unknown }>> {
   if (binding === undefined) return Object.freeze({ valid: true, value: input });
   if (typeof binding.validate !== "function") invalidBinding(`Validator binding ${binding.id} is not executable.`);
   const result = (binding.validate as (value: unknown) => unknown)(input);
   if (isThenable(result)) return result.then((value) => normalizeValidation(value, input));
   return normalizeValidation(result, input);
 }
-function normalizeValidation(result: unknown, input?: unknown): Readonly<{ valid: boolean; value: unknown }> {
-  if (result === false || isInvalidResult(result)) return Object.freeze({ valid: false, value: undefined });
+function normalizeValidation(result: unknown, input?: unknown): Readonly<{ valid: boolean; value: unknown; errors?: unknown }> {
+  if (result === false) return Object.freeze({ valid: false, value: undefined });
+  if (isInvalidResult(result)) return Object.freeze({ valid: false, value: undefined, ...("errors" in result ? { errors: result.errors } : {}) });
   if (result === true) return Object.freeze({ valid: true, value: input });
   if (hasValidatedValue(result)) return Object.freeze({ valid: true, value: result.value });
   return Object.freeze({ valid: true, value: result });
@@ -94,7 +95,7 @@ async function continueGuards(
 function isThenable(value: unknown): value is Promise<unknown> {
   return typeof value === "object" && value !== null && "then" in value && typeof value.then === "function";
 }
-function isInvalidResult(value: unknown): boolean {
+function isInvalidResult(value: unknown): value is Readonly<{ valid: false; errors?: unknown }> {
   return typeof value === "object" && value !== null && "valid" in value && value.valid === false;
 }
 function hasValidatedValue(value: unknown): value is Readonly<{ valid: true; value: unknown }> {

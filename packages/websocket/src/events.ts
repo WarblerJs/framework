@@ -1,12 +1,12 @@
 import type { SocketGuard } from "./guards";
-import type { SocketValidator } from "./validation";
+import type { SocketValidatorDefinition } from "./validation";
 
 /** Supported socket lifecycle names. */
 export type SocketLifecycle = "open" | "message" | "drain" | "close" | "error";
 /** Options compiled for an application event subscription. */
 export interface SocketSubscribeOptions<TInput = unknown> {
   readonly guards?: readonly SocketGuard<TInput>[];
-  readonly validator?: SocketValidator<TInput>;
+  readonly validator?: SocketValidatorDefinition<TInput>;
   readonly rateLimit?: Readonly<{ limit: number; windowMs: number }>;
   readonly binary?: boolean;
   readonly compression?: boolean;

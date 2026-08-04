@@ -1,0 +1,8 @@
+{
+  "username_not_valid": "Le nom d’utilisateur est invalide.",
+  "invalid_page": "La page doit être un nombre positif.",
+  "invalid_id": "L’identifiant doit être un nombre positif.",
+  "invalid_room": "Le salon est invalide.",
+  "invalid_content": "Le contenu du message est invalide.",
+  "content_too_long": "Le contenu du message est trop long."
+}

@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { Console, createCorrelationId } from "@warbler/console";
 import { analyzeProgram } from "../analyzer/analyze-program";
 import { discoverProject, loadProjectConfig } from "../filesystem/discover-project";
 import { DiagnosticCode, type CompilerDiagnostic } from "../diagnostics/diagnostic";
@@ -21,9 +22,14 @@ export class Compiler {
   /** Discovers, loads, analyzes, validates, and emits metadata-only WIR. */
   public async compile(): Promise<CompilerContext> {
     await Promise.resolve();
+    const compileId = createCorrelationId("compile");
+    const timer = Console.timer("Compiler", { compileId, projectRoot: this.#projectRoot });
+    Console.compiler("Discovering project and Graphs", "started", { compileId });
     try {
       const config = discoverProject(this.#projectRoot);
       const parsed = loadProjectConfig(config);
+      Console.compiler("Discovering project and Graphs", "success", { compileId });
+      Console.compiler("Building dependency graph", "started", { compileId });
       const program = ts.createProgram({
         rootNames: parsed.fileNames,
         options: parsed.options,
@@ -33,17 +39,41 @@ export class Compiler {
       const diagnostics = [...parsed.errors, ...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()].map(normalizeTypeScriptDiagnostic);
       const context = new CompilerContext(program, sourceFiles, config, diagnostics);
       context.applicationWIR = validateApplication(config.projectRoot, analyzeProgram(context), context.diagnostics);
+      for (const diagnostic of context.diagnostics) {
+        Console.diagnostic({
+          source: "compiler",
+          code: diagnostic.code,
+          severity: diagnostic.category,
+          message: diagnostic.message,
+          ...(diagnostic.sourceFile.length === 0 ? {} : { file: diagnostic.sourceFile, line: diagnostic.line, column: diagnostic.column }),
+        });
+      }
+      Console.compiler("Building dependency graph", "success", { compileId });
+      Console.compiler("Optimizing lookup tables", "started", { compileId });
       const optimized = optimizeWIR(context.applicationWIR);
+      Console.compiler("Optimizing lookup tables", "success", { compileId });
+      Console.compiler("Generating executable bindings", "started", { compileId });
       const bindings = analyzeExecutableBindings(context, context.applicationWIR, optimized);
       if (bindings !== undefined) {
         context.generatedApplication = generateArtifacts(optimized, bindings);
-        await writeArtifacts(config.projectRoot, context.generatedApplication);
-        context.applicationEntry = `${config.projectRoot}/.warbler/generated/application.generated.ts`;
+        context.fingerprint = Bun.hash(JSON.stringify({
+          generated: context.generatedApplication.files,
+          sources: sourceFiles.map((source) => [source.fileName, source.text]),
+        })).toString(16);
+        await writeArtifacts(config.projectRoot, context.generatedApplication, {
+          fingerprint: context.fingerprint,
+          sources: sourceFiles.map((source) => Object.freeze({ file: source.fileName, text: source.text })),
+        });
+        context.applicationEntry = `${config.projectRoot}/.warbler/generated/build-${context.fingerprint}/application.generated.ts`;
         context.productionEntry = `${config.projectRoot}/.warbler/generated/production.generated.ts`;
-        context.fingerprint = Bun.hash(JSON.stringify(context.generatedApplication.files)).toString(16);
       }
+      const elapsed = timer.end({ diagnostics: context.diagnostics.length });
+      Console.compiler("Generating executable bindings", bindings === undefined ? "failure" : "success", { compileId });
+      Console.success("Compiler completed.", { compileId, duration: elapsed });
       return context;
     } catch (cause) {
+      const elapsed = timer.end();
+      Console.compiler("Compiler", "failure", { compileId, duration: elapsed });
       const root = ts.sys.resolvePath(this.#projectRoot);
       const config = Object.freeze({ projectRoot: root, tsconfigPath: `${root}/tsconfig.json` });
       const program = ts.createProgram({ rootNames: [], options: { strict: true, noEmit: true } });

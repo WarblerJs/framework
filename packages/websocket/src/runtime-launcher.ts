@@ -1,4 +1,5 @@
 import type { RuntimeTransportLauncher, RuntimeTransportStartInput, RuntimeTransportStopOptions } from "@warbler/transport";
+import { Console, createCorrelationId } from "@warbler/console";
 import type { ServerWebSocket, WebSocketHandler } from "bun";
 import { normalizeWebSocketConfig, type WebSocketConfig } from "./config";
 import { createSocketContext } from "./context";
@@ -31,6 +32,7 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
         publishToSelf: config.bun.publishToSelf,
         perMessageDeflate: config.compression.enabled,
         open(socket) {
+          Console.socket({ action: "connect", path: "/chat", connectionId: socket.data.connectionId });
           dispatchLifecycle(input.bindings, "open", undefined, socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection), socket);
         },
         message(socket, raw) {
@@ -42,6 +44,7 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
               maxMessageIdLength: config.messages.maxMessageIdLength,
             });
             const known = input.bindings.compiled?.events?.[message.event] !== undefined;
+            Console.socket({ action: "incoming", event: message.event, connectionId: socket.data.connectionId, size: rawSize(raw) });
             const result = input.bindings.dispatch(known ? message.event : "message", message, context);
             settle(result, socket);
           } catch {
@@ -52,6 +55,11 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
           dispatchLifecycle(input.bindings, "drain", undefined, socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection), socket);
         },
         close(socket, code, reason) {
+          Console.socket({
+            action: "disconnect",
+            connectionId: socket.data.connectionId,
+            duration: performance.now() - socket.data.connectedAt,
+          });
           dispatchLifecycle(input.bindings, "close", Object.freeze({ code, reason }), socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection), socket);
         },
       };
@@ -67,7 +75,7 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
             return new Response("WebSocket upgrade rejected", { status: 403 });
           }
           const upgraded = native.upgrade(request, {
-            data: Object.freeze({ connectionId: crypto.randomUUID(), connectedAt: Date.now() }),
+            data: Object.freeze({ connectionId: createCorrelationId("conn"), connectedAt: performance.now() }),
             ...(protocol === undefined ? {} : { headers: { "sec-websocket-protocol": protocol } }),
           });
           return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 400 });
@@ -78,6 +86,9 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
     },
     stop(handle: WebSocketRuntimeHandle, options: RuntimeTransportStopOptions) { return handle.server.stop(options.closeActiveConnections ?? false); },
   });
+}
+function rawSize(value: string | ArrayBuffer | Uint8Array): number {
+  return typeof value === "string" ? new TextEncoder().encode(value).byteLength : value.byteLength;
 }
 function socketContext(socket: ServerWebSocket<RuntimeSocketData>, format: "json" | "text" | "binary", subscriptionLimit: number) {
   return createSocketContext(socket, { id: socket.data.connectionId, connectedAt: socket.data.connectedAt }, { format, subscriptionLimit });

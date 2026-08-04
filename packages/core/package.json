@@ -11,6 +11,7 @@
     "typecheck": "bunx tsc --noEmit"
   },
   "devDependencies": {
+    "@types/bun": "latest",
     "typescript": "^5.9.2"
   }
 }

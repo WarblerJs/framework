@@ -1,0 +1,7 @@
+{
+  "welcome": "Bienvenue, :name !",
+  "auth_failed": "Échec de l’authentification.",
+  "invalid_string": "Cette valeur doit être une chaîne.",
+  "max_message": "La longueur maximale est :allowed. Vous avez saisi :entered.",
+  "max_length": "La longueur maximale est :allowed. Vous avez saisi :entered."
+}

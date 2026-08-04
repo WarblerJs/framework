@@ -9,6 +9,7 @@
     "start": "warbler start",
     "doctor": "warbler doctor",
     "inspect": "warbler inspect",
+    "dev:verb": "warbler dev --verbose",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "clean": "warbler clean"
@@ -17,6 +18,7 @@
     "@warbler/core": "workspace:*",
     "@warbler/http": "workspace:*",
     "@warbler/runtime": "workspace:*",
+    "@warbler/validators": "workspace:*",
     "@warbler/websocket": "workspace:*"
   },
   "devDependencies": {

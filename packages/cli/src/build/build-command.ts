@@ -1,4 +1,5 @@
 import { compileProject } from "@warbler/compiler";
+import { Console, createCorrelationId } from "@warbler/console";
 import { mkdir } from "node:fs/promises";
 import { loadCLIConfig, loadEnabledTransportConfigs, resolveEnabledTransports } from "../config";
 import { CLIError } from "../errors";
@@ -15,6 +16,9 @@ export interface BuildResult {
 }
 /** Compiles, bundles the real application entry, copies assets, and emits a deterministic manifest. */
 export async function buildCommand(layout: ProjectLayout, options: Readonly<{ out?: string; minify?: boolean; sourcemap?: boolean }> = {}): Promise<BuildResult> {
+  const timer = Console.timer("Build");
+  const buildId = createCorrelationId("build");
+  Console.build({ build: 1, buildId, status: "started" });
   const runtime = await loadCLIConfig(layout.root);
   await loadEnabledTransportConfigs(runtime, layout.root);
   const enabledTransports = resolveEnabledTransports(runtime);
@@ -57,6 +61,7 @@ export async function buildCommand(layout: ProjectLayout, options: Readonly<{ ou
   });
   const manifest = await atomicWrite(outDirectory, ".warbler/build-manifest.json", `${JSON.stringify(manifestValue, null, 2)}\n`, true);
   const entry = resolveInside(outDirectory, "server.js");
+  Console.build({ build: 1, buildId, status: "success", duration: timer.end() });
   return Object.freeze({ entry, outDirectory, manifest });
 }
 

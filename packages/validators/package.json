@@ -1,0 +1,17 @@
+{
+  "name": "@warbler/validators",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
+  "peerDependencies": { "zod": "^4.0.0" },
+  "dependencies": {
+    "@warbler/core": "workspace:*",
+    "@warbler/i18n": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.2",
+    "zod": "^4.0.0"
+  }
+}

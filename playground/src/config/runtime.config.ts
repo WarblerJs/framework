@@ -1,5 +1,5 @@
 export default {
-  network: { host: "127.0.0.1", bindInterface: undefined },
+  network: { host: "0.0.0.0", bindInterface: undefined },
   transports: {
     http: { enabled: true, port: 3000 },
     websocket: { enabled: true, mode: "standalone", port: 3001 },
@@ -9,7 +9,7 @@ export default {
     webrtc: { enabled: false, signaling: { port: 3002 } },
   },
   telemetry: {
-    metrics: { enabled: false, host: "127.0.0.1", port: 9090, path: "/metrics" },
-    healthCheck: { enabled: false, host: "127.0.0.1", port: 8081, path: "/healthz" },
+    metrics: { enabled: false, host: "0.0.0.0", port: 9090, path: "/metrics" },
+    healthCheck: { enabled: false, host: "0.0.0.0", port: 8081, path: "/healthz" },
   },
 } as const;

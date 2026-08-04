@@ -5,6 +5,10 @@
   "private": false,
   "exports": { ".": "./src/index.ts" },
   "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
-  "dependencies": { "@warbler/core": "workspace:*" },
+  "dependencies": {
+    "@warbler/console": "workspace:*",
+    "@warbler/core": "workspace:*",
+    "@warbler/validators": "workspace:*"
+  },
   "devDependencies": { "@types/bun": "latest", "typescript": "^5.9.2" }
 }

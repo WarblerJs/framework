@@ -1,3 +1,4 @@
+import { Console } from "@warbler/console";
 import type { CLIDiagnostic } from "./diagnostics";
 /** CLI output sink, injectable for tests. */
 export interface CLIOutput {
@@ -6,8 +7,8 @@ export interface CLIOutput {
 }
 /** Default terminal output sink. */
 export const terminalOutput: CLIOutput = Object.freeze({
-  write(message: string): void { console.log(message); },
-  error(message: string): void { console.error(message); },
+  write(message: string): void { Console.raw(message); },
+  error(message: string): void { Console.raw(message, true); },
 });
 /** Renders command success without mixing human and JSON formats. */
 export function writeResult(output: CLIOutput, format: "human" | "json", value: Readonly<Record<string, unknown>>, human: string): void {
