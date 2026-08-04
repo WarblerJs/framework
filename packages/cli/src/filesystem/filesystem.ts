@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { CLIError } from "../errors";
 import { ExitCode } from "../types";
@@ -37,9 +37,24 @@ export async function copyTree(sourceRoot: string, sourceRelative: string, desti
   const destination = resolveInside(destinationRoot, destinationRelative);
   if (!await pathExists(source)) return;
   await assertRealPathInside(sourceRoot, source);
-  await mkdir(dirname(destination), { recursive: true });
-  await assertRealPathInside(destinationRoot, dirname(destination));
-  await cp(source, destination, { recursive: true, errorOnExist: false, force: true });
+  await mkdir(destination, { recursive: true });
+  await assertRealPathInside(destinationRoot, destination);
+  await copyDirectory(source, destination);
+}
+async function copyDirectory(source: string, destination: string): Promise<void> {
+  for (const entry of await readdir(source, { withFileTypes: true })) {
+    if (entry.name === ".DS_Store" || entry.name.startsWith(".")) continue;
+    const sourcePath = `${source}/${entry.name}`;
+    const destinationPath = `${destination}/${entry.name}`;
+    const details = await lstat(sourcePath);
+    if (details.isSymbolicLink()) throw new CLIError("CLI6006", `Public asset symlinks are not allowed: ${entry.name}`, ExitCode.FILESYSTEM_FAILURE);
+    if (details.isDirectory()) {
+      await mkdir(destinationPath, { recursive: true });
+      await copyDirectory(sourcePath, destinationPath);
+    } else if (details.isFile()) {
+      await copyFile(sourcePath, destinationPath);
+    }
+  }
 }
 /** Removes only `.warbler` or `dist` beneath a trusted project root. */
 export async function removeGeneratedDirectory(projectRoot: string, name: ".warbler" | "dist"): Promise<void> {

@@ -42,9 +42,11 @@ export async function runCLI(argv: readonly string[], services: CLIServices = {}
       ...parsed, cwd, ...(projectRoot === undefined ? {} : { projectRoot }), format, verbose,
     });
     validateCommandFlags(context);
+    const color = context.format === "human" && context.flags["no-color"] !== true && process.env.NO_COLOR === undefined && Boolean(process.stdout.isTTY);
+    const renderedOutput = color ? colorOutput(output) : output;
     const commandOutput = context.flags.quiet === true && context.format === "human"
       ? Object.freeze({ write(_message: string): void {}, error(message: string): void { output.error(message); } })
-      : output;
+      : renderedOutput;
     return await execute(context, commandOutput, services);
   } catch (cause) {
     const known = cause instanceof CLIError;
@@ -105,8 +107,8 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
       const out = stringFlag(context.flags.out);
       const result = await buildCommand(layout, {
         ...(out === undefined ? {} : { out }),
-        minify: context.flags.minify === true,
-        sourcemap: context.flags.sourcemap === true,
+        ...(context.flags["no-minify"] === true ? { minify: false } : context.flags.minify === true ? { minify: true } : {}),
+        ...(context.flags["no-sourcemap"] === true ? { sourcemap: false } : context.flags.sourcemap === true ? { sourcemap: true } : {}),
       });
       writeResult(output, context.format, { command: "build", status: "success", entry: result.entry }, `Built ${result.entry}`);
       return ExitCode.SUCCESS;
@@ -122,13 +124,13 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
     case "inspect": {
       if (context.args.length > 1) throw new CLIError("CLI1008", "inspect accepts at most one section.", ExitCode.INVALID_ARGUMENTS);
       const result = await inspectCommand(layout, context.args[0]);
-      writeResult(output, context.format, { command: "inspect", status: "success", ...result }, `Graphs:      ${result.graphs}\nProviders:   ${result.providers}\nHTTP routes: ${result.routes}\nSocket events: ${result.socketEvents}`);
+      writeResult(output, context.format, { command: "inspect", status: "success", ...result }, `Graphs:      ${result.graphs}\nProviders:   ${result.providers}\nControllers: ${result.controllers}\nHandlers:    ${result.handlers}\nGuards:      ${result.guards}\nValidators:  ${result.validators}\nHTTP routes: ${result.routes}\nSocket events: ${result.socketEvents}`);
       return ExitCode.SUCCESS;
     }
     case "clean":
       assertArgs(context, 0);
-      await cleanCommand(root);
-      writeResult(output, context.format, { command: "clean", status: "success" }, "Removed dist/ and .warbler/.");
+      await cleanCommand(root, context.flags["dry-run"] === true);
+      writeResult(output, context.format, { command: "clean", status: "success", dryRun: context.flags["dry-run"] === true }, context.flags["dry-run"] === true ? "Would remove dist/ and .warbler/." : "Removed dist/ and .warbler/.");
       return ExitCode.SUCCESS;
     default: throw new CLIError("CLI1001", `Unsupported command: ${context.command}`, ExitCode.INVALID_ARGUMENTS);
   }
@@ -138,21 +140,28 @@ function assertArgs(context: CLIContext, count: number): void {
 }
 function stringFlag(value: string | boolean | undefined): string | undefined { return typeof value === "string" ? value : undefined; }
 function validateCommandFlags(context: CLIContext): void {
-  const common = ["json", "verbose", "quiet", "help"];
+  const common = ["json", "verbose", "quiet", "help", "no-color"];
   const commandFlags: Readonly<Record<CLIContext["command"], readonly string[]>> = {
     dev: [...common, "project", "mode", "host", "port", "watch", "no-watch"],
-    build: [...common, "project", "out", "minify", "sourcemap"],
+    build: [...common, "project", "out", "minify", "no-minify", "sourcemap", "no-sourcemap"],
     start: [...common, "project"],
     doctor: [...common, "project"],
     inspect: [...common, "project"],
     new: [...common, "dry-run"],
     generate: [...common, "project", "dry-run", "force"],
-    clean: [...common, "project"],
+    clean: [...common, "project", "dry-run"],
     version: common,
     help: common,
   };
   const allowed = new Set(commandFlags[context.command]);
   for (const flag of Object.keys(context.flags)) if (!allowed.has(flag)) throw new CLIError("CLI1010", `Flag --${flag} is not supported by ${context.command}.`, ExitCode.INVALID_ARGUMENTS);
+}
+function colorOutput(output: CLIOutput): CLIOutput {
+  const reset = "\u001b[0m";
+  return Object.freeze({
+    write(message: string): void { output.write(`\u001b[32m${message}${reset}`); },
+    error(message: string): void { output.error(`\u001b[31m${message}${reset}`); },
+  });
 }
 
 const HELP = `Warbler CLI

@@ -3,7 +3,7 @@ import { ExitCode, type CLICommandName, type CLIFlagValue, type ParsedCLI } from
 
 const COMMANDS = new Set<CLICommandName>(["dev", "build", "start", "doctor", "inspect", "new", "generate", "clean", "version", "help"]);
 const VALUE_FLAGS = new Set(["project", "mode", "host", "port", "out"]);
-const BOOLEAN_FLAGS = new Set(["watch", "no-watch", "minify", "sourcemap", "json", "verbose", "quiet", "dry-run", "force", "help"]);
+const BOOLEAN_FLAGS = new Set(["watch", "no-watch", "minify", "no-minify", "sourcemap", "no-sourcemap", "no-color", "json", "verbose", "quiet", "dry-run", "force", "help"]);
 
 /** Parses CLI arguments without mutating input or retaining global state. */
 export function parseCLI(input: readonly string[]): ParsedCLI {
@@ -32,6 +32,8 @@ export function parseCLI(input: readonly string[]): ParsedCLI {
     }
   }
   if (flags.watch === true && flags["no-watch"] === true) throw new CLIError("CLI1007", "--watch conflicts with --no-watch.", ExitCode.INVALID_ARGUMENTS);
+  if (flags.minify === true && flags["no-minify"] === true) throw new CLIError("CLI1007", "--minify conflicts with --no-minify.", ExitCode.INVALID_ARGUMENTS);
+  if (flags.sourcemap === true && flags["no-sourcemap"] === true) throw new CLIError("CLI1007", "--sourcemap conflicts with --no-sourcemap.", ExitCode.INVALID_ARGUMENTS);
   return freeze(command as CLICommandName, args, flags);
 }
 function freeze(command: CLICommandName, args: readonly string[], flags: Record<string, CLIFlagValue>): ParsedCLI {

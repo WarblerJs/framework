@@ -6,7 +6,7 @@ describe("public API", () => {
     expect(Object.keys(api).sort()).toEqual([
       "ArchiveRes", "Controller", "Delete", "DownloadRes", "EmptyRes", "FileRes", "Get",
       "Head", "HtmlRes", "HtmlStreamRes", "ImageRes", "JsonRes", "Options", "Patch", "PdfRes",
-      "Post", "Put", "RedirectRes", "Sse", "SseRes", "TextRes",
+      "Post", "Put", "RedirectRes", "Sse", "SseRes", "TextRes", "createHttpRuntimeLauncher",
     ]);
   });
 });

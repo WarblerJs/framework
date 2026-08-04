@@ -1,12 +1,8 @@
-// @ts-nocheck
-import { createApp } from '@warbler/core';
-import ChatSocketGraph from './graph/chat/chat.graph';
-import AuthGraph from './graph/auth/auth.graph';
+import { createApp } from "@warbler/core";
+import AuthGraph from "./graphs/auth/auth.graph";
+import ChatGraph from "./graphs/chat/chat.graph";
+import HomeGraph from "./graphs/home/home.graph";
 
- export default createApp({
-    graphs: [
-        AuthGraph,
-        ChatSocketGraph
-    ],
-
-})
+export default createApp({
+  graphs: [HomeGraph, AuthGraph, ChatGraph],
+});

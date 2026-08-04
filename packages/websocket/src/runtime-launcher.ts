@@ -1,0 +1,109 @@
+import type { RuntimeTransportLauncher, RuntimeTransportStartInput, RuntimeTransportStopOptions } from "@warbler/transport";
+import type { ServerWebSocket, WebSocketHandler } from "bun";
+import { normalizeWebSocketConfig, type WebSocketConfig } from "./config";
+import { createSocketContext } from "./context";
+import { decodeSocketMessage } from "./message";
+import { validateOrigin, validateSubprotocol } from "./upgrade";
+
+interface RuntimeSocketData { readonly connectionId: string; readonly connectedAt: number }
+interface WebSocketRuntimeBindings {
+  readonly compiled?: Readonly<{ readonly events?: Readonly<Record<string, unknown>> }>;
+  readonly dispatch: (event: string, message: unknown, context: unknown) => unknown;
+}
+interface WebSocketRuntimeHandle { readonly server: Bun.Server<RuntimeSocketData> }
+
+/** Creates the package-owned dedicated WebSocket Runtime launcher. */
+export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSocketRuntimeBindings, WebSocketConfig, WebSocketRuntimeHandle> {
+  return Object.freeze({
+    kind: "websocket",
+    start(input: RuntimeTransportStartInput<WebSocketRuntimeBindings, WebSocketConfig>) {
+      const config = normalizeWebSocketConfig(input.config);
+      const value = input.config as Readonly<Record<string, unknown>>;
+      const port = value.port;
+      if (config.mode !== "dedicated") throw new TypeError("Independent Runtime WebSocket launcher requires dedicated mode.");
+      if (typeof port !== "number" || !Number.isSafeInteger(port) || port < 1 || port > 65535) throw new TypeError("Dedicated WebSocket Runtime port is invalid.");
+      const handler: WebSocketHandler<RuntimeSocketData> = {
+        idleTimeout: config.timeouts.idleSeconds,
+        maxPayloadLength: config.messages.maxPayloadLength,
+        backpressureLimit: config.backpressure.limitBytes,
+        closeOnBackpressureLimit: config.backpressure.closeOnLimit,
+        sendPings: config.bun.sendPings,
+        publishToSelf: config.bun.publishToSelf,
+        perMessageDeflate: config.compression.enabled,
+        open(socket) {
+          dispatchLifecycle(input.bindings, "open", undefined, socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection), socket);
+        },
+        message(socket, raw) {
+          const context = socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection);
+          try {
+            const message = decodeSocketMessage(raw, {
+              format: config.messages.format,
+              maxEventNameLength: config.messages.maxEventNameLength,
+              maxMessageIdLength: config.messages.maxMessageIdLength,
+            });
+            const known = input.bindings.compiled?.events?.[message.event] !== undefined;
+            const result = input.bindings.dispatch(known ? message.event : "message", message, context);
+            settle(result, socket);
+          } catch {
+            socket.close(1008, "Invalid WebSocket message");
+          }
+        },
+        drain(socket) {
+          dispatchLifecycle(input.bindings, "drain", undefined, socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection), socket);
+        },
+        close(socket, code, reason) {
+          dispatchLifecycle(input.bindings, "close", Object.freeze({ code, reason }), socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection), socket);
+        },
+      };
+      const server = Bun.serve<RuntimeSocketData>({
+        port,
+        fetch(request, native) {
+          if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return new Response("Upgrade Required", { status: 426 });
+          let protocol: string | undefined;
+          try {
+            validateOrigin(request, config.origins);
+            protocol = validateSubprotocol(request, config.protocols);
+          } catch {
+            return new Response("WebSocket upgrade rejected", { status: 403 });
+          }
+          const upgraded = native.upgrade(request, {
+            data: Object.freeze({ connectionId: crypto.randomUUID(), connectedAt: Date.now() }),
+            ...(protocol === undefined ? {} : { headers: { "sec-websocket-protocol": protocol } }),
+          });
+          return upgraded ? undefined : new Response("WebSocket upgrade failed", { status: 400 });
+        },
+        websocket: handler,
+      });
+      return Object.freeze({ server });
+    },
+    stop(handle: WebSocketRuntimeHandle, options: RuntimeTransportStopOptions) { return handle.server.stop(options.closeActiveConnections ?? false); },
+  });
+}
+function socketContext(socket: ServerWebSocket<RuntimeSocketData>, format: "json" | "text" | "binary", subscriptionLimit: number) {
+  return createSocketContext(socket, { id: socket.data.connectionId, connectedAt: socket.data.connectedAt }, { format, subscriptionLimit });
+}
+function isThenable(value: unknown): value is Promise<unknown> {
+  return typeof value === "object" && value !== null && "then" in value && typeof value.then === "function";
+}
+function settle(value: unknown, socket: ServerWebSocket<RuntimeSocketData>): void {
+  if (isThenable(value)) value.catch((error: unknown) => {
+    try {
+      socket.close(1011, "Internal WebSocket error");
+    } finally {
+      void error;
+    }
+  });
+}
+function dispatchLifecycle(
+  bindings: WebSocketRuntimeBindings,
+  lifecycle: "open" | "drain" | "close",
+  message: unknown,
+  context: unknown,
+  socket: ServerWebSocket<RuntimeSocketData>,
+): void {
+  try {
+    settle(bindings.dispatch(lifecycle, message, context), socket);
+  } catch {
+    socket.close(1011, "Internal WebSocket error");
+  }
+}

@@ -98,11 +98,14 @@
       "dependencies": {
         "@warbler/core": "workspace:*",
         "@warbler/http": "workspace:*",
+        "@warbler/runtime": "workspace:*",
         "@warbler/websocket": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
         "@warbler/cli": "workspace:*",
+        "@warbler/compiler": "workspace:*",
+        "@warbler/transport": "workspace:*",
         "typescript": "^5.9.2",
       },
     },

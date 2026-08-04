@@ -67,27 +67,40 @@ function requireSections(value: unknown, name: TransportName, sections: readonly
 }
 
 export function validateHttp(value: unknown): void {
-  const root = requireSections(value, "http", ["request", "rateLimit"]);
-  const request = record(root.request, "http.request");
-  for (const section of ["body", "headers", "query", "cookies", "path", "timeouts"]) {
-    if (!(section in request)) throw new ConfigError("is required", `http.request.${section}`);
+  const root = record(value, "http");
+  const modernKeys = ["host", "port", "allowedHosts", "request", "body", "timeouts", "security", "csrf", "static", "rateLimit", "maxRequestBodySize", "development", "reusePort"];
+  for (const key of Object.keys(root)) {
+    if (!modernKeys.includes(key)) throw new ConfigError("is not supported", `http.${key}`);
   }
-  const body = record(request.body, "http.request.body");
-  oneOf(body.unknownContentType, ["reject", "ignore"] as const, "http.request.body.unknownContentType");
+  validateTree(root, "http", "http");
+  if (!("request" in root)) throw new ConfigError("is required", "http.request");
+  const request = record(root.request, "http.request");
+  const body: Readonly<Record<string, unknown>> = request.body === undefined ? Object.freeze({}) : record(request.body, "http.request.body");
+  if (body.unknownContentType !== undefined) {
+    oneOf(body.unknownContentType, ["reject", "ignore"] as const, "http.request.body.unknownContentType");
+  }
   // Bun.serve's idleTimeout is a whole-second value capped at 255 (it's stored as a uint8) — Bun
   // throws at startup, not per-request, if this is exceeded. `idle` is expressed in milliseconds
   // here like its sibling timeout fields, so the bound below is 255 seconds converted to ms. The
   // generic key-name tree walker can't know this Bun-specific ceiling, so it's checked explicitly.
-  const timeouts = record(request.timeouts, "http.request.timeouts");
-  integer(timeouts.idle, "http.request.timeouts.idle", 0, 255_000);
-  const rateLimit = record(root.rateLimit, "http.rateLimit");
-  oneOf(rateLimit.onExceeded, ["reject"] as const, "http.rateLimit.onExceeded");
-  integer(rateLimit.statusCode, "http.rateLimit.statusCode", 400, 599);
+  const timeouts: Readonly<Record<string, unknown>> = request.timeouts === undefined ? Object.freeze({}) : record(request.timeouts, "http.request.timeouts");
+  if (timeouts.idle !== undefined) integer(timeouts.idle, "http.request.timeouts.idle", 0, 255_000);
+  const rateLimit: Readonly<Record<string, unknown>> = root.rateLimit === undefined ? Object.freeze({}) : record(root.rateLimit, "http.rateLimit");
+  if (rateLimit.onExceeded !== undefined) oneOf(rateLimit.onExceeded, ["reject"] as const, "http.rateLimit.onExceeded");
+  if (rateLimit.statusCode !== undefined) integer(rateLimit.statusCode, "http.rateLimit.statusCode", 400, 599);
 }
 
 export function validateWebsocket(value: unknown): void {
-  const root = requireSections(value, "websocket", ["connection", "rateLimit"]);
-  const rateLimit = record(root.rateLimit, "websocket.rateLimit");
+  const root = record(value, "websocket");
+  const modernKeys = ["mode", "port", "security", "messages", "compression", "timeouts", "backpressure", "limits", "bun"];
+  if (Object.keys(root).some((key) => modernKeys.includes(key))) {
+    for (const key of Object.keys(root)) if (!modernKeys.includes(key)) throw new ConfigError("is not supported", `websocket.${key}`);
+    validateTree(root, "websocket", "websocket");
+    if (root.mode !== undefined) oneOf(root.mode, ["shared-http", "dedicated"] as const, "websocket.mode");
+    return;
+  }
+  const legacy = requireSections(value, "websocket", ["connection", "rateLimit"]);
+  const rateLimit = record(legacy.rateLimit, "websocket.rateLimit");
   oneOf(rateLimit.onExceeded, ["reject_handshake", "close_socket", "throttle"] as const, "websocket.rateLimit.onExceeded");
   integer(rateLimit.closeCode, "websocket.rateLimit.closeCode", 1000, 4999);
 }

@@ -6,7 +6,7 @@ export interface ProviderBindingContext {
   resolve<T>(token: ProviderToken<T>): T;
   run<T>(callback: () => T): T;
 }
-export type ProviderBindingFactory<T = unknown> = (context: ProviderBindingContext) => T;
+export type ProviderBindingFactory<T = unknown> = (context: ProviderBindingContext) => T | Promise<T>;
 export interface ProviderBinding<T = unknown> {
   readonly id: number;
   readonly token: ProviderToken<T>;
@@ -14,6 +14,7 @@ export interface ProviderBinding<T = unknown> {
   readonly graphId?: number;
   readonly dependencyIds: readonly number[];
   readonly factory: ProviderBindingFactory<T>;
+  readonly dispose?: (instance: T) => void | Promise<void>;
 }
 export interface ControllerBinding<T = unknown> {
   readonly id: number;
@@ -21,12 +22,17 @@ export interface ControllerBinding<T = unknown> {
   readonly transport: "http" | "websocket";
   readonly token: Constructor<T>;
   readonly factory: ProviderBindingFactory<T>;
+  readonly dispose?: (instance: T) => void | Promise<void>;
 }
 export interface HandlerBinding<TController = unknown> {
   readonly id: number;
   readonly controllerId: number;
   readonly invoke: unknown;
 }
+export type RuntimeGuard = (input: unknown) => boolean | Promise<boolean>;
+export type RuntimeMiddlewareNext = (input?: unknown) => unknown;
+export type RuntimeMiddleware = (input: unknown, next: RuntimeMiddlewareNext) => unknown;
+export type RuntimeValidator = (input: unknown) => unknown;
 export interface GuardBinding { readonly id: number; readonly execute: unknown }
 export interface MiddlewareBinding { readonly id: number; readonly execute: unknown }
 export interface ValidatorBinding { readonly id: number; readonly validate: unknown }
@@ -37,6 +43,10 @@ export interface GeneratedApplicationDefinition {
   readonly providerDependencies: readonly number[];
   readonly routeTable: readonly Readonly<Record<string, unknown>>[];
   readonly socketEventTable: readonly Readonly<Record<string, unknown>>[];
+  readonly routeGuards?: readonly number[];
+  readonly routeMiddleware?: readonly number[];
+  readonly socketGuards?: readonly number[];
+  readonly socketMiddleware?: readonly number[];
 }
 export type HttpRouteExecutor = (routeId: number, request: Request) => Response | Promise<Response>;
 export interface GeneratedHttpBindings {

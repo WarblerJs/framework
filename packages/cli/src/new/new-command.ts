@@ -14,7 +14,7 @@ export async function createStarterProject(cwd: string, name: string | undefined
     "package.json": JSON.stringify({
       name, version: "0.1.0", private: true, type: "module",
       scripts: { dev: "warbler dev", build: "warbler build", start: "warbler start", doctor: "warbler doctor", inspect: "warbler inspect", test: "bun test", typecheck: "tsc --noEmit" },
-      dependencies: { "@warbler/core": "^0.1.0", "@warbler/http": "^0.1.0" },
+      dependencies: { "@warbler/core": "^0.1.0", "@warbler/http": "^0.1.0", "@warbler/runtime": "^0.1.0" },
       devDependencies: { "@warbler/cli": "^0.1.0", "@types/bun": "latest", typescript: "^5.9.2" },
     }, null, 2) + "\n",
     "tsconfig.json": JSON.stringify({ compilerOptions: { lib: ["ESNext"], target: "ESNext", module: "Preserve", moduleResolution: "Bundler", strict: true, skipLibCheck: true, noEmit: true, types: ["bun"] }, include: ["src"] }, null, 2) + "\n",

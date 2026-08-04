@@ -1,6 +1,5 @@
 import type { CompilerContext } from "@warbler/compiler";
 import { compileProject } from "@warbler/compiler";
-import { mkdir } from "node:fs/promises";
 import { atomicWrite, resolveInside } from "../filesystem";
 import { CLIError } from "../errors";
 import { ExitCode } from "../types";
@@ -22,10 +21,12 @@ export interface DevelopmentRuntimeOverrides {
   readonly mode?: string;
 }
 /** Development session lifecycle state. */
-export type DevSessionState = "starting" | "running" | "reloading" | "stopping" | "stopped";
+export type DevSessionState = "starting" | "running" | "compiling" | "reloading" | "restarting" | "failed" | "stopping" | "stopped";
 /** Typed managed development session. */
 export interface DevSession {
   readonly state: DevSessionState;
+  readonly projectRoot: string;
+  readonly buildNumber: number;
   stop(): Promise<void>;
   wait(): Promise<void>;
 }
@@ -41,12 +42,17 @@ export class ManagedDevSession implements DevSession {
   #runtime: DevelopmentRuntimeHandle | undefined;
   #watcher: SourceWatcher | undefined;
   #artifactSignature = "";
+  #buildNumber = 0;
+  readonly #pendingPaths = new Set<string>();
+  #rebuildPromise: Promise<void> | undefined;
   #signalHandler: (() => void) | undefined;
   /** Creates an unstarted development session. */
   public constructor(projectRoot: string, launcher: DevelopmentRuntimeLauncher, watchEnabled: boolean, overrides: DevelopmentRuntimeOverrides = {}) {
     this.#projectRoot = projectRoot; this.#launcher = launcher; this.#watchEnabled = watchEnabled; this.#overrides = Object.freeze({ ...overrides });
   }
   public get state(): DevSessionState { return this.#state; }
+  public get projectRoot(): string { return this.#projectRoot; }
+  public get buildNumber(): number { return this.#buildNumber; }
   /** Performs initial compilation and starts the Runtime abstraction. */
   public async start(): Promise<this> {
     const compiler = await this.#compile();
@@ -61,7 +67,11 @@ export class ManagedDevSession implements DevSession {
   public wait(): Promise<void> { return this.#closed.promise; }
   /** Applies one coalesced relevant-change batch; exposed for watcher adapters and deterministic tests. */
   public async notifyChanges(paths: readonly string[]): Promise<void> {
-    await this.#rebuild(paths);
+    for (const path of paths) this.#pendingPaths.add(path);
+    if (this.#rebuildPromise === undefined) {
+      this.#rebuildPromise = this.#drainChanges().finally(() => { this.#rebuildPromise = undefined; });
+    }
+    await this.#rebuildPromise;
   }
   /** Stops watcher before Runtime and releases signals idempotently. */
   public async stop(): Promise<void> {
@@ -73,13 +83,22 @@ export class ManagedDevSession implements DevSession {
   async #compile(): Promise<CompilerContext> {
     const compiler = await compileProject(this.#projectRoot);
     const errors = compiler.diagnostics.filter((diagnostic) => diagnostic.category === "error");
-    await mkdir(resolveInside(this.#projectRoot, ".warbler/diagnostics"), { recursive: true });
     await atomicWrite(this.#projectRoot, ".warbler/diagnostics/compiler.json", `${JSON.stringify(compiler.diagnostics, null, 2)}\n`, true);
-    if (errors.length > 0) throw new CLIError("CLI2101", `Compilation failed with ${errors.length} error(s).`, ExitCode.FAILURE);
-    const files = compiler.generatedApplication?.files ?? {};
-    for (const [name, content] of Object.entries(files)) await atomicWrite(this.#projectRoot, `.warbler/generated/${name}`, content, true);
+    if (errors.length > 0) throw new CLIError("CLI2002", `Compilation failed with ${errors.length} error(s).`, ExitCode.FAILURE);
+    if (compiler.generatedApplication === undefined || compiler.applicationEntry === undefined || compiler.fingerprint === undefined) {
+      throw new CLIError("CLI2003", "Compiler did not emit executable application bindings.", ExitCode.FAILURE);
+    }
+    const files = compiler.generatedApplication.files;
     this.#artifactSignature = JSON.stringify(files);
+    this.#buildNumber++;
     return compiler;
+  }
+  async #drainChanges(): Promise<void> {
+    while (this.#pendingPaths.size > 0 && this.#state !== "stopping" && this.#state !== "stopped") {
+      const paths = Object.freeze([...this.#pendingPaths]);
+      this.#pendingPaths.clear();
+      await this.#rebuild(paths);
+    }
   }
   async #rebuild(paths: readonly string[]): Promise<void> {
     if (this.#state !== "running") return;
@@ -88,16 +107,19 @@ export class ManagedDevSession implements DevSession {
       if (paths.every((path) => path.startsWith("public/") || path.startsWith("resources/"))) return;
       const previous = this.#artifactSignature;
       const configurationChange = paths.some((path) => path === "package.json" || path === "tsconfig.json" || path.includes("src/config/"));
+      this.#state = "compiling";
       const compiler = await this.#compile();
+      this.#state = "reloading";
       if (this.#artifactSignature === previous && !configurationChange) return;
       const reloaded = !configurationChange && this.#runtime?.reload !== undefined && await this.#runtime.reload(compiler);
       if (!reloaded) {
+        this.#state = "restarting";
         await this.#runtime?.stop();
         this.#runtime = await this.#launcher.start(this.#projectRoot, compiler, this.#overrides);
       }
     } catch {
       // Compiler diagnostics were persisted; keep the last valid Runtime running.
-    } finally { if (this.#state === "reloading") this.#state = "running"; }
+    } finally { if (!this.#isStopping()) this.#state = "running"; }
   }
   #installSignals(): void {
     this.#signalHandler = (): void => { void this.stop(); };
@@ -107,4 +129,5 @@ export class ManagedDevSession implements DevSession {
     if (this.#signalHandler === undefined) return;
     process.off("SIGINT", this.#signalHandler); process.off("SIGTERM", this.#signalHandler); this.#signalHandler = undefined;
   }
+  #isStopping(): boolean { return this.#state === "stopping" || this.#state === "stopped"; }
 }

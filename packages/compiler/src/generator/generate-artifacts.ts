@@ -256,7 +256,7 @@ export const unknownSocketEvent = undefined;
 }
 function bindingsSource(bindings: ExecutableBindingPlan, optimized: OptimizedApplication): string {
   const imports = [
-    `import { strings, graphIds, providerTable, providerDependencies, routeTable, socketEventTable } from "./tables.generated";`,
+    `import { strings, graphIds, providerTable, providerDependencies, routeTable, socketEventTable, routeGuards, routeMiddleware, socketGuards, socketMiddleware } from "./tables.generated";`,
     bindings.providers.length > 0 ? `import { providerBindings } from "./providers.generated";` : "",
     bindings.controllers.length > 0 ? `import { controllerBindings } from "./controllers.generated";` : "",
     bindings.handlers.length > 0 ? `import { handlerBindings } from "./handlers.generated";` : "",
@@ -270,7 +270,10 @@ function bindingsSource(bindings: ExecutableBindingPlan, optimized: OptimizedApp
 import type { GeneratedApplicationBindings } from "@warbler/runtime";
 ${imports}
 export const applicationBindings = Object.freeze({
-  application: Object.freeze({ strings, graphIds, providerTable, providerDependencies, routeTable, socketEventTable }),
+  application: Object.freeze({
+    strings, graphIds, providerTable, providerDependencies, routeTable, socketEventTable,
+    routeGuards, routeMiddleware, socketGuards, socketMiddleware,
+  }),
   providers: ${bindings.providers.length > 0 ? "providerBindings" : "Object.freeze([])"},
   controllers: ${bindings.controllers.length > 0 ? "controllerBindings" : "Object.freeze([])"},
   handlers: ${bindings.handlers.length > 0 ? "handlerBindings" : "Object.freeze([])"},

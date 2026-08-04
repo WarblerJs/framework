@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, symlink } from "node:fs/promises";
+import { mkdir, stat, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { CLIError, generateSource, locateProject, resolveInside, validateProject } from "../src";
+import { CLIError, cleanCommand, generateSource, locateProject, resolveInside, validateProject } from "../src";
 import { atomicWrite, removeGeneratedDirectory } from "../src/filesystem";
 import { createTestProject } from "./helpers";
 
@@ -49,5 +49,13 @@ describe("filesystem boundaries", () => {
     await mkdir(join(project.root, ".warbler"), { recursive: true });
     await removeGeneratedDirectory(project.root, "dist");
     expect(await Bun.file(join(project.root, "package.json")).exists()).toBe(true);
+  });
+  test("clean dry-run preserves generated directories", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    await mkdir(join(project.root, "dist"), { recursive: true });
+    await mkdir(join(project.root, ".warbler"), { recursive: true });
+    await cleanCommand(project.root, true);
+    expect((await stat(join(project.root, "dist"))).isDirectory()).toBe(true);
+    expect((await stat(join(project.root, ".warbler"))).isDirectory()).toBe(true);
   });
 });

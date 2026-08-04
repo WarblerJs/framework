@@ -38,6 +38,9 @@ export class Compiler {
       if (bindings !== undefined) {
         context.generatedApplication = generateArtifacts(optimized, bindings);
         await writeArtifacts(config.projectRoot, context.generatedApplication);
+        context.applicationEntry = `${config.projectRoot}/.warbler/generated/application.generated.ts`;
+        context.productionEntry = `${config.projectRoot}/.warbler/generated/production.generated.ts`;
+        context.fingerprint = Bun.hash(JSON.stringify(context.generatedApplication.files)).toString(16);
       }
       return context;
     } catch (cause) {

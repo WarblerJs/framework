@@ -16,3 +16,9 @@ export {
 export { TransportRegistry, type TransportRegistration } from "./registry";
 export { TransportState, type TransportStateValue } from "./state";
 export { TransportKind, type MaybePromise, type TransportKindValue } from "./types";
+export type {
+  RuntimeExecutionContext,
+  RuntimeTransportLauncher,
+  RuntimeTransportStartInput,
+  RuntimeTransportStopOptions,
+} from "./runtime-launcher";

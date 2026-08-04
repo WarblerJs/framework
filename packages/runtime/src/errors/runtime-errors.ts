@@ -26,3 +26,17 @@ export class RuntimeConfigurationError extends RuntimeError {}
 export class RuntimeBootstrapError extends RuntimeError {}
 /** Raised when graceful shutdown fails. */
 export class RuntimeShutdownError extends RuntimeError {}
+/** Raised when executable binding integrity validation fails. */
+export class InvalidApplicationBindingsError extends GeneratedArtifactError {
+  public readonly code: string;
+  public readonly metadata: Readonly<Record<string, number | string>>;
+  public constructor(code: string, message: string, metadata: Readonly<Record<string, number | string>> = Object.freeze({})) {
+    super(message);
+    this.code = code;
+    this.metadata = Object.freeze({ ...metadata });
+  }
+}
+/** Raised when a generated Controller factory fails. */
+export class ControllerCreationError extends RuntimeBootstrapError {}
+/** Raised when a generated Guard returns a value other than boolean or Promise<boolean>. */
+export class InvalidGuardResultError extends RuntimeError {}

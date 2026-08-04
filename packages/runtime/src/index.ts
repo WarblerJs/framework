@@ -5,6 +5,9 @@ export { RuntimeProviderContainers } from "./container/provider-container";
 export type { RuntimeDiagnostic } from "./diagnostics/runtime-diagnostic";
 export {
   GeneratedArtifactError,
+  InvalidApplicationBindingsError,
+  ControllerCreationError,
+  InvalidGuardResultError,
   InvalidRuntimeStateError,
   ProviderResolutionError,
   RuntimeBootstrapError,
@@ -39,6 +42,25 @@ export type {
   ValidatorBinding,
 } from "./generated/executable-bindings";
 export { ExecutableBindingsRuntime, createExecutableBindingsRuntime } from "./generated/executable-runtime";
+export {
+  GeneratedRuntimeOwner,
+  startRuntime,
+  type RuntimeHandle,
+  type RuntimeStopOptions,
+  type StartRuntimeOptions,
+} from "./lifecycle/runtime-owner";
+export { RootProviderContainer, GraphProviderContainer } from "./container/generated-provider-containers";
+export { ControllerInstanceTable } from "./controllers";
+export { RuntimeDiagnosticCode } from "./diagnostics/runtime-diagnostic-codes";
+export { validateApplicationBindings, type ValidatedBindingIndexes } from "./bindings";
+export { createMiddlewarePipeline, executeGuardRange, executeHandler, executeValidator } from "./pipelines";
+export { TransportLauncherRegistry } from "./transports/transport-launcher-registry";
+export type {
+  RunningTransport,
+  RuntimeExecutionContext,
+  RuntimeTransportLauncher,
+  RuntimeTransportStartInput,
+} from "./transports/runtime-transport-launcher";
 export type { RuntimeHook, RuntimeHooks } from "./hooks/runtime-hooks";
 export { loadGeneratedApplication } from "./loader/load-generated-application";
 export type { RuntimeProviderDisposer, RuntimeProviderFactory } from "./providers/provider-types";

@@ -6,6 +6,9 @@ import { loadCLIConfig, loadEnabledTransportConfigs, resolveEnabledTransports } 
 import { assertRealPathInside, pathExists, resolveInside } from "../filesystem";
 import type { ProjectLayout } from "../project";
 import { readProjectPackage } from "../project";
+import { compileProject } from "@warbler/compiler";
+import { startRuntime, validateApplicationBindings } from "@warbler/runtime";
+import { importGeneratedApplication, loadTransportLaunchers } from "../dev/runtime-launcher";
 
 const PACKAGES: Readonly<Record<string, string>> = Object.freeze({
   http: "@warbler/http", websocket: "@warbler/websocket", tcp: "@warbler/tcp",
@@ -22,6 +25,8 @@ export async function doctorCommand(layout: ProjectLayout): Promise<readonly CLI
   try {
     const config = await loadCLIConfig(layout.root);
     await loadEnabledTransportConfigs(config, layout.root);
+    if (typeof compileProject !== "function") diagnostics.push(cliDiagnostic({ code: "CLI2001", severity: "error", message: "Compiler public API is unavailable." }));
+    if (typeof startRuntime !== "function") diagnostics.push(cliDiagnostic({ code: "CLI2005", severity: "error", message: "Runtime public API is unavailable." }));
     for (const transport of resolveEnabledTransports(config)) {
       const packageName = PACKAGES[transport]!;
       if (!dependencies.has(packageName)) diagnostics.push(cliDiagnostic({ code: "CLI4003", severity: "error", message: `Enabled transport package is missing: ${packageName}`, metadata: { transport } }));
@@ -29,6 +34,18 @@ export async function doctorCommand(layout: ProjectLayout): Promise<readonly CLI
         try { Bun.resolveSync(packageName, layout.root); }
         catch { diagnostics.push(cliDiagnostic({ code: "CLI4006", severity: "error", message: `Enabled transport package cannot be resolved: ${packageName}`, metadata: { transport } })); }
       }
+    }
+    if (!diagnostics.some((item) => item.severity === "error")) {
+      const compiler = await compileProject(layout.root);
+      if (compiler.applicationEntry === undefined || compiler.fingerprint === undefined) {
+        diagnostics.push(cliDiagnostic({ code: "CLI2003", severity: "error", message: "Compiler did not emit executable application bindings." }));
+      } else {
+        const application = await importGeneratedApplication(compiler.applicationEntry, compiler.fingerprint);
+        try { validateApplicationBindings(application); }
+        catch { diagnostics.push(cliDiagnostic({ code: "CLI2004", severity: "error", message: "Generated application bindings are incompatible with Runtime." })); }
+      }
+      try { await loadTransportLaunchers(resolveEnabledTransports(config), layout.root); }
+      catch (cause) { diagnostics.push(cliDiagnostic({ code: "CLI2008", severity: "error", message: safeMessage(cause) })); }
     }
   } catch (cause) {
     diagnostics.push(cliDiagnostic({ code: "CLI4004", severity: "error", message: "Runtime or enabled transport configuration is invalid.", metadata: { detail: safeMessage(cause) } }));

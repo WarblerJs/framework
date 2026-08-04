@@ -10,6 +10,7 @@ export { generateSource, type GeneratedFilePlan, type GeneratorKind } from "./ge
 export { createStarterProject } from "./new/new-command";
 export { devCommand } from "./dev/dev-command";
 export type { DevelopmentRuntimeHandle, DevelopmentRuntimeLauncher, DevelopmentRuntimeOverrides, DevSession, DevSessionState } from "./dev/dev-session";
+export { ApplicationEntryRuntimeLauncher, GeneratedBindingsRuntimeLauncher, importGeneratedApplication, loadTransportLaunchers } from "./dev/runtime-launcher";
 export { SourceWatcher, isRelevantSourcePath } from "./dev/source-watcher";
 export { buildCommand, type BuildResult } from "./build/build-command";
 export { startCommand } from "./start/start-command";

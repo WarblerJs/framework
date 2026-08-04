@@ -1,0 +1,347 @@
+import {
+  loadRuntimeConfig,
+  loadTransportConfig,
+  normalizeRuntimeConfig,
+  type RuntimeConfig,
+  type TransportName,
+} from "@warbler/config";
+import { validateApplicationBindings, type ValidatedBindingIndexes } from "../bindings";
+import { RootProviderContainer, GraphProviderContainer } from "../container/generated-provider-containers";
+import { ControllerInstanceTable } from "../controllers";
+import { RuntimeDiagnosticCode } from "../diagnostics/runtime-diagnostic-codes";
+import {
+  InvalidRuntimeStateError,
+  RuntimeBootstrapError,
+  RuntimeConfigurationError,
+  RuntimeError,
+  RuntimeShutdownError,
+  RuntimeTransportError,
+} from "../errors/runtime-errors";
+import type { GeneratedApplicationBindings } from "../generated/executable-bindings";
+import { createMiddlewarePipeline, executeGuardRange, executeHandler, executeValidator } from "../pipelines";
+import { RuntimeState, type RuntimeStateValue } from "../state/runtime-state";
+import { TransportLauncherRegistry } from "../transports/transport-launcher-registry";
+import type {
+  RunningTransport,
+  RuntimeExecutionContext,
+  RuntimeTransportLauncher,
+  RuntimeTransportStartInput,
+  RuntimeTransportStopOptions,
+} from "../transports/runtime-transport-launcher";
+
+const TRANSPORT_ORDER = Object.freeze(["http", "websocket", "tcp", "udp", "mcp", "webrtc"] as const);
+type KnownTransport = (typeof TRANSPORT_ORDER)[number];
+type TransportConfigLoader = (transport: TransportName, runtime: RuntimeConfig, workspaceRoot: string) => Promise<Readonly<unknown> | undefined>;
+
+/** Graceful Runtime shutdown controls. */
+export type RuntimeStopOptions = RuntimeTransportStopOptions;
+/** Options accepted by the generated-binding production launcher. */
+export interface StartRuntimeOptions {
+  readonly application: GeneratedApplicationBindings;
+  readonly runtimeConfig?: unknown;
+  readonly transportLaunchers?: readonly RuntimeTransportLauncher[];
+  readonly signal?: AbortSignal;
+  readonly development?: boolean;
+  readonly workspaceRoot?: string;
+  readonly transportConfigLoader?: TransportConfigLoader;
+}
+/** Running generated application owner returned from startRuntime(). */
+export interface RuntimeHandle {
+  readonly state: RuntimeStateValue;
+  readonly application: GeneratedApplicationBindings;
+  readonly rootContainer: RootProviderContainer;
+  readonly graphContainers: readonly GraphProviderContainer[];
+  readonly transports: readonly RunningTransport[];
+  stop(options?: RuntimeStopOptions): void | Promise<void>;
+}
+interface OwnedTransport {
+  readonly launcher: RuntimeTransportLauncher;
+  readonly running: RunningTransport;
+}
+
+/** Owns one generated application from validation through graceful shutdown. */
+export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionContext {
+  readonly #options: StartRuntimeOptions;
+  readonly #abortController = new AbortController();
+  readonly #ownedTransports: OwnedTransport[] = [];
+  readonly #graphMap = new Map<number, GraphProviderContainer>();
+  #state: RuntimeStateValue = RuntimeState.CREATED;
+  #indexes: ValidatedBindingIndexes | undefined;
+  #root: RootProviderContainer | undefined;
+  #graphs: readonly GraphProviderContainer[] = Object.freeze([]);
+  #controllers: ControllerInstanceTable | undefined;
+  #routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
+  #socketPipelines: Readonly<Record<string, (input: unknown) => unknown>> = Object.freeze({});
+  #abortListener: (() => void) | undefined;
+  #stopPromise: Promise<void> | undefined;
+
+  public constructor(options: StartRuntimeOptions) { this.#options = Object.freeze({ ...options }); }
+  public get state(): RuntimeStateValue { return this.#state; }
+  public get application(): GeneratedApplicationBindings { return this.#options.application; }
+  public get rootContainer(): RootProviderContainer {
+    if (this.#root === undefined) throw new InvalidRuntimeStateError("Runtime Root container is not initialized.");
+    return this.#root;
+  }
+  public get graphContainers(): readonly GraphProviderContainer[] { return this.#graphs; }
+  public get transports(): readonly RunningTransport[] { return Object.freeze(this.#ownedTransports.map((item) => item.running)); }
+
+  /** Validates, eagerly constructs, starts enabled transports, and reaches RUNNING. */
+  public async start(): Promise<this> {
+    this.#transition(RuntimeState.CREATED, RuntimeState.VALIDATING);
+    try {
+      this.#indexes = validateApplicationBindings(this.application);
+      this.#state = RuntimeState.BOOTSTRAPPING;
+      this.#root = new RootProviderContainer(this.#indexes.providers);
+      const graphIds = Object.values(this.application.application.graphIds).sort((left, right) => left - right);
+      this.#graphs = Object.freeze(graphIds.map((graphId) => {
+        const container = new GraphProviderContainer(this.#indexes!.providers, graphId, this.#root!);
+        this.#graphMap.set(graphId, container);
+        return container;
+      }));
+      await this.#root.initialize();
+      for (const graph of this.#graphs) await graph.initialize();
+      this.#controllers = new ControllerInstanceTable(this.#indexes.controllers, this.#graphMap);
+      await this.#controllers.initialize();
+      this.#routes = this.#createHttpRoutes();
+      this.#socketPipelines = this.#createSocketPipelines();
+      const config = await this.#loadConfiguration();
+      this.#state = RuntimeState.STARTING_TRANSPORTS;
+      await this.#startTransports(config);
+      if (this.#options.signal !== undefined) {
+        this.#abortListener = (): void => { void this.stop({ reason: "abort" }); };
+        this.#options.signal.addEventListener("abort", this.#abortListener, { once: true });
+        if (this.#options.signal.aborted) {
+          await this.stop({ reason: "abort" });
+          return this;
+        }
+      }
+      this.#state = RuntimeState.RUNNING;
+      return this;
+    } catch (cause) {
+      this.#state = RuntimeState.FAILED;
+      await this.#rollback();
+      if (cause instanceof RuntimeError) throw cause;
+      throw new RuntimeBootstrapError("Generated Runtime startup failed.", { cause });
+    }
+  }
+  /** Direct indexed provider lookup with Graph-to-Root fallback. */
+  public resolveProvider(graphId: number, providerId: number): unknown {
+    const graph = this.#graphMap.get(graphId);
+    if (graph === undefined) throw new RuntimeBootstrapError(`Generated Graph container not found: ${graphId}`);
+    return graph.resolve(providerId);
+  }
+  /** Direct indexed Handler execution against its startup-created Controller. */
+  public invokeHandler(handlerId: number, input: readonly unknown[]): unknown {
+    const binding = this.#indexes?.handlers[handlerId];
+    if (binding === undefined || this.#controllers === undefined) throw new RuntimeBootstrapError(`Generated Handler not found: ${handlerId}`);
+    return executeHandler(binding, this.#controllers.get(binding.controllerId), input);
+  }
+  /** Idempotently stops transports, Controllers, Graph providers, then Root providers. */
+  public stop(options: RuntimeStopOptions = {}): Promise<void> {
+    if (this.#state === RuntimeState.STOPPED) return Promise.resolve();
+    if (this.#state === RuntimeState.STOPPING) return this.#stopPromise ?? Promise.resolve();
+    if (this.#state !== RuntimeState.RUNNING && this.#state !== RuntimeState.FAILED && this.#state !== RuntimeState.STARTING_TRANSPORTS) {
+      throw new InvalidRuntimeStateError(`${RuntimeDiagnosticCode.INVALID_STATE_TRANSITION}: Cannot stop Runtime from "${this.#state}".`);
+    }
+    this.#state = RuntimeState.STOPPING;
+    this.#stopPromise = this.#performStop(options);
+    return this.#stopPromise;
+  }
+  async #performStop(options: RuntimeStopOptions): Promise<void> {
+    this.#abortController.abort(sanitizeReason(options.reason));
+    let failure: unknown;
+    try { await withTimeout(this.#stopTransports(options), options.timeoutMs); } catch (cause) { failure ??= cause; }
+    try { await this.#controllers?.dispose(); } catch (cause) { failure ??= cause; }
+    for (let index = this.#graphs.length - 1; index >= 0; index--) {
+      try { await this.#graphs[index]!.dispose(); } catch (cause) { failure ??= cause; }
+    }
+    try { await this.#root?.dispose(); } catch (cause) { failure ??= cause; }
+    this.#removeAbortListener();
+    this.#state = RuntimeState.STOPPED;
+    if (failure !== undefined) throw new RuntimeShutdownError(`${RuntimeDiagnosticCode.SHUTDOWN_FAILED}: Runtime shutdown completed with failures.`, { cause: failure });
+  }
+  async #loadConfiguration(): Promise<RuntimeConfig> {
+    try {
+      return this.#options.runtimeConfig === undefined
+        ? await loadRuntimeConfig(this.#options.workspaceRoot ?? process.cwd())
+        : normalizeRuntimeConfig(this.#options.runtimeConfig);
+    } catch (cause) {
+      throw new RuntimeConfigurationError("Unable to load Runtime configuration.", { cause });
+    }
+  }
+  async #startTransports(config: RuntimeConfig): Promise<void> {
+    const registry = new TransportLauncherRegistry(this.#options.transportLaunchers ?? Object.freeze([]));
+    const loadConfig = this.#options.transportConfigLoader ?? loadTransportConfig;
+    for (const kind of TRANSPORT_ORDER) {
+      if (!config.transports[kind].enabled) continue;
+      const launcher = registry.get(kind);
+      if (launcher === undefined) throw new RuntimeTransportError(`${RuntimeDiagnosticCode.TRANSPORT_LAUNCHER_MISSING}: No launcher registered for enabled transport "${kind}".`);
+      const transportConfig = await loadConfig(kind, config, this.#options.workspaceRoot ?? process.cwd());
+      if (transportConfig === undefined) throw new RuntimeConfigurationError(`Enabled transport configuration missing: ${kind}`);
+      const input = Object.freeze({
+        bindings: this.#transportBindings(kind),
+        config: launcherConfiguration(kind, transportConfig, config, this.#options.development ?? false),
+        runtime: this,
+        signal: this.#abortController.signal,
+      }) satisfies RuntimeTransportStartInput;
+      try {
+        const handle = await launcher.start(input);
+        this.#ownedTransports.push(Object.freeze({ launcher, running: Object.freeze({ kind, handle }) }));
+      } catch (cause) {
+        throw new RuntimeTransportError(`${RuntimeDiagnosticCode.TRANSPORT_START_FAILED}: Transport "${kind}" failed to start.`, { cause });
+      }
+    }
+  }
+  #transportBindings(kind: KnownTransport): unknown {
+    if (kind === "http") return Object.freeze({
+      routes: this.#routes,
+      compiled: this.application.http,
+      routeRecords: this.application.application.routeTable,
+      strings: this.application.application.strings,
+    });
+    if (kind === "websocket") return Object.freeze({
+      compiled: this.application.websocket,
+      dispatch: (event: string, message: unknown, context: unknown): unknown => this.#executeSocket(event, message, context),
+    });
+    return undefined;
+  }
+  #createHttpRoutes(): Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> {
+    const http = this.application.http;
+    if (http === undefined) return Object.freeze({});
+    const pipelines = this.application.application.routeTable.map((record) => this.#compileRecordPipeline(record, true));
+    return http.createRoutes((routeId, request) => {
+      const pipeline = pipelines[routeId];
+      if (pipeline === undefined) throw new RuntimeBootstrapError(`Generated HTTP route not found: ${routeId}`);
+      const result = pipeline(request);
+      return normalizeHttpResult(result);
+    });
+  }
+  #executeSocket(event: string, message: unknown, context: unknown): unknown {
+    return this.#socketPipelines[event]?.(Object.freeze({ message, context }));
+  }
+  #createSocketPipelines(): Readonly<Record<string, (input: unknown) => unknown>> {
+    const result: Record<string, (input: unknown) => unknown> = Object.create(null);
+    const events: Readonly<Record<string, Readonly<Record<string, unknown>>>> = this.application.websocket?.events ?? Object.freeze({});
+    for (const [event, record] of Object.entries(events)) {
+      result[event] = this.#compileRecordPipeline(record, false, event);
+    }
+    return Object.freeze(result);
+  }
+  #compileRecordPipeline(record: Readonly<Record<string, unknown>>, http: boolean, socketEvent?: string): (input: unknown) => unknown {
+    const handlerId = numberField(record, "handlerId");
+    const validatorId = numberField(record, "validatorId");
+    const guardIds = rangeIds(record, "guardStart", "guardCount", http ? this.application.application.routeGuards : this.application.application.socketGuards);
+    const middlewareIds = rangeIds(record, "middlewareStart", "middlewareCount", http ? this.application.application.routeMiddleware : this.application.application.socketMiddleware);
+    const terminal = createMiddlewarePipeline(this.#indexes!.middleware, middlewareIds, (validated) =>
+      this.invokeHandler(handlerId, http ? [validated] : socketInputs(validated, socketEvent)),
+    );
+    return (input: unknown): unknown => {
+      const guarded = executeGuardRange(this.#indexes!.guards, guardIds, input);
+      if (isThenable(guarded)) return guarded.then((allowed) => allowed ? runValidated(this.#indexes!.validators[validatorId], input, terminal) : http ? forbidden() : undefined);
+      return guarded ? runValidated(this.#indexes!.validators[validatorId], input, terminal) : http ? forbidden() : undefined;
+    };
+  }
+  async #stopTransports(options: RuntimeStopOptions): Promise<void> {
+    let failure: unknown;
+    for (let index = this.#ownedTransports.length - 1; index >= 0; index--) {
+      const owned = this.#ownedTransports[index]!;
+      const reason = sanitizeReason(options.reason);
+      const stopOptions = Object.freeze({ ...options, ...(reason === undefined ? {} : { reason }) });
+      try { await owned.launcher.stop?.(owned.running.handle, stopOptions); }
+      catch (cause) { failure ??= cause; }
+    }
+    this.#ownedTransports.length = 0;
+    if (failure !== undefined) throw new RuntimeTransportError("One or more generated transports failed to stop.", { cause: failure });
+  }
+  async #rollback(): Promise<void> {
+    try { await this.#stopTransports({ reason: "startup-failure" }); } catch {}
+    try { await this.#controllers?.dispose(); } catch {}
+    for (let index = this.#graphs.length - 1; index >= 0; index--) try { await this.#graphs[index]!.dispose(); } catch {}
+    try { await this.#root?.dispose(); } catch {}
+    this.#removeAbortListener();
+  }
+  #removeAbortListener(): void {
+    if (this.#options.signal !== undefined && this.#abortListener !== undefined) this.#options.signal.removeEventListener("abort", this.#abortListener);
+    this.#abortListener = undefined;
+  }
+  #transition(expected: RuntimeStateValue, next: RuntimeStateValue): void {
+    if (this.#state !== expected) throw new InvalidRuntimeStateError(`${RuntimeDiagnosticCode.INVALID_STATE_TRANSITION}: Expected "${expected}", received "${this.#state}".`);
+    this.#state = next;
+  }
+}
+
+/** Starts one Compiler-generated executable application manifest. */
+export async function startRuntime(options: StartRuntimeOptions): Promise<RuntimeHandle> {
+  return new GeneratedRuntimeOwner(options).start();
+}
+function runValidated(validator: import("../generated/executable-bindings").ValidatorBinding | undefined, input: unknown, terminal: (input: unknown) => unknown): unknown {
+  const result = executeValidator(validator, input);
+  if (isThenable(result)) return result.then((outcome) => outcome.valid ? terminal(outcome.value) : invalidRequest());
+  return result.valid ? terminal(result.value) : invalidRequest();
+}
+function rangeIds(record: Readonly<Record<string, unknown>>, startKey: string, countKey: string, values: readonly number[] | undefined): readonly number[] {
+  const start = numberField(record, startKey);
+  const count = numberField(record, countKey);
+  return count === 0 ? Object.freeze([]) : Object.freeze(values!.slice(start, start + count));
+}
+function numberField(record: Readonly<Record<string, unknown>>, key: string): number {
+  const value = record[key];
+  if (typeof value !== "number") throw new RuntimeBootstrapError(`Generated field "${key}" is invalid.`);
+  return value;
+}
+function socketInputs(value: unknown, event?: string): readonly unknown[] {
+  if (typeof value === "object" && value !== null && "message" in value && "context" in value) {
+    if (event === "open" || event === "drain" || event === "close") return [value.context];
+    return [value.message, value.context];
+  }
+  return [value];
+}
+function isThenable<T>(value: T | Promise<T>): value is Promise<T> {
+  return typeof value === "object" && value !== null && "then" in value && typeof value.then === "function";
+}
+function forbidden(): Response { return new Response("Forbidden", { status: 403 }); }
+function invalidRequest(): Response { return new Response("Invalid request", { status: 400 }); }
+function normalizeHttpResult(value: unknown): Response | Promise<Response> {
+  if (value instanceof Response) return value;
+  if (isThenable(value)) return value.then((result) => {
+    if (!(result instanceof Response)) throw new RuntimeBootstrapError("Generated HTTP Handler returned an invalid response.");
+    return result;
+  });
+  throw new RuntimeBootstrapError("Generated HTTP Handler returned an invalid response.");
+}
+function sanitizeReason(reason: string | undefined): string | undefined {
+  if (reason === undefined) return undefined;
+  return reason.replace(/[\u0000-\u001f\u007f]/gu, "").slice(0, 123);
+}
+function launcherConfiguration(
+  kind: KnownTransport,
+  transport: Readonly<unknown>,
+  runtime: RuntimeConfig,
+  development: boolean,
+): Readonly<Record<string, unknown>> {
+  const value = typeof transport === "object" && transport !== null ? transport : Object.freeze({});
+  const activation = runtime.transports[kind];
+  const mode = kind === "websocket" && activation.mode === "standalone" ? "dedicated" : activation.mode;
+  return Object.freeze({
+    ...value,
+    host: runtime.network.host,
+    ...(activation.port === undefined ? {} : { port: activation.port }),
+    ...(mode === undefined ? {} : { mode }),
+    development,
+  });
+}
+async function withTimeout(operation: Promise<void>, timeoutMs: number | undefined): Promise<void> {
+  if (timeoutMs === undefined) return operation;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs <= 0) throw new RuntimeShutdownError("Runtime shutdown timeout must be a positive safe integer.");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new RuntimeShutdownError("Runtime transport shutdown timed out.")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}

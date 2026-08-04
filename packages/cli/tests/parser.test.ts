@@ -19,7 +19,8 @@ describe("CLI parser", () => {
   test("rejects unknown, malformed, duplicate, and conflicting flags", () => {
     for (const args of [
       ["unknown"], ["dev", "--wat"], ["build", "--port"], ["build", "--port", "0"],
-      ["dev", "--watch", "--no-watch"], ["build", "--minify=true"], ["build", "--out", "a", "--out", "b"],
+      ["dev", "--watch", "--no-watch"], ["build", "--minify", "--no-minify"],
+      ["build", "--sourcemap", "--no-sourcemap"], ["build", "--minify=true"], ["build", "--out", "a", "--out", "b"],
     ]) expect(() => parseCLI(args)).toThrow(CLIError);
   });
 });

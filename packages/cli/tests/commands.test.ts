@@ -12,6 +12,8 @@ import {
   validateProject,
   type DevelopmentRuntimeLauncher,
 } from "../src";
+import { compileProject } from "@warbler/compiler";
+import { GeneratedBindingsRuntimeLauncher, loadTransportLaunchers } from "../src/dev/runtime-launcher";
 import { captureOutput, createTestProject } from "./helpers";
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -84,11 +86,26 @@ describe("development", () => {
     expect(isRelevantSourcePath(".warbler/generated/app.ts")).toBe(false);
     expect(isRelevantSourcePath("node_modules/pkg/index.ts")).toBe(false);
   });
+  test("loads Compiler-generated bindings into the real Runtime and lazily resolves enabled launchers", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    const runtimePath = join(project.root, "src/config/runtime.config.ts");
+    const source = await Bun.file(runtimePath).text();
+    await Bun.write(runtimePath, source.replace("http: { enabled: true, port: 3000 }", "http: { enabled: false, port: 3000 }"));
+    const compiler = await compileProject(project.root);
+    const handle = await new GeneratedBindingsRuntimeLauncher().start(project.root, compiler);
+    await handle.stop();
+    expect(await loadTransportLaunchers([], project.root)).toEqual([]);
+    await expect(loadTransportLaunchers(["websocket"], project.root)).rejects.toMatchObject({ code: "CLI2008" });
+  });
 });
 
 describe("build and start", () => {
   test("bundles the real entry, public assets, and deterministic manifest", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
+    const runtimePath = join(project.root, "src/config/runtime.config.ts");
+    const runtimeSource = await Bun.file(runtimePath).text();
+    const port = 38_000 + Math.floor(Math.random() * 1_000);
+    await Bun.write(runtimePath, runtimeSource.replace("port: 3000", `port: ${port}`));
     await Bun.write(join(project.root, "public", "app.txt"), "asset");
     const layout = await validateProject(project.root);
     const result = await buildCommand(layout);
@@ -97,11 +114,22 @@ describe("build and start", () => {
     const manifest = JSON.parse(await Bun.file(result.manifest).text());
     expect(manifest.entry).toBe("server.js");
     expect(manifest.generatedAt).toBe("deterministic");
-    expect(await startCommand(layout)).toBe(0);
+    expect(manifest.applicationFingerprint).toBeTypeOf("string");
+    const productionEntry = await Bun.file(join(project.root, ".warbler/generated/production-entry.ts")).text();
+    expect(productionEntry).toContain("createHttpRuntimeLauncher");
+    expect(productionEntry).not.toContain("createWebSocketRuntimeLauncher");
+    const bundle = await Bun.file(result.entry).text();
+    expect(bundle).not.toContain("@warbler/compiler");
+    expect(bundle).not.toContain("@warbler/cli");
+    const child = Bun.spawn(["bun", result.entry], { cwd: project.root, stdout: "pipe", stderr: "pipe" });
+    await Bun.sleep(150);
+    expect(child.exitCode).toBeNull();
+    child.kill("SIGTERM");
+    await child.exited;
   }, 20_000);
   test("start never compiles a missing production build", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
-    await expect(startCommand(await validateProject(project.root))).rejects.toMatchObject({ code: "CLI3001" });
+    await expect(startCommand(await validateProject(project.root))).rejects.toMatchObject({ code: "CLI2011" });
   });
 });
 

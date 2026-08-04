@@ -20,6 +20,12 @@ export class CompilerContext {
   public applicationWIR: ApplicationWIR | undefined;
   /** Optimized tables and deterministic generated source files. */
   public generatedApplication: GeneratedApplication | undefined;
+  /** Absolute generated application module path after successful executable emission. */
+  public applicationEntry: string | undefined;
+  /** Absolute generated production module path after successful executable emission. */
+  public productionEntry: string | undefined;
+  /** Stable content fingerprint for generated-module cache busting. */
+  public fingerprint: string | undefined;
 
   /** Creates a context from already discovered project state. */
   public constructor(program: ts.Program, sourceFiles: readonly ts.SourceFile[], config: Readonly<CompilerConfig>, diagnostics: CompilerDiagnostic[] = []) {
