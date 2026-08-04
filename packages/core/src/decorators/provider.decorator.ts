@@ -1,31 +1,80 @@
-import { defineMetadata, MetadataKeys } from "../metadata";
+import { defineMetadata, MetadataKeys, readMetadata } from "../metadata";
 import type { Constructor } from "../types";
-import type { ProviderScope } from "../di";
+import { ProviderScope, type ProviderLifetime, type ProviderOptions } from "../di";
+
+/** Injectable decorator options, including the existing instance lifetime control. */
+export interface InjectableProviderOptions extends ProviderOptions {
+  readonly scope?: ProviderLifetime;
+}
 
 /** Metadata attached to injectable provider classes. */
 export interface ProviderMetadata {
-  readonly kind: "service" | "repository" | "injectable";
-  readonly scope: ProviderScope;
+  readonly token: Constructor;
+  readonly provide: ProviderScope;
+  readonly dependencies: readonly Constructor[];
+  readonly kind: "service" | "repository" | "factory" | "resolver" | "gateway" | "injectable";
+  readonly scope: ProviderLifetime;
 }
 
-function providerDecorator(kind: ProviderMetadata["kind"], scope: ProviderScope) {
+const EMPTY_DEPENDENCIES: readonly Constructor[] = Object.freeze([]);
+
+function providerDecorator(kind: ProviderMetadata["kind"], options: InjectableProviderOptions) {
   return <T extends Constructor>(target: T): T => {
-    defineMetadata(target, MetadataKeys.PROVIDER, Object.freeze({ kind, scope } satisfies ProviderMetadata));
+    const inherited = readProviderMetadata(Object.getPrototypeOf(target));
+    defineMetadata(target, MetadataKeys.PROVIDER, Object.freeze({
+      token: target,
+      provide: options.provide ?? ProviderScope.GRAPH,
+      dependencies: inherited?.dependencies ?? EMPTY_DEPENDENCIES,
+      kind,
+      scope: options.scope ?? "singleton",
+    } satisfies ProviderMetadata));
     return target;
   };
 }
 
 /** Marks a class as a service provider. */
-export function Service(options: { readonly scope?: ProviderScope } = {}) {
-  return providerDecorator("service", options.scope ?? "singleton");
+export function Service(options: InjectableProviderOptions = {}) {
+  return providerDecorator("service", options);
 }
 
 /** Marks a class as a repository provider. */
-export function Repository(options: { readonly scope?: ProviderScope } = {}) {
-  return providerDecorator("repository", options.scope ?? "singleton");
+export function Repository(options: InjectableProviderOptions = {}) {
+  return providerDecorator("repository", options);
 }
 
 /** Marks a class as a generic injectable provider. */
-export function Injectable(options: { readonly scope?: ProviderScope } = {}) {
-  return providerDecorator("injectable", options.scope ?? "singleton");
+export function Injectable(options: InjectableProviderOptions = {}) {
+  return providerDecorator("injectable", options);
+}
+
+/** Marks a class as an injectable factory provider. */
+export function Factory(options: InjectableProviderOptions = {}) {
+  return providerDecorator("factory", options);
+}
+
+/** Marks a class as an injectable resolver provider. */
+export function Resolver(options: InjectableProviderOptions = {}) {
+  return providerDecorator("resolver", options);
+}
+
+/** Marks a class as an injectable gateway provider. */
+export function Gateway(options: InjectableProviderOptions = {}) {
+  return providerDecorator("gateway", options);
+}
+
+/** Reads immutable provider metadata for compiler/bootstrap analysis. */
+export function getProviderMetadata(target: Constructor): ProviderMetadata | undefined {
+  return readProviderMetadata(target);
+}
+
+function readProviderMetadata(target: unknown): ProviderMetadata | undefined {
+  if (typeof target !== "function") return undefined;
+  const constructor = target as Constructor;
+  const direct = readMetadata<ProviderMetadata>(constructor, MetadataKeys.PROVIDER);
+  if (direct !== undefined) return direct;
+  const inherited = readProviderMetadata(Object.getPrototypeOf(target));
+  if (inherited === undefined) return undefined;
+  const metadata = Object.freeze({ ...inherited, token: constructor });
+  defineMetadata(constructor, MetadataKeys.PROVIDER, metadata);
+  return metadata;
 }

@@ -1,13 +1,14 @@
 {
   "name": "warbler",
+  "version": "0.1.0",
   "private": true,
   "workspaces": [
     "packages/*",
     "playground"
   ],
   "scripts": {
-    "typecheck": "bunx tsc --noEmit",
+    "install:all": "bun install",
     "test": "bun test",
-    "dev": "bun playground/src/main.ts"
+    "typecheck": "bun run --filter '*' typecheck"
   }
 }

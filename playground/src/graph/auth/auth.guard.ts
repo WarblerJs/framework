@@ -1,10 +1,5 @@
-// @ts-nocheck
-export const loginGuard: Guard = async context => {
-    if (!context.user) {
-      return new Response("Unauthorized", {
-        status: 401,
-      });
-    }
-  
-    return true;
-  };
+import type { Guard } from "@warbler/core";
+
+export const loginGuard: Guard = async (context) => {
+  return context.user !== undefined;
+};

@@ -4,7 +4,7 @@ import { query,transactions,ALL } from '@warbler/db';
 import { Profile,User } from '@db/generated';
 
 @Repository()
-export default class AuthRepo {
+export default class AuthRepository {
 
     async findUserByUsername(username: string) {
         /*

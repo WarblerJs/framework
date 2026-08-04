@@ -1,10 +1,10 @@
-// @ts-nocheck
+
 import {
   Graph,
 } from "@warbler/core";
-import { AuthController } from "./auth.controller";
-import { AuthRepository } from "./auth.repository";
-import { AuthService } from "./auth.service";
+import AuthController  from "./auth.controller";
+import AuthService  from "./auth.service";
+import AuthRepository from "./auth.repository";
 
 @Graph({
   prefix: "/api/auth",

@@ -1,0 +1,16 @@
+{
+  "name": "@warbler/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "warbler": "./src/bin.ts" },
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@warbler/compiler": "workspace:*",
+    "@warbler/config": "workspace:*",
+    "@warbler/core": "workspace:*",
+    "@warbler/runtime": "workspace:*"
+  },
+  "devDependencies": { "@types/bun": "latest", "typescript": "^5.9.2" }
+}

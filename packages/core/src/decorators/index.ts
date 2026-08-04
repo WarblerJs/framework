@@ -1,2 +1,2 @@
-export { Injectable, Repository, Service } from "./provider.decorator";
-export type { ProviderMetadata } from "./provider.decorator";
+export { Factory, Gateway, Injectable, Repository, Resolver, Service, getProviderMetadata } from "./provider.decorator";
+export type { InjectableProviderOptions, ProviderMetadata } from "./provider.decorator";

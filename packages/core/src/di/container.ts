@@ -1,23 +1,31 @@
-import { CircularDependencyError, ProviderNotFoundError } from "../errors";
+import { CircularDependencyError, DuplicateProviderError, ProviderNotFoundError } from "../errors";
 import type { Constructor } from "../types";
 import { runInInjectionContext } from "./injection-context";
-import type { FactoryProvider, Provider, ProviderScope } from "./provider";
+import type { FactoryProvider, Provider, ProviderLifetime } from "./provider";
 import type { ProviderToken } from "./token";
 import { tokenName } from "./token";
 
 type ProviderRecord<T> =
-  | { readonly kind: "class"; readonly useClass: Constructor<T>; readonly scope: ProviderScope }
-  | { readonly kind: "factory"; readonly useFactory: () => T; readonly scope: ProviderScope }
+  | { readonly kind: "class"; readonly useClass: Constructor<T>; readonly scope: ProviderLifetime }
+  | { readonly kind: "factory"; readonly useFactory: () => T; readonly scope: ProviderLifetime }
   | { readonly kind: "value"; readonly useValue: T };
 
 /** Resolves and owns Warbler providers. */
 export class Container {
+  readonly #parent: Container | undefined;
   readonly #records = new Map<ProviderToken<unknown>, ProviderRecord<unknown>>();
   readonly #singletons = new Map<ProviderToken<unknown>, unknown>();
   readonly #resolving: ProviderToken<unknown>[] = [];
 
+  /** Creates an isolated container with an optional O(1) root fallback. */
+  public constructor(parent?: Container) {
+    this.#parent = parent;
+  }
+
   /** Registers one provider definition. */
   register<T>(provider: Provider<T>): this {
+    const token = typeof provider === "function" ? provider : provider.token;
+    if (this.#records.has(token)) throw new DuplicateProviderError(tokenName(token));
     if (typeof provider === "function") {
       this.#records.set(provider, { kind: "class", useClass: provider, scope: "singleton" });
       return this;
@@ -42,7 +50,7 @@ export class Container {
 
   /** Returns whether a provider token is registered. */
   has<T>(token: ProviderToken<T>): boolean {
-    return this.#records.has(token);
+    return this.#records.has(token) || (this.#parent?.has(token) ?? false);
   }
 
   /** Resolves a provider token or throws when unavailable. */
@@ -50,7 +58,10 @@ export class Container {
     const existing = this.#singletons.get(token);
     if (existing !== undefined || this.#singletons.has(token)) return existing as T;
     const record = this.#records.get(token) as ProviderRecord<T> | undefined;
-    if (!record) throw new ProviderNotFoundError(tokenName(token));
+    if (!record) {
+      if (this.#parent !== undefined) return this.#parent.resolve(token);
+      throw new ProviderNotFoundError(tokenName(token));
+    }
 
     const cycleIndex = this.#resolving.indexOf(token);
     if (cycleIndex !== -1) {

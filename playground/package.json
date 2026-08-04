@@ -1,0 +1,44 @@
+{
+    "name": "@warbler/playground",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Warbler playground application",
+    "type": "module",
+  
+    "scripts": {
+      "dev": "warbler dev",
+      "build": "warbler build",
+      "start": "warbler start",
+      "doctor": "warbler doctor",
+      "inspect": "warbler inspect",
+  
+      "generate:graph": "warbler generate graph",
+      "generate:controller": "warbler generate controller",
+      "generate:service": "warbler generate service",
+      "generate:repository": "warbler generate repository",
+  
+      "db:generate": "warbler db generate",
+      "db:migrate": "warbler db migrate",
+      "db:seed": "warbler db seed",
+  
+      "test": "bun test tests",
+      "typecheck": "tsc --noEmit",
+      "clean": "warbler clean"
+    },
+  
+    "dependencies": {
+      "@warbler/core": "workspace:*",
+      "@warbler/http": "workspace:*",
+      "@warbler/websocket": "workspace:*"
+    },
+  
+    "devDependencies": {
+      "@warbler/cli": "workspace:*",
+      "@types/bun": "latest",
+      "typescript": "^5.9.2"
+    },
+  
+    "engines": {
+      "bun": ">=1.3.0"
+    }
+  }

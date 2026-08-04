@@ -22,6 +22,25 @@ export class ProviderNotFoundError extends InjectionError {
   }
 }
 
+/** Raised when a provider token is registered twice in one scope. */
+export class DuplicateProviderError extends InjectionError {
+  constructor(tokenName: string) {
+    super(`Duplicate provider: ${tokenName}`);
+    this.name = "DuplicateProviderError";
+  }
+}
+
+/** Raised when compiled dependencies cross an isolated Graph boundary. */
+export class ProviderScopeError extends InjectionError {
+  constructor(providerName: string, ownerGraph: string, consumerGraph: string) {
+    super(
+      `Provider "${providerName}" is scoped to Graph "${ownerGraph}" and cannot be injected into "${consumerGraph}". ` +
+      "Declare provide: ProviderScope.ROOT if the provider should be globally available.",
+    );
+    this.name = "ProviderScopeError";
+  }
+}
+
 /** Raised when the provider graph contains a cycle. */
 export class CircularDependencyError extends InjectionError {
   constructor(path: readonly string[]) {

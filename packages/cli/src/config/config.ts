@@ -1,0 +1,46 @@
+import { normalizeRuntimeConfig, type RuntimeConfig, type TransportName } from "@warbler/config";
+import {
+  validateHttpConfig, validateMcpConfig, validateTcpConfig, validateUdpConfig,
+  validateWebrtcConfig, validateWebsocketConfig,
+} from "@warbler/config/validator";
+import { resolve } from "node:path";
+
+const TRANSPORTS = Object.freeze(["http", "websocket", "tcp", "udp", "mcp", "webrtc"] as const);
+/** Loads normalized Runtime configuration through `@warbler/config`. */
+export async function loadCLIConfig(projectRoot: string): Promise<RuntimeConfig> {
+  const module = await import(resolve(projectRoot, "src/config/runtime.config.ts"));
+  return normalizeRuntimeConfig(select(module, ["runtimeConfig"]));
+}
+/** Returns enabled transport names in deterministic order. */
+export function resolveEnabledTransports(config: RuntimeConfig): readonly TransportName[] {
+  return Object.freeze(TRANSPORTS.filter((transport) => config.transports[transport].enabled));
+}
+/** Loads only enabled transport configuration modules. */
+export async function loadEnabledTransportConfigs(config: RuntimeConfig, projectRoot: string): Promise<ReadonlyMap<TransportName, Readonly<unknown>>> {
+  const result = new Map<TransportName, Readonly<unknown>>();
+  for (const transport of resolveEnabledTransports(config)) {
+    const file = transport === "websocket" ? "ws.config.ts" : `${transport}.config.ts`;
+    const module = await import(resolve(projectRoot, "src/config/transports", file));
+    const names = transport === "websocket" ? ["wsConfig", "websocketConfig"] : [`${transport}Config`];
+    const value = select(module, names);
+    validate(transport, value);
+    if (typeof value !== "object" || value === null) throw new TypeError(`${transport} configuration must be an object`);
+    result.set(transport, Object.freeze(value));
+  }
+  return result;
+}
+function select(module: Readonly<Record<string, unknown>>, names: readonly string[]): unknown {
+  for (const name of names) if (name in module) return module[name];
+  if ("default" in module) return module.default;
+  throw new TypeError(`Configuration export not found: ${names.join(", ")}`);
+}
+function validate(transport: TransportName, value: unknown): void {
+  switch (transport) {
+    case "http": validateHttpConfig(value); return;
+    case "websocket": validateWebsocketConfig(value); return;
+    case "tcp": validateTcpConfig(value); return;
+    case "udp": validateUdpConfig(value); return;
+    case "mcp": validateMcpConfig(value); return;
+    case "webrtc": validateWebrtcConfig(value);
+  }
+}

@@ -4,11 +4,106 @@
   "workspaces": {
     "": {
       "name": "warbler",
+    },
+    "packages/cli": {
+      "name": "@warbler/cli",
+      "version": "0.1.0",
+      "bin": {
+        "warbler": "./src/bin.ts",
+      },
+      "dependencies": {
+        "@warbler/compiler": "workspace:*",
+        "@warbler/config": "workspace:*",
+        "@warbler/core": "workspace:*",
+        "@warbler/runtime": "workspace:*",
+      },
       "devDependencies": {
         "@types/bun": "latest",
+        "typescript": "^5.9.2",
       },
-      "peerDependencies": {
-        "typescript": "^5",
+    },
+    "packages/compiler": {
+      "name": "@warbler/compiler",
+      "version": "0.1.0",
+      "dependencies": {
+        "@warbler/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.9.2",
+      },
+    },
+    "packages/config": {
+      "name": "@warbler/config",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.9.2",
+      },
+    },
+    "packages/core": {
+      "name": "@warbler/core",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.9.2",
+      },
+    },
+    "packages/http": {
+      "name": "@warbler/http",
+      "version": "0.1.0",
+      "dependencies": {
+        "@warbler/config": "workspace:*",
+        "@warbler/core": "workspace:*",
+        "@warbler/transport": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "^5.9.2",
+      },
+    },
+    "packages/runtime": {
+      "name": "@warbler/runtime",
+      "version": "0.1.0",
+      "dependencies": {
+        "@warbler/config": "workspace:*",
+        "@warbler/core": "workspace:*",
+        "@warbler/transport": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.9.2",
+      },
+    },
+    "packages/transport": {
+      "name": "@warbler/transport",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.9.2",
+      },
+    },
+    "packages/websocket": {
+      "name": "@warbler/websocket",
+      "version": "0.1.0",
+      "dependencies": {
+        "@warbler/config": "workspace:*",
+        "@warbler/core": "workspace:*",
+        "@warbler/transport": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.9.2",
+      },
+    },
+    "playground": {
+      "name": "@warbler/playground",
+      "version": "0.1.0",
+      "dependencies": {
+        "@warbler/core": "workspace:*",
+        "@warbler/http": "workspace:*",
+        "@warbler/websocket": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "@warbler/cli": "workspace:*",
+        "typescript": "^5.9.2",
       },
     },
   },
@@ -16,6 +111,24 @@
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 
     "@types/node": ["@types/node@26.1.2", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg=="],
+
+    "@warbler/cli": ["@warbler/cli@workspace:packages/cli"],
+
+    "@warbler/compiler": ["@warbler/compiler@workspace:packages/compiler"],
+
+    "@warbler/config": ["@warbler/config@workspace:packages/config"],
+
+    "@warbler/core": ["@warbler/core@workspace:packages/core"],
+
+    "@warbler/http": ["@warbler/http@workspace:packages/http"],
+
+    "@warbler/playground": ["@warbler/playground@workspace:playground"],
+
+    "@warbler/runtime": ["@warbler/runtime@workspace:packages/runtime"],
+
+    "@warbler/transport": ["@warbler/transport@workspace:packages/transport"],
+
+    "@warbler/websocket": ["@warbler/websocket@workspace:packages/websocket"],
 
     "bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
 

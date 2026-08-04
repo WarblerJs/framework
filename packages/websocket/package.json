@@ -1,0 +1,13 @@
+{
+  "name": "@warbler/websocket",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@warbler/config": "workspace:*",
+    "@warbler/core": "workspace:*",
+    "@warbler/transport": "workspace:*"
+  },
+  "devDependencies": { "@types/bun": "latest", "typescript": "^5.9.2" }
+}

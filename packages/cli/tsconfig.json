@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@warbler/compiler": ["../compiler/src/index.ts"],
+      "@warbler/config": ["../config/src/index.ts"],
+      "@warbler/config/validator": ["../config/src/validator/index.ts"],
+      "@warbler/core": ["../core/src/index.ts"],
+      "@warbler/runtime": ["../runtime/src/index.ts"]
+    },
+    "exactOptionalPropertyTypes": true
+  },
+  "include": ["src", "tests"]
+}
