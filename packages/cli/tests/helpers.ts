@@ -16,6 +16,7 @@ export async function createTestProject(): Promise<{ readonly root: string; clea
     symlink(join(packagesRoot, "http"), join(scope, "http")),
     symlink(join(packagesRoot, "runtime"), join(scope, "runtime")),
     symlink(join(packagesRoot, "transport"), join(scope, "transport")),
+    symlink(join(packagesRoot, "validators"), join(scope, "validators")),
   ]);
   return Object.freeze({ root, cleanup: () => rm(parent, { recursive: true, force: true }) });
 }

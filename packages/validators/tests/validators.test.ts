@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  ValidatorError, compileValidator, firstTranslatedValidationErrors,
+  ValidatorError, compileValidator, defineValidator, firstTranslatedValidationErrors,
   messageDescriptorCacheSize, parseMessageDescriptor, translateValidationErrors,
   type InferValidatorBody, type InferValidatorOutput, type InferValidatorPath,
   type InferValidatorQuery, type RequestValidator, v,
@@ -64,6 +64,27 @@ describe("validation execution", () => {
     expect(JSON.stringify(result.errors)).not.toContain("too-long-secret");
     const password = result.errors["body.password"]![0]!;
     expect(password.message).toEqual({ key: "max_message", parameters: { allowed: 5, entered: 15 } });
+  });
+  test("validates File size and MIME type with byte parameters", () => {
+    const validator = compileValidator({
+      rules: {
+        upload: v.file("file_required")
+          .max(4, "file_too_large:allowed::entered")
+          .mime(["image/png"], "invalid_mime"),
+      },
+    });
+    expect(validator.execute({
+      value: { upload: new File(["png"], "image.png", { type: "image/png" }) },
+    }).valid).toBe(true);
+    const oversized = validator.execute({
+      value: { upload: new File(["12345"], "image.png", { type: "image/png" }) },
+    });
+    expect(oversized.valid).toBe(false);
+    if (oversized.valid) return;
+    expect(oversized.errors["body.upload"]![0]!.message).toEqual({
+      key: "file_too_large",
+      parameters: { allowed: 4, entered: 5 },
+    });
   });
 });
 
@@ -141,5 +162,18 @@ describe("inference helpers", () => {
     // @ts-expect-error mapK removes username from the final type.
     const removed: string = output.username;
     expect(removed).toBeUndefined();
+  });
+  test("defineValidator preserves mapV and mapK literals without annotation widening", () => {
+    const validator = defineValidator({
+      rules: { username: v.string(), password: v.string() },
+      mapV: (body) => ({ ...body, email: "habib@test" }),
+      mapK: { username: "name" },
+    });
+    const value: InferValidatorOutput<typeof validator> = {
+      name: "habib", password: "secret", email: "habib@test",
+    };
+    expect(value.name).toBe("habib");
+    // @ts-expect-error username was removed by mapK.
+    expect(value.username).toBeUndefined();
   });
 });

@@ -138,7 +138,7 @@ export class ManagedDevSession implements DevSession {
     this.#state = "reloading";
     try {
       this.#emit("rebuild", "started", `Change detected in ${paths.length} path(s).`, Object.freeze({ paths }));
-      if (paths.every((path) => path.startsWith("public/") || path.startsWith("resources/"))) {
+      if (paths.every((path) => path.startsWith("public/") || (path.startsWith("resources/") && !path.startsWith("resources/i18n/")))) {
         this.#emit("rebuild", "skipped", "Static or resource change requires no Runtime restart.");
         return;
       }

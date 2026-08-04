@@ -50,6 +50,7 @@ function issueParameters(issue: z.core.$ZodIssue, input: unknown): Readonly<Reco
 }
 function sizeOf(value: unknown): number | undefined {
   if (typeof value === "string" || Array.isArray(value)) return value.length;
+  if (value instanceof Blob) return value.size;
   if (value instanceof Map || value instanceof Set) return value.size;
   return undefined;
 }

@@ -31,3 +31,33 @@ export const uploadAvatarValidator = defineValidator({
 
 export type UploadAvatarInput =
   InferValidatorOutput<typeof uploadAvatarValidator>;
+
+export const requestSourcesValidator = defineValidator({
+  rules: {
+    username: v.string("validators.username_not_valid").trim().min(1, "validators.username_not_valid"),
+    password: v.string("invalid_string").trim().min(1, "invalid_string"),
+  },
+  queryRules: {
+    page: v.coerce.number("validators.invalid_page").int("validators.invalid_page").positive("validators.invalid_page"),
+    type: v.string("validators.invalid_type"),
+  },
+  pathRules: {
+    id: v.coerce.number("validators.invalid_id").int("validators.invalid_id").positive("validators.invalid_id"),
+  },
+  headerRules: {
+    "x-retries": v.coerce.number("validators.invalid_retries").int("validators.invalid_retries").nonnegative("validators.invalid_retries"),
+  },
+  cookieRules: {
+    session: v.string("validators.invalid_session").min(1, "validators.invalid_session"),
+  },
+  mapV: (body) => ({
+    ...body,
+    password: `${body.password}##@@`,
+    email: "habib@test",
+  }),
+  mapK: {
+    username: "name",
+  },
+});
+
+export type RequestSourcesBody = InferValidatorOutput<typeof requestSourcesValidator>;

@@ -2,7 +2,7 @@ export default {
   enabled: true,
   defaultLocale: "en",
   fallbackLocale: "en",
-  supportedLocales: ["en", "fr", "es"],
+  supportedLocales: ["en", "fr", "es", "ar"],
   root: "resources/i18n",
   detection: ["explicit", "path", "query", "cookie", "header"],
   queryName: "lang",

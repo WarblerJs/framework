@@ -7,5 +7,10 @@
   "content_too_long": "El contenido del mensaje es demasiado largo.",
   "avatar_required": "Se requiere un archivo de avatar.",
   "file_too_large": "El archivo no puede superar :allowed bytes. Subiste :entered bytes.",
-  "invalid_image_type": "El avatar debe ser una imagen JPEG, PNG o WebP."
+  "invalid_image_type": "El avatar debe ser una imagen JPEG, PNG o WebP.",
+  "invalid_type": "El tipo no es válido.",
+  "invalid_city": "La ciudad no es válida.",
+  "invalid_retries": "El número de reintentos no es válido.",
+  "invalid_session": "La sesión no es válida.",
+  "unrecognized_keys": "La solicitud contiene campos desconocidos."
 }

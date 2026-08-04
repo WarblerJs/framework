@@ -7,5 +7,10 @@
   "content_too_long": "Le contenu du message est trop long.",
   "avatar_required": "Un fichier d’avatar est requis.",
   "file_too_large": "Le fichier ne doit pas dépasser :allowed octets. Vous avez envoyé :entered octets.",
-  "invalid_image_type": "L’avatar doit être une image JPEG, PNG ou WebP."
+  "invalid_image_type": "L’avatar doit être une image JPEG, PNG ou WebP.",
+  "invalid_type": "Le type est invalide.",
+  "invalid_city": "La ville est invalide.",
+  "invalid_retries": "Le nombre de tentatives est invalide.",
+  "invalid_session": "La session est invalide.",
+  "unrecognized_keys": "La requête contient des champs inconnus."
 }

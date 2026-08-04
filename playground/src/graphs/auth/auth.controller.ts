@@ -4,10 +4,22 @@ import { authGuard } from "./auth.guard";
 import AuthService from "./auth.service";
 import {
   type LoginInput,
+  type RequestSourcesBody,
   type UploadAvatarInput,
   loginValidator,
+  requestSourcesValidator,
   uploadAvatarValidator,
 } from "./auth.validator";
+
+type SourcesRequest = AppRequest<
+  RequestSourcesBody,
+  { readonly id: number },
+  { readonly page: number; readonly type: string },
+  unknown,
+  { readonly "x-retries": number },
+  { readonly session: string }
+>;
+let validationCalls = 0;
 
 @Controller()
 export default class AuthController {
@@ -27,6 +39,19 @@ export default class AuthController {
       filename: request.body.avatar.name,
       mimeType: request.body.avatar.type,
       size: request.body.avatar.size,
+    });
+  }
+
+  @Post("/validate/:id", { validator: requestSourcesValidator, csrf: false })
+  validateSources(request: SourcesRequest): Response {
+    validationCalls += 1;
+    return JsonRes({
+      body: request.body,
+      page: request.query.page,
+      id: request.params.id,
+      retries: request.headers["x-retries"],
+      session: request.cookies.session,
+      calls: validationCalls,
     });
   }
 

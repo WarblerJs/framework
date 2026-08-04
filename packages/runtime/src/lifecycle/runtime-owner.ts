@@ -317,8 +317,10 @@ function runValidated(
   onInvalid: (outcome: Readonly<{ valid: boolean; errors?: unknown }>) => unknown = () => invalidRequest(),
 ): unknown {
   const result = executeValidator(validator, input);
-  if (isThenable(result)) return result.then((outcome) => outcome.valid ? terminal(outcome.value) : onInvalid(outcome));
-  return result.valid ? terminal(result.value) : onInvalid(result);
+  const successValue = (outcome: Readonly<{ value: unknown }>): unknown =>
+    typeof validator?.flags === "number" ? outcome : outcome.value;
+  if (isThenable(result)) return result.then((outcome) => outcome.valid ? terminal(successValue(outcome)) : onInvalid(outcome));
+  return result.valid ? terminal(successValue(result)) : onInvalid(result);
 }
 function rangeIds(record: Readonly<Record<string, unknown>>, startKey: string, countKey: string, values: readonly number[] | undefined): readonly number[] {
   const start = numberField(record, startKey);
@@ -347,8 +349,9 @@ function socketValidatedEnvelope(original: unknown, validated: unknown): unknown
   if (typeof original !== "object" || original === null || !("message" in original) || !("context" in original)) return original;
   const message = original.message;
   if (typeof message !== "object" || message === null) return original;
+  const data = validationOutcomeValue(validated);
   return Object.freeze({
-    message: Object.freeze({ ...message, data: validated }),
+    message: Object.freeze({ ...message, data }),
     context: original.context,
   });
 }
@@ -357,18 +360,25 @@ function httpValidatedRequest(validationInput: unknown, body: unknown): unknown 
   const request = validationInput.__request;
   if (!(request instanceof Request)) return body;
   const source = request as Request & Readonly<Record<string, unknown>>;
+  const outcome = validationOutcome(body);
   return Object.freeze({
     native: request,
-    body,
-    params: source.params ?? Object.freeze({}),
-    query: source.query ?? Object.freeze({}),
-    headers: request.headers,
-    cookies: source.cookies ?? Object.freeze({}),
+    body: outcome?.value ?? body,
+    params: outcome?.path ?? source.params ?? Object.freeze({}),
+    query: outcome?.query ?? source.query ?? Object.freeze({}),
+    headers: outcome?.headers ?? request.headers,
+    cookies: outcome?.cookies ?? source.cookies ?? Object.freeze({}),
     context: source.context,
     locale: typeof source.locale === "string" ? source.locale : "en",
     tr: typeof source.tr === "function" ? source.tr : (key: string) => key,
   });
 }
+function validationOutcome(value: unknown): Readonly<Record<string, unknown>> | undefined {
+  return typeof value === "object" && value !== null && "valid" in value && value.valid === true && "value" in value
+    ? value
+    : undefined;
+}
+function validationOutcomeValue(value: unknown): unknown { return validationOutcome(value)?.value ?? value; }
 function isThenable<T>(value: T | Promise<T>): value is Promise<T> {
   return typeof value === "object" && value !== null && "then" in value && typeof value.then === "function";
 }

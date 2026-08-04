@@ -65,11 +65,14 @@ export interface CompiledValidator<TOutput = unknown> {
   execute(input: ValidationInput): ValidationResult<TOutput>;
 }
 
-type InferShape<T> = T extends RuleShape ? z.output<z.ZodObject<T>> : unknown;
-type RulesOf<T, K extends PropertyKey> = T extends Readonly<Record<K, infer S>> ? S extends RuleShape ? InferShape<S> : unknown : unknown;
-type MapValueOutput<T> = T extends Readonly<{ mapV: (...input: readonly never[]) => infer O }> ? O : RulesOf<T, "rules">;
+export type InferRuleShape<T> = T extends RuleShape ? z.output<z.ZodObject<T>> : unknown;
+type InferShape<T> = InferRuleShape<T>;
+type RulesOf<T, K extends PropertyKey> = K extends keyof T ? NonNullable<T[K]> extends RuleShape ? InferShape<NonNullable<T[K]>> : unknown : unknown;
+type MapValueOutput<T> = "mapV" extends keyof T
+  ? NonNullable<T["mapV"]> extends (...input: readonly never[]) => infer O ? O : RulesOf<T, "rules">
+  : RulesOf<T, "rules">;
 type StringKeys<T> = Extract<keyof T, string>;
-type MapRecord<T> = T extends Readonly<{ mapK: infer M }> ? M extends Readonly<Record<string, string>> ? M : {} : {};
+type MapRecord<T> = "mapK" extends keyof T ? NonNullable<T["mapK"]> extends Readonly<Record<string, string>> ? NonNullable<T["mapK"]> : {} : {};
 type MapTargets<M> = M[keyof M] & string;
 type RenameKeys<T, M extends Readonly<Record<string, string>>> =
   Omit<T, Extract<keyof M, keyof T>> & { readonly [K in MapTargets<M>]: T[Extract<{ [S in keyof M]: M[S] extends K ? S : never }[keyof M], keyof T>] };

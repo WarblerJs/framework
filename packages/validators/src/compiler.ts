@@ -21,6 +21,7 @@ export const ValidatorSourceFlag = Object.freeze({
   COOKIES: 1 << 4, MESSAGE: 1 << 5, METADATA: 1 << 6,
 });
 type SchemaProperty = typeof SECTIONS[number][2];
+const selectedHeaderKeys = new WeakMap<z.ZodType, readonly string[]>();
 
 export function compileValidator<T extends RequestValidator>(definition: T, id = 0): CompiledValidator {
   if (!isRecord(definition) || !Number.isSafeInteger(id) || id < 0) throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, "Validator definition or ID is invalid.");
@@ -31,7 +32,9 @@ export function compileValidator<T extends RequestValidator>(definition: T, id =
   for (const [definitionKey, , schemaKey, , flag] of SECTIONS) {
     const shape = definition[definitionKey] as RuleShape | undefined;
     if (shape === undefined) continue;
-    schemas[schemaKey] = compileShape(shape, definitionKey === "headerRules");
+    const schema = compileShape(shape, definitionKey === "headerRules");
+    schemas[schemaKey] = schema;
+    if (definitionKey === "headerRules") selectedHeaderKeys.set(schema, Object.freeze(Object.keys(shape).map((key) => key.toLowerCase())));
     flags |= flag;
   }
   if (flags === 0) throw new ValidatorError(ValidatorErrorCode.INVALID_RULES, "Validator must define at least one rule section.");
@@ -72,7 +75,7 @@ function executeCompiled(compiled: CompiledValidator, input: ValidationInput): V
     const schema = compiled[schemaKey];
     if (schema === undefined) continue;
     const raw = input[inputKey];
-    const candidate = source === "headers" ? normalizeHeaderRecord(raw) : raw;
+    const candidate = source === "headers" ? normalizeHeaderRecord(raw, selectedHeaderKeys.get(schema) ?? Object.freeze([])) : raw;
     let parsed: z.ZodSafeParseResult<unknown>;
     try { parsed = schema.safeParse(candidate); }
     catch (cause) {
@@ -128,10 +131,15 @@ function valueAtPath(value: unknown, path: readonly PropertyKey[]): unknown {
   }
   return current;
 }
-function normalizeHeaderRecord(value: unknown): unknown {
+function normalizeHeaderRecord(value: unknown, selected: readonly string[]): unknown {
   if (!isRecord(value)) return value;
+  const normalized: Record<string, unknown> = Object.create(null);
+  for (const [key, item] of Object.entries(value)) normalized[key.toLowerCase()] = item;
   const result: Record<string, unknown> = Object.create(null);
-  for (const [key, item] of Object.entries(value)) result[key.toLowerCase()] = item;
+  for (const key of selected) {
+    const item = normalized[key];
+    if (item !== undefined) result[key] = item;
+  }
   return result;
 }
 function asRecord(value: unknown): Readonly<Record<string, unknown>> {
