@@ -2,7 +2,12 @@ import { inject } from "@warbler/core";
 import { Controller, Get, JsonRes, Post, type AppRequest } from "@warbler/http";
 import { authGuard } from "./auth.guard";
 import AuthService from "./auth.service";
-import { type LoginInput, loginValidator } from "./auth.validator";
+import {
+  type LoginInput,
+  type UploadAvatarInput,
+  loginValidator,
+  uploadAvatarValidator,
+} from "./auth.validator";
 
 @Controller()
 export default class AuthController {
@@ -10,7 +15,19 @@ export default class AuthController {
 
   @Post("/login", { validator: loginValidator, csrf: false })
   login(request: AppRequest<LoginInput>): Response {
-    return JsonRes(this.#auth.login(request.body.username, request.body.password));
+    return JsonRes({
+      name: request.body.name,
+      d: this.#auth.login(request.body.name, request.body.password)
+    });
+  }
+
+  @Post("/avatar", { validator: uploadAvatarValidator, csrf: false })
+  uploadAvatar(request: AppRequest<UploadAvatarInput>): Response {
+    return JsonRes({
+      filename: request.body.avatar.name,
+      mimeType: request.body.avatar.type,
+      size: request.body.avatar.size,
+    });
   }
 
   @Get("/profile/:id", { guards: [authGuard] })

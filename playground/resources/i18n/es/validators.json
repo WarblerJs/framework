@@ -4,5 +4,8 @@
   "invalid_id": "El identificador debe ser un número positivo.",
   "invalid_room": "La sala no es válida.",
   "invalid_content": "El contenido del mensaje no es válido.",
-  "content_too_long": "El contenido del mensaje es demasiado largo."
+  "content_too_long": "El contenido del mensaje es demasiado largo.",
+  "avatar_required": "Se requiere un archivo de avatar.",
+  "file_too_large": "El archivo no puede superar :allowed bytes. Subiste :entered bytes.",
+  "invalid_image_type": "El avatar debe ser una imagen JPEG, PNG o WebP."
 }

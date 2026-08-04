@@ -1,10 +1,33 @@
-import { v, type InferValidatorOutput } from "@warbler/validators";
+import { defineValidator, v, type InferValidatorOutput } from "@warbler/validators";
 
-export const loginValidator = {
+export const loginValidator = defineValidator({
   rules: {
     username: v.string("validators.username_not_valid").trim().min(1, "validators.username_not_valid"),
     password: v.string("invalid_string").min(1, "invalid_string"),
   },
-} as const;
+  queryRules: {
+    type: v.number('type_not_existe')
+  },
+  mapK: {
+    username: 'name'
+  }
+});
 
 export type LoginInput = InferValidatorOutput<typeof loginValidator>;
+
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+
+export const uploadAvatarValidator = defineValidator({
+  rules: {
+    avatar: v
+      .file("validators.avatar_required")
+      .max(MAX_AVATAR_BYTES, "validators.file_too_large:allowed::entered")
+      .mime(
+        ["image/jpeg", "image/png", "image/webp"],
+        "validators.invalid_image_type",
+      ),
+  },
+});
+
+export type UploadAvatarInput =
+  InferValidatorOutput<typeof uploadAvatarValidator>;

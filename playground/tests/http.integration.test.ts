@@ -23,6 +23,7 @@ test("generated native HTTP routes invoke real controllers and validation", asyn
     expect(await invalid.json()).toEqual({
       username: "Username is invalid.",
       password: "This value must be a string.",
+      type: "Type is not exist .",
     });
     const profileRequest = new Request("http://127.0.0.1/api/auth/profile/10");
     Object.defineProperty(profileRequest, "params", { value: Object.freeze({ id: "10" }) });
@@ -30,6 +31,28 @@ test("generated native HTTP routes invoke real controllers and validation", asyn
     expect(profile.status).toBe(200);
     expect((await profile.json()) as Readonly<Record<string, unknown>>).toMatchObject({
       tr: "Welcome, habib!",
+    });
+    const avatarBody = new FormData();
+    avatarBody.set("avatar", new File(["image"], "avatar.png", { type: "image/png" }));
+    const avatar = await routes["/api/auth/avatar"]!.POST!(new Request("http://127.0.0.1/api/auth/avatar", {
+      method: "POST",
+      body: avatarBody,
+    }));
+    expect(avatar.status).toBe(200);
+    expect(await avatar.json()).toEqual({
+      filename: "avatar.png",
+      mimeType: "image/png",
+      size: 5,
+    });
+    const invalidAvatarBody = new FormData();
+    invalidAvatarBody.set("avatar", new File(["plain"], "avatar.txt", { type: "text/plain" }));
+    const invalidAvatar = await routes["/api/auth/avatar"]!.POST!(new Request("http://127.0.0.1/api/auth/avatar", {
+      method: "POST",
+      body: invalidAvatarBody,
+    }));
+    expect(invalidAvatar.status).toBe(400);
+    expect(await invalidAvatar.json()).toEqual({
+      avatar: "The avatar must be a JPEG, PNG, or WebP image.",
     });
   } finally {
     await runtime.stop();

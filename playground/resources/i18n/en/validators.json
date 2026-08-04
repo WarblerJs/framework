@@ -4,5 +4,9 @@
   "invalid_id": "ID must be a positive number.",
   "invalid_room": "Room is invalid.",
   "invalid_content": "Message content is invalid.",
-  "content_too_long": "Message content is too long."
+  "content_too_long": "Message content is too long.",
+  "avatar_required": "An avatar file is required.",
+  "file_too_large": "The file may not exceed :allowed bytes. You uploaded :entered bytes.",
+  "invalid_type": "The avatar must be a JPEG, PNG, or WebP image.",
+  "invalid_image_type": "The avatar must be a JPEG, PNG, or WebP image."
 }
