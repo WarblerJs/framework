@@ -7,6 +7,8 @@ import { ApplicationEntryRuntimeLauncher } from "./dev/runtime-launcher";
 import { buildCommand } from "./build/build-command";
 import { cleanCommand } from "./clean/clean-command";
 import { cliDiagnostic } from "./diagnostics";
+import { databaseGenerateCommand } from "./db/generate-command";
+import { migrationRunCommand, migrationScaffoldCommand } from "./db/migration-command";
 import { doctorCommand } from "./doctor/doctor-command";
 import { CLIError } from "./errors";
 import { generateSource } from "./generate/generate-command";
@@ -164,6 +166,35 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
       await cleanCommand(root, context.flags["dry-run"] === true);
       writeResult(output, context.format, { command: "clean", status: "success", dryRun: context.flags["dry-run"] === true }, context.flags["dry-run"] === true ? "Would remove dist/ and .warbler/." : "Removed dist/ and .warbler/.");
       return ExitCode.SUCCESS;
+    case "db:pg": {
+      assertArgs(context, [1, 2]);
+      const [action, target] = context.args;
+      if (action === "generate") {
+        assertArgs(context, 1);
+        const result = await databaseGenerateCommand(layout);
+        writeResult(
+          output,
+          context.format,
+          { command: "db:pg", status: "success", action: "generate", tables: result.tables, fingerprint: result.fingerprint },
+          `Compiled ${result.tables.length} table(s): ${result.tables.join(", ")}`,
+        );
+        return ExitCode.SUCCESS;
+      }
+      if (action === "migration") {
+        if (target === undefined) {
+          const result = await migrationRunCommand(layout);
+          const message = result.executed.length === 0
+            ? "No pending migrations."
+            : result.executed.map((migration) => `${migration.name} (batch ${migration.batch}, ${migration.executionMs}ms)`).join("\n");
+          writeResult(output, context.format, { command: "db:pg", status: "success", action: "migration", executed: result.executed }, message);
+          return ExitCode.SUCCESS;
+        }
+        const scaffold = await migrationScaffoldCommand(layout, target);
+        writeResult(output, context.format, { command: "db:pg", status: "success", action: "migration", file: scaffold.path }, `Generated ${scaffold.path}`);
+        return ExitCode.SUCCESS;
+      }
+      throw new CLIError("CLI3002", `Unknown db:pg action: ${action ?? ""}`, ExitCode.INVALID_ARGUMENTS, "Run warbler db:pg generate or warbler db:pg migration.");
+    }
     default: throw new CLIError("CLI1001", `Unsupported command: ${context.command}`, ExitCode.INVALID_ARGUMENTS);
   }
 }
@@ -177,7 +208,14 @@ function writeDevelopmentEvent(output: CLIOutput, format: "human" | "json", verb
   const message = `${marker} ${event.message}`;
   (event.status === "failure" ? output.error : output.write)(message);
 }
-function assertArgs(context: CLIContext, count: number): void {
+function assertArgs(context: CLIContext, count: number | readonly [min: number, max: number]): void {
+  if (Array.isArray(count)) {
+    const [min, max] = count;
+    if (context.args.length < min || context.args.length > max) {
+      throw new CLIError("CLI1009", `${context.command} expects between ${min} and ${max} positional argument(s).`, ExitCode.INVALID_ARGUMENTS);
+    }
+    return;
+  }
   if (context.args.length !== count) throw new CLIError("CLI1009", `${context.command} expects ${count} positional argument(s).`, ExitCode.INVALID_ARGUMENTS);
 }
 function stringFlag(value: string | boolean | undefined): string | undefined { return typeof value === "string" ? value : undefined; }
@@ -191,6 +229,7 @@ function validateCommandFlags(context: CLIContext): void {
     inspect: [...common, "project"],
     new: [...common, "dry-run"],
     generate: [...common, "project", "dry-run", "force"],
+    "db:pg": [...common, "project"],
     clean: [...common, "project", "dry-run"],
     version: common,
     help: common,
@@ -216,6 +255,8 @@ Usage:
   warbler inspect [graphs|routes|providers|transports|config]
   warbler new <name>
   warbler generate <kind> <name>
+  warbler db:pg migration [<kind>:<name>]
+  warbler db:pg generate
   warbler clean
   warbler version
 

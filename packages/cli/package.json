@@ -11,6 +11,7 @@
     "@warbler/compiler": "workspace:*",
     "@warbler/config": "workspace:*",
     "@warbler/core": "workspace:*",
+    "@warbler/database": "workspace:*",
     "@warbler/runtime": "workspace:*",
     "@warbler/view": "workspace:*"
   },

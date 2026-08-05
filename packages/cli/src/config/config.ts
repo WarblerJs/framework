@@ -3,6 +3,7 @@ import {
   validateHttpConfig, validateMcpConfig, validateTcpConfig, validateUdpConfig,
   validateWebrtcConfig, validateWebsocketConfig,
 } from "@warbler/config/validator";
+import type { DatabaseProjectConfig } from "@warbler/database";
 import { resolve } from "node:path";
 
 const TRANSPORTS = Object.freeze(["http", "websocket", "tcp", "udp", "mcp", "webrtc"] as const);
@@ -10,6 +11,15 @@ const TRANSPORTS = Object.freeze(["http", "websocket", "tcp", "udp", "mcp", "web
 export async function loadCLIConfig(projectRoot: string): Promise<RuntimeConfig> {
   const module = await import(resolve(projectRoot, "src/config/runtime.config.ts"));
   return normalizeRuntimeConfig(select(module, ["runtimeConfig"]));
+}
+/** Loads the `pg` section of `src/config/database.config.ts`. Assumes the file exists. */
+export async function loadDatabaseConfig(projectRoot: string): Promise<DatabaseProjectConfig> {
+  const module = await import(resolve(projectRoot, "src/config/database.config.ts"));
+  const candidate = select(module, ["databaseConfig"]);
+  if (typeof candidate !== "object" || candidate === null) throw new TypeError("Database configuration must be an object.");
+  const pg = (candidate as Readonly<Record<string, unknown>>)["pg"];
+  if (typeof pg !== "object" || pg === null) throw new TypeError("Database configuration must export a `pg` key.");
+  return pg as DatabaseProjectConfig;
 }
 /** Returns enabled transport names in deterministic order. */
 export function resolveEnabledTransports(config: RuntimeConfig): readonly TransportName[] {

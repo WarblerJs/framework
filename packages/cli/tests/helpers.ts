@@ -13,6 +13,7 @@ export async function createTestProject(): Promise<{ readonly root: string; clea
   await Promise.all([
     symlink(join(packagesRoot, "config"), join(scope, "config")),
     symlink(join(packagesRoot, "core"), join(scope, "core")),
+    symlink(join(packagesRoot, "database"), join(scope, "database")),
     symlink(join(packagesRoot, "http"), join(scope, "http")),
     symlink(join(packagesRoot, "runtime"), join(scope, "runtime")),
     symlink(join(packagesRoot, "transport"), join(scope, "transport")),

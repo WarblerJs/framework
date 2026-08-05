@@ -25,5 +25,12 @@ export { startCommand } from "./start/start-command";
 export { doctorCommand } from "./doctor/doctor-command";
 export { inspectCommand, type InspectionResult } from "./inspect/inspect-command";
 export { cleanCommand } from "./clean/clean-command";
+export { databaseGenerateCommand, type DatabaseGenerateResult } from "./db/generate-command";
+export {
+  migrationRunCommand,
+  migrationScaffoldCommand,
+  type MigrationRunCommandResult,
+  type MigrationScaffoldCommandResult,
+} from "./db/migration-command";
 export { ProcessOwner } from "./process/process-owner";
 export { resolveInside } from "./filesystem";

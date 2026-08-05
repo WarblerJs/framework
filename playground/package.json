@@ -10,12 +10,14 @@
     "doctor": "warbler doctor",
     "inspect": "warbler inspect",
     "dev:verb": "warbler dev --verbose",
+    "generate": "warbler generate model Post",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "clean": "warbler clean"
   },
   "dependencies": {
     "@warbler/core": "workspace:*",
+    "@warbler/database": "workspace:*",
     "@warbler/http": "workspace:*",
     "@warbler/runtime": "workspace:*",
     "@warbler/validators": "workspace:*",

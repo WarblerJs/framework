@@ -10,6 +10,8 @@ warbler doctor
 warbler inspect [section]
 warbler new <name>
 warbler generate <kind> <name>
+warbler db:pg migration [<kind>:<name>]
+warbler db:pg generate
 warbler clean
 warbler version
 warbler help
