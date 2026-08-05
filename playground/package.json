@@ -20,6 +20,7 @@
     "@warbler/runtime": "workspace:*",
     "@warbler/validators": "workspace:*",
     "@warbler/view": "workspace:*",
+    "@warbler/config": "workspace:*",
     "@warbler/websocket": "workspace:*"
   },
   "devDependencies": {

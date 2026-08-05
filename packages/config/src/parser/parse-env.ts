@@ -1,4 +1,5 @@
 import { ConfigError } from "../errors";
+import { parseBoolean } from "./parse-boolean";
 
 const ENV_NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/u;
 
@@ -16,3 +17,30 @@ export function parseEnv(
   }
   return value;
 }
+
+export const envBoolean = (
+  key: string,
+  fallback: boolean,
+): boolean =>
+  process.env[key] ? parseBoolean(process.env[key] ) : fallback;
+
+export const envString = (
+  key: string,
+  fallback: string,
+): string =>
+  process.env[key] ?? fallback;
+
+export const envNumber = (
+  key: string,
+  fallback: number,
+): number => {
+  const value = process.env[key];
+
+  if (value === undefined) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+
+  return Number.isSafeInteger(parsed) ? parsed : fallback;
+};

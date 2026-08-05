@@ -161,6 +161,7 @@
       "name": "@warbler/playground",
       "version": "0.1.0",
       "dependencies": {
+        "@warbler/config": "workspace:*",
         "@warbler/core": "workspace:*",
         "@warbler/http": "workspace:*",
         "@warbler/runtime": "workspace:*",
