@@ -22,7 +22,7 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
     async start(input: RuntimeTransportStartInput<HttpRuntimeBindings, unknown>) {
       const config = normalizeHttpConfig(input.config);
       const routes: Record<string, unknown> = {
-        ...await createStaticRouteTable(process.cwd(), config.static),
+        ...await createStaticRouteTable(process.cwd(), config.static, config.development),
         ...(config.development ? createViewDevelopmentRoutes() : {}),
       };
       const csrf = config.csrf.enabled

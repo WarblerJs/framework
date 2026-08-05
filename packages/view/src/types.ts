@@ -99,7 +99,10 @@ export interface ViewProjectConfig {
   readonly assets?: Readonly<{
     readonly enabled?: boolean;
     readonly scripts?: Readonly<{ readonly entries?: Readonly<Record<string, string>> }>;
-    readonly styles?: Readonly<{ readonly entries?: Readonly<Record<string, string>> }>;
+    readonly styles?: Readonly<{
+      readonly entries?: Readonly<Record<string, string>>;
+      readonly tailwind?: boolean;
+    }>;
     readonly development?: Readonly<{ readonly sourceMaps?: boolean }>;
     readonly production?: Readonly<{ readonly minify?: boolean }>;
   }>;

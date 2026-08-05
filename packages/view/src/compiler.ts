@@ -10,6 +10,7 @@ import type {
   ViewDependencyMap,
   ViewProjectConfig,
 } from "./types";
+import { buildTailwindCss } from "./tailwind";
 
 export interface CompileViewProjectOptions {
   readonly projectRoot: string;
@@ -17,6 +18,7 @@ export interface CompileViewProjectOptions {
   readonly mode?: "development" | "production";
   readonly previous?: CompiledViewArtifact;
   readonly changedTemplates?: readonly string[];
+  readonly buildAssets?: boolean;
 }
 
 const compareText = (left: string, right: string): number =>
@@ -75,7 +77,7 @@ export async function compileViewProject(
     dependents,
   });
 
-  if (config.assets?.enabled === true) {
+  if (config.assets?.enabled === true && options.buildAssets !== false) {
     await buildFrontendAssets(root, config, production);
   }
 
@@ -185,7 +187,17 @@ async function buildFrontendAssets(root: string, config: ViewProjectConfig, prod
   const sourceMap = !production && config.assets?.development?.sourceMaps === true ? "external" : "none";
   const minify = production && config.assets?.production?.minify === true;
   await buildAssetGroup(root, publicDirectory, "app.js", config.assets?.scripts?.entries, "js", sourceMap, minify);
-  await buildAssetGroup(root, publicDirectory, "app.css", config.assets?.styles?.entries, "css", sourceMap, minify);
+  const styleEntries = configuredEntries(config.assets?.styles?.entries, "css entry");
+  if (config.assets?.styles?.tailwind === true) {
+    await buildTailwindCss({
+      projectRoot: root,
+      publicDirectory,
+      entries: Object.freeze(styleEntries),
+      minify,
+    });
+  } else {
+    await buildAssetGroup(root, publicDirectory, "app.css", config.assets?.styles?.entries, "css", sourceMap, minify);
+  }
 }
 
 async function buildAssetGroup(
@@ -197,7 +209,7 @@ async function buildAssetGroup(
   sourcemap: "external" | "none",
   minify: boolean,
 ): Promise<void> {
-  const paths = Object.values(entries ?? {}).sort(compareText).map((path) => safeRelative(path, `${kind} entry`));
+  const paths = configuredEntries(entries, `${kind} entry`);
   if (paths.length === 0) return;
   const virtualDirectory = `${root}/.warbler/view`;
   const entry = `${virtualDirectory}/${kind}.entry.${kind === "js" ? "ts" : "css"}`;
@@ -226,6 +238,16 @@ function safeRelative(value: string, label: string): string {
     throw new TemplateCompilationError(label, `${label} must remain inside the project.`);
   }
   return normalized.replace(/\/$/u, "");
+}
+function configuredEntries(
+  entries: Readonly<Record<string, string>> | undefined,
+  label: string,
+): readonly string[] {
+  const values: unknown[] = Object.values(entries ?? {});
+  if (values.some((value) => typeof value !== "string")) {
+    throw new TemplateCompilationError("View configuration", `${label} values must be file paths.`);
+  }
+  return Object.freeze((values as string[]).sort(compareText).map((path) => safeRelative(path, label)));
 }
 function cleanRoot(value: string): string { return value.replaceAll("\\", "/").replace(/\/+$/u, ""); }
 function validExtension(value: string): string {

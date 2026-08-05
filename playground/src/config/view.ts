@@ -18,6 +18,7 @@ export const viewConfig = {
       entries: {
         app: "resources/css/app.css",
       },
+      tailwind: true,
     },
     development: {
       watch: true,

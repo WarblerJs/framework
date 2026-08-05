@@ -11,6 +11,7 @@ export type StaticRouteValue = Bun.BunFile | Readonly<Partial<Record<"GET" | "HE
 export async function createStaticRouteTable(
   workspaceRoot: string,
   policy: StaticPolicy,
+  development = false,
 ): Promise<Readonly<Record<string, StaticRouteValue>>> {
   if (!policy.enabled) return Object.freeze({});
   const root = join(workspaceRoot, policy.root);
@@ -24,14 +25,16 @@ export async function createStaticRouteTable(
     const canonical = await resolveStaticPath(root, relative);
     const file = Bun.file(canonical, { type: mimeTypeForPath(canonical) });
     const headers = new Headers({ "content-type": mimeTypeForPath(canonical), "x-content-type-options": "nosniff" });
-    if (policy.cacheControl.enabled) {
+    if (development) {
+      headers.set("cache-control", "no-store");
+    } else if (policy.cacheControl.enabled) {
       headers.set("cache-control", policy.cacheControl.immutableAssets && /\.[a-f0-9]{8,}\./iu.test(relative)
         ? "public, max-age=31536000, immutable"
         : "public, max-age=3600");
     }
     const route = joinPaths(policy.prefix, relative);
     const routeValue = Object.freeze({
-      GET: file,
+      GET: development ? new Response(file, { headers }) : file,
       HEAD: new Response(null, { headers }),
     });
     output[route] = routeValue;

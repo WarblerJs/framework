@@ -78,3 +78,18 @@ return View("home.index", { users });
 
 `{{ value }}` is escaped. `{!! value !!}` deliberately emits raw HTML and must not receive
 untrusted content.
+
+Tailwind CSS v4 uses the official CLI when enabled in the existing View configuration:
+
+```ts
+assets: {
+  styles: {
+    entries: { app: "resources/css/app.css" },
+    tailwind: true,
+  },
+}
+```
+
+The CSS entry remains CSS-first and may use `@import "tailwindcss"`, `@plugin`, `@theme`,
+`@custom-variant`, and `@source`. Warbler invokes no Tailwind watcher; its existing serialized
+development queue builds and atomically replaces `public/app.css`.

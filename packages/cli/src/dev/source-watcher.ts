@@ -1,7 +1,8 @@
 import { watch, type FSWatcher } from "node:fs";
 
-const IGNORED = /(?:^|[/\\])(?:node_modules|dist|\.warbler|\.git|coverage)(?:[/\\]|$)/u;
-const RELEVANT = /^(?:src|resources|public)(?:[/\\]|$)|^(?:package\.json|tsconfig\.json)$/u;
+const IGNORED = /(?:^|[/\\])(?:node_modules|public|dist|\.warbler|\.git|coverage)(?:[/\\]|$)/u;
+const RELEVANT = /\.(?:[cm]?[jt]sx?|html?|css|scss|sass)$/iu;
+const PROJECT_FILE = /^(?:package\.json|tsconfig\.json)$/u;
 
 /** One recursive project watcher with one shared burst-coalescing timer. */
 export class SourceWatcher {
@@ -20,7 +21,7 @@ export class SourceWatcher {
     this.#watcher = watch(this.#root, { recursive: true }, (_event, filename) => {
       if (filename === null) return;
       const path = filename.toString();
-      if (IGNORED.test(path) || !RELEVANT.test(path)) return;
+      if (!isRelevantSourcePath(path)) return;
       this.#pending.add(path);
       if (this.#timer !== undefined) clearTimeout(this.#timer);
       this.#timer = setTimeout(() => { void this.#flush(); }, 40);
@@ -40,4 +41,6 @@ export class SourceWatcher {
   }
 }
 /** Returns whether a path is relevant to development recompilation. */
-export function isRelevantSourcePath(path: string): boolean { return !IGNORED.test(path) && RELEVANT.test(path); }
+export function isRelevantSourcePath(path: string): boolean {
+  return !IGNORED.test(path) && (RELEVANT.test(path) || PROJECT_FILE.test(path));
+}

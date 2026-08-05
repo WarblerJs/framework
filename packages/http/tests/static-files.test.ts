@@ -29,6 +29,25 @@ describe("static files", () => {
     expect(table["/"]).toHaveProperty("GET");
   });
 
+  test("disables browser caching for development static assets", async () => {
+    temporary = await mkdtemp(join(tmpdir(), "warbler-static-dev-"));
+    await mkdir(join(temporary, "public"), { recursive: true });
+    await Bun.write(join(temporary, "public", "app.css"), "body{}");
+    const routes = await createStaticRouteTable(temporary, {
+      enabled: true, root: "public", prefix: "/", indexFiles: ["index.html"],
+      exposeDotfiles: false, exposeSourceMaps: false,
+      cacheControl: { enabled: true, immutableAssets: true },
+    }, true);
+    const route = routes["/app.css"];
+    expect(route).toBeObject();
+    if (route instanceof Blob || route instanceof Response || route === undefined) {
+      throw new Error("Expected method route.");
+    }
+    const response = route.GET;
+    expect(response).toBeInstanceOf(Response);
+    expect((response as Response).headers.get("cache-control")).toBe("no-store");
+  });
+
   test("rejects encoded traversal and symlink escape", async () => {
     temporary = await mkdtemp(join(tmpdir(), "warbler-http-"));
     const root = join(temporary, "public");

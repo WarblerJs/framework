@@ -54,6 +54,34 @@ describe("View compiler", () => {
     expect(second.compiled).not.toContain("other");
   });
 
+  test("can rebuild an HTML artifact without rebuilding frontend assets", async () => {
+    const root = await createProject({
+      "resources/views/page.html": "Before",
+      "resources/css/app.css": "body { color: red; }",
+      "public/app.css": "published-css",
+    });
+    const configured = {
+      assets: {
+        enabled: true,
+        styles: { entries: { app: "resources/css/app.css" } },
+      },
+    } as const;
+    const first = await compileViewProject({
+      projectRoot: root,
+      config: configured,
+      buildAssets: false,
+    });
+    await Bun.write(`${root}/resources/views/page.html`, "After");
+    await compileViewProject({
+      projectRoot: root,
+      config: configured,
+      previous: first.artifact,
+      changedTemplates: ["resources/views/page.html"],
+      buildAssets: false,
+    });
+    expect(await Bun.file(`${root}/public/app.css`).text()).toBe("published-css");
+  });
+
   test("rejects circular and missing dependencies before Runtime", async () => {
     const circular = await createProject({
       "resources/views/a.html": "@import('b')",

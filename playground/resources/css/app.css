@@ -1,13 +1,19 @@
+@import "tailwindcss";
 :root {
-  color-scheme: light dark;
+  /* color-scheme: light dark; */
+  color-scheme: light ;
   font-family: system-ui, sans-serif;
 }
-
-body {
-  margin: 2rem;
+@theme{
+  --breakpoint-*: initial;
+  --breakpoint-sm: 480px;
+  --breakpoint-md: 768px;
+  --color-wbdark: #012;
 }
+
+
 
 .logo{
   border-radius: 20px;
-  width: 200px;
+  max-width: 200px;
 }

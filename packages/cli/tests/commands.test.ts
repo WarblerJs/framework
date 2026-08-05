@@ -104,7 +104,8 @@ describe("development", () => {
   test("watch path filtering ignores generated and dependency paths", () => {
     expect(isRelevantSourcePath("src/graphs/user.ts")).toBe(true);
     expect(isRelevantSourcePath("resources/views/index.html")).toBe(true);
-    expect(isRelevantSourcePath("public/app.css")).toBe(true);
+    expect(isRelevantSourcePath("public/app.css")).toBe(false);
+    expect(isRelevantSourcePath("design-system/sources/components.html")).toBe(true);
     expect(isRelevantSourcePath(".warbler/generated/app.ts")).toBe(false);
     expect(isRelevantSourcePath("node_modules/pkg/index.ts")).toBe(false);
   });
