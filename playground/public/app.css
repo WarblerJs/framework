@@ -17,5 +17,10 @@ body {
   margin: 2rem;
 }
 
+.logo {
+  border-radius: 20px;
+  width: 200px;
+}
+
 /* .warbler/view/css.entry.css */
 
