@@ -4,6 +4,7 @@ import { atomicWrite, resolveInside } from "../filesystem";
 import { CLIError } from "../errors";
 import { ExitCode } from "../types";
 import { SourceWatcher } from "./source-watcher";
+import { DevelopmentViewPipeline } from "./view-pipeline";
 
 /** Managed Runtime handle used by development orchestration. */
 export interface DevelopmentRuntimeHandle {
@@ -22,7 +23,7 @@ export interface DevelopmentRuntimeOverrides {
 }
 /** Structured development progress emitted by orchestration stages. */
 export interface DevelopmentEvent {
-  readonly stage: "project" | "config" | "compiler" | "bindings" | "runtime" | "transport" | "watcher" | "rebuild" | "reload" | "restart";
+  readonly stage: "project" | "config" | "compiler" | "bindings" | "runtime" | "transport" | "watcher" | "rebuild" | "reload" | "restart" | "view" | "assets" | "hmr";
   readonly status: "started" | "success" | "failure" | "skipped";
   readonly message: string;
   readonly metadata?: Readonly<Record<string, unknown>>;
@@ -53,6 +54,7 @@ export class ManagedDevSession implements DevSession {
   #activeCompiler: CompilerContext | undefined;
   #activePreparation: unknown;
   #watcher: SourceWatcher | undefined;
+  #views: DevelopmentViewPipeline | undefined;
   #buildNumber = 0;
   readonly #pendingPaths = new Set<string>();
   #rebuildPromise: Promise<void> | undefined;
@@ -67,6 +69,8 @@ export class ManagedDevSession implements DevSession {
   /** Performs initial compilation and starts the Runtime abstraction. */
   public async start(): Promise<this> {
     const preparation = await this.#launcher.prepare?.(this.#projectRoot, this.#overrides, this.#report);
+    this.#views = new DevelopmentViewPipeline(this.#projectRoot, this.#report);
+    await this.#views.start();
     const compiler = await this.#compile();
     this.#runtime = await this.#launcher.start(this.#projectRoot, compiler, this.#overrides, this.#report, preparation);
     this.#activeCompiler = compiler;
@@ -138,6 +142,11 @@ export class ManagedDevSession implements DevSession {
     this.#state = "reloading";
     try {
       this.#emit("rebuild", "started", `Change detected in ${paths.length} path(s).`, Object.freeze({ paths }));
+      const viewHandled = await this.#views?.rebuild(paths) === true;
+      if (viewHandled) {
+        this.#emit("rebuild", "success", "View update published without a Runtime restart.");
+        return;
+      }
       if (paths.every((path) => path.startsWith("public/") || (path.startsWith("resources/") && !path.startsWith("resources/i18n/")))) {
         this.#emit("rebuild", "skipped", "Static or resource change requires no Runtime restart.");
         return;

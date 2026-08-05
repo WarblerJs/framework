@@ -11,7 +11,8 @@
     "@warbler/compiler": "workspace:*",
     "@warbler/config": "workspace:*",
     "@warbler/core": "workspace:*",
-    "@warbler/runtime": "workspace:*"
+    "@warbler/runtime": "workspace:*",
+    "@warbler/view": "workspace:*"
   },
   "devDependencies": { "@types/bun": "latest", "typescript": "^5.9.2" }
 }

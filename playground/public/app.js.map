@@ -1,0 +1,10 @@
+{
+  "version": 3,
+  "sources": ["../resources/js/app.ts"],
+  "sourcesContent": [
+    "document.documentElement.dataset.warbler = \"ready\";\n \n"
+  ],
+  "mappings": ";AAAA,SAAS,gBAAgB,QAAQ,UAAU;",
+  "debugId": "703D587F50AE4AFC64756E2164756E21",
+  "names": []
+}

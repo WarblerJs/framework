@@ -1,0 +1,31 @@
+<html>
+  <head>
+    <title>
+      {{title}}
+    </title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+        <style type="text/tailwindcss">
+
+    </style>
+    <script src="/app.js"></script>
+  </head>
+<body>
+  <div class="flex  min-h-screen">
+    <div class="flex flex-col w-30  bg-gray-800 text-white">
+     side bar
+    </div>
+    <div class="hidden">
+      subleft
+    </div>
+    <div class="flex-1">
+      <header>
+     
+      </header>
+      <main class="p-4">@yield('content')</main>
+    </div>
+
+  </div>
+
+ 
+</body>
+</html>

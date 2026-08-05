@@ -22,7 +22,8 @@
     "@warbler/core": "workspace:*",
     "@warbler/i18n": "workspace:*",
     "@warbler/validators": "workspace:*",
-    "@warbler/transport": "workspace:*"
+    "@warbler/transport": "workspace:*",
+    "@warbler/view": "workspace:*"
   },
   "devDependencies": { "@types/bun": "latest", "typescript": "^5.9.2" }
 }

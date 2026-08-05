@@ -42,7 +42,7 @@ export const httpConfig = {
   static: {
     enabled: true,
     root: "public",
-    prefix: "/public",
+    prefix: "/",
     indexFiles: ["index.html"],
     exposeDotfiles: false,
     exposeSourceMaps: false,

@@ -17,6 +17,7 @@
         "@warbler/console": "workspace:*",
         "@warbler/core": "workspace:*",
         "@warbler/runtime": "workspace:*",
+        "@warbler/view": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -70,6 +71,7 @@
         "@warbler/i18n": "workspace:*",
         "@warbler/transport": "workspace:*",
         "@warbler/validators": "workspace:*",
+        "@warbler/view": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -126,6 +128,14 @@
         "zod": "^4.0.0",
       },
     },
+    "packages/view": {
+      "name": "@warbler/view",
+      "version": "0.1.0-rc.0",
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.9.0",
+      },
+    },
     "packages/websocket": {
       "name": "@warbler/websocket",
       "version": "0.1.0",
@@ -150,6 +160,7 @@
         "@warbler/http": "workspace:*",
         "@warbler/runtime": "workspace:*",
         "@warbler/validators": "workspace:*",
+        "@warbler/view": "workspace:*",
         "@warbler/websocket": "workspace:*",
       },
       "devDependencies": {
@@ -187,6 +198,8 @@
     "@warbler/transport": ["@warbler/transport@workspace:packages/transport"],
 
     "@warbler/validators": ["@warbler/validators@workspace:packages/validators"],
+
+    "@warbler/view": ["@warbler/view@workspace:packages/view"],
 
     "@warbler/websocket": ["@warbler/websocket@workspace:packages/websocket"],
 

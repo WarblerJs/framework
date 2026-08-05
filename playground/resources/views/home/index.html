@@ -1,11 +1,19 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WarblerJS :: home</title>
-</head>
-<body>
-    Hello, this is the home page of WarblerJS.
-</body>
-</html>
+@extends('layouts.main')
+@section('content') {
+   
+        <h1>sss title</h1>
+        <p>User Name : </p>
+        <p>{{ hello }}</p>
+        <p>{{ test1 }}--> ddss</p>
+        <div class="bg-amber-300">
+          <form action="/newUser/ll" method="POST">
+           
+            <input class="border py-0.5 px-2 rounded-md border-gray-800" type="text" name="name" value="p" />
+            <button class="bg-gray-800 text-white rounded-md py-0.5 px-2" type="submit">Set new user</button>
+          </form>
+        </div>
+        <div class="grid grid-cols-3 gap-4">
+ 
+        </div>
+ 
+}

@@ -7,6 +7,7 @@ import { createSecurityHeaderTemplate } from "../security";
 import { createStaticRouteTable } from "../static";
 import { createHttpServerOwner } from "./create-http-server-owner";
 import type { HttpServer } from "./http-server.types";
+import { createViewDevelopmentRoutes } from "@warbler/view";
 
 /** Generated HTTP bindings supplied by Runtime after one-time pipeline compilation. */
 export interface HttpRuntimeBindings {
@@ -22,6 +23,7 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
       const config = normalizeHttpConfig(input.config);
       const routes: Record<string, unknown> = {
         ...await createStaticRouteTable(process.cwd(), config.static),
+        ...(config.development ? createViewDevelopmentRoutes() : {}),
       };
       const csrf = config.csrf.enabled
         ? Object.freeze({

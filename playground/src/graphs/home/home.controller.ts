@@ -1,5 +1,6 @@
 import { inject } from "@warbler/core";
-import { ArchiveRes, Controller, Get, HtmlRes, ImageRes, JsonRes, PdfRes, Sse, SseRes, TextRes } from "@warbler/http";
+import { ArchiveRes, Controller, Get, ImageRes, JsonRes, PdfRes, Sse, SseRes, TextRes } from "@warbler/http";
+import { View } from "@warbler/view";
 import HomeService from "./home.service";
 
 @Controller()
@@ -18,7 +19,11 @@ export default class HomeController {
 
   @Get("/page")
   page(): Response {
-    return HtmlRes("<!doctype html><html><body><h1>Warbler Playground</h1></body></html>");
+    return View("home.index", {
+      title: "Warbler Playground",
+      hello: 'World',
+      test1: 'Awsdvf'
+    });
   }
 
   @Get("/file/pdf")
