@@ -3,7 +3,7 @@ import ts from "typescript";
 import { BindingDiagnosticCode, bindingDiagnostic } from "../diagnostics/binding-diagnostics";
 import type { OptimizedApplication } from "../output/artifact-types";
 import type { CompilerContext } from "../project/compiler-context";
-import type { ApplicationWIR, ControllerWIR, ProviderWIR } from "../wir/wir";
+import type { ApplicationWIR, CapturedExpressionWIR, ControllerWIR, ProviderWIR } from "../wir/wir";
 
 /** One deterministic ESM value import required by generated executable code. */
 export interface BindingImport {
@@ -12,9 +12,26 @@ export interface BindingImport {
   readonly kind: "default" | "named";
   readonly module: string;
 }
+/** A verbatim-captured expression plus the resolved imports its free identifiers require. */
+export interface CapturedBindingExpression {
+  readonly text: string;
+  readonly imports: readonly BindingImport[];
+}
+/** A bare string/symbol token embedded directly in generated source — it has no declaration to import. */
+export interface LiteralTokenReference {
+  readonly kind: "literal";
+  readonly expression: string;
+}
+/** A provider/existing token: either an imported declaration or an inline literal. */
+export type TokenReference = BindingImport | LiteralTokenReference;
 export interface ProviderBindingPlan {
   readonly id: number; readonly graphId: number; readonly scope: "graph" | "root";
-  readonly dependencyIds: readonly number[]; readonly symbol: BindingImport;
+  readonly registration: "class" | "useValue" | "useFactory" | "useExisting";
+  readonly dependencyIds: readonly number[]; readonly token: TokenReference;
+  readonly implementation?: BindingImport;
+  readonly capturedValue?: CapturedBindingExpression;
+  readonly capturedFactory?: CapturedBindingExpression;
+  readonly existing?: TokenReference;
   readonly dependencySymbols: readonly BindingImport[];
 }
 export interface ControllerBindingPlan {
@@ -46,10 +63,10 @@ export function analyzeExecutableBindings(
   for (const graph of wir.graphs) for (const controller of graph.controllers) controllerOwners.set(`${graph.name}:${controller.name}`, { graph: graph.name, controller });
 
   const imports = new Map<string, BindingImport>();
-  const resolveValue = (name: string, preferredFile?: string): BindingImport | undefined => {
+  const resolveValue = (name: string, preferredFile?: string, silent = false): BindingImport | undefined => {
     const candidates = (declarations.get(name) ?? []).filter((node) => preferredFile === undefined || node.getSourceFile().fileName === preferredFile);
     if (candidates.length !== 1) {
-      context.diagnostics.push(bindingDiagnostic(
+      if (!silent) context.diagnostics.push(bindingDiagnostic(
         candidates.length === 0 ? BindingDiagnosticCode.SYMBOL_NOT_FOUND : BindingDiagnosticCode.IMPORT_UNRESOLVED,
         `Executable binding symbol "${name}" ${candidates.length === 0 ? "was not found" : "is ambiguous"}.`,
         preferredFile ?? "", name,
@@ -58,12 +75,12 @@ export function analyzeExecutableBindings(
     }
     const declaration = candidates[0]!;
     if (isTypeOnly(declaration)) {
-      context.diagnostics.push(bindingDiagnostic(BindingDiagnosticCode.NOT_EXPORTED, `Executable binding "${name}" is type-only.`, declaration.getSourceFile().fileName, name));
+      if (!silent) context.diagnostics.push(bindingDiagnostic(BindingDiagnosticCode.NOT_EXPORTED, `Executable binding "${name}" is type-only.`, declaration.getSourceFile().fileName, name));
       return undefined;
     }
     const kind = exportKind(declaration);
     if (kind === undefined) {
-      context.diagnostics.push(bindingDiagnostic(BindingDiagnosticCode.NOT_EXPORTED, `Executable binding "${name}" is not exported.`, declaration.getSourceFile().fileName, name));
+      if (!silent) context.diagnostics.push(bindingDiagnostic(BindingDiagnosticCode.NOT_EXPORTED, `Executable binding "${name}" is not exported.`, declaration.getSourceFile().fileName, name));
       return undefined;
     }
     const declaredName = declarationName(declaration);
@@ -76,6 +93,15 @@ export function analyzeExecutableBindings(
     imports.set(key, value);
     return value;
   };
+  /** Resolves a captured free identifier to an import when it's a user declaration; globals (console, Math, ...) silently resolve to nothing. */
+  const resolveCaptured = (captured: CapturedExpressionWIR | undefined): CapturedBindingExpression | undefined => {
+    if (captured === undefined) return undefined;
+    const capturedImports = captured.captures.filter((name) => !isLiteralReference(name)).map((name) => resolveValue(name, undefined, true)).filter(isImport);
+    return Object.freeze({ text: captured.text, imports: Object.freeze(capturedImports) });
+  };
+  /** Resolves a token/dependency name to an import, or — for a bare string/symbol literal, which has no declaration — an inline literal. */
+  const resolveToken = (name: string, preferredFile?: string): TokenReference | undefined =>
+    isLiteralReference(name) ? Object.freeze({ kind: "literal" as const, expression: name }) : resolveValue(name, preferredFile);
 
   let failed = false;
   const providers: ProviderBindingPlan[] = [];
@@ -84,12 +110,31 @@ export function analyzeExecutableBindings(
     const ownerEntry = [...providerOwners.entries()].find(([key]) => key === (row.root ? `root:${name}` : `${graphName(optimized, row.graphId)}:${name}`));
     if (ownerEntry === undefined) { failed = true; continue; }
     const owner = ownerEntry[1];
-    const symbol = resolveValue(name, owner.provider.file);
-    if (symbol === undefined) { failed = true; continue; }
+    const provider = owner.provider;
+    const token = resolveToken(provider.token ?? provider.name);
+    if (token === undefined) { failed = true; continue; }
     const dependencyIds = optimized.providerDependencies.slice(row.dependencyStart, row.dependencyStart + row.dependencyCount);
-    const dependencySymbols = owner.provider.dependencies.map((dependency) => resolveValue(dependency)).filter(isImport);
-    if (dependencySymbols.length !== owner.provider.dependencies.length) failed = true;
-    providers.push(Object.freeze({ id: row.id, graphId: row.graphId, scope: row.root ? "root" : "graph", dependencyIds: Object.freeze(dependencyIds), symbol, dependencySymbols: Object.freeze(dependencySymbols) }));
+    const identifierDependencies = provider.dependencies.filter((dependency) => !isLiteralReference(dependency));
+    const dependencySymbols = identifierDependencies.map((dependency) => resolveValue(dependency)).filter(isImport);
+    if (dependencySymbols.length !== identifierDependencies.length) failed = true;
+
+    const registration = provider.registration;
+    const implementation = registration === "class" ? resolveValue(provider.implementation ?? provider.name, provider.file) : undefined;
+    if (registration === "class" && implementation === undefined) failed = true;
+    const existing = registration === "useExisting" && provider.existing !== undefined ? resolveToken(provider.existing) : undefined;
+    if (registration === "useExisting" && existing === undefined) failed = true;
+    const capturedValue = registration === "useValue" ? resolveCaptured(provider.capturedValue) : undefined;
+    const capturedFactory = registration === "useFactory" ? resolveCaptured(provider.capturedFactory) : undefined;
+
+    providers.push(Object.freeze({
+      id: row.id, graphId: row.graphId, scope: row.root ? "root" : "graph", registration,
+      dependencyIds: Object.freeze(dependencyIds), token,
+      ...(implementation === undefined ? {} : { implementation }),
+      ...(capturedValue === undefined ? {} : { capturedValue }),
+      ...(capturedFactory === undefined ? {} : { capturedFactory }),
+      ...(existing === undefined ? {} : { existing }),
+      dependencySymbols: Object.freeze(dependencySymbols),
+    }));
   }
   const controllers: ControllerBindingPlan[] = [];
   for (const row of optimized.controllers) {
@@ -192,3 +237,5 @@ function graphName(optimized: OptimizedApplication, id: number): string {
 function safeLocal(name: string, index: number): string { return `Binding${index}_${name.replace(/[^A-Za-z0-9_$]/gu, "_")}`; }
 function isImport(value: BindingImport | undefined): value is BindingImport { return value !== undefined; }
 function isDefined<T>(value: T | undefined): value is T { return value !== undefined; }
+/** A WIR reference name produced from a string-literal token (see `referenceName` in the analyzer) starts with `"`, which no identifier can. */
+function isLiteralReference(name: string): boolean { return name.startsWith("\""); }

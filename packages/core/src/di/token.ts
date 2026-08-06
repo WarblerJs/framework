@@ -1,7 +1,7 @@
-import type { Constructor } from "../types";
+import type { AbstractConstructor, Constructor } from "../types";
 
 /** Represents a dependency-injection token. */
-export type ProviderToken<T> = Constructor<T> | InjectionToken<T>;
+export type ProviderToken<T> = Constructor<T> | AbstractConstructor<T> | InjectionToken<T> | string | symbol;
 
 /** Represents a typed non-class dependency-injection token. */
 export interface InjectionToken<T> {
@@ -11,11 +11,17 @@ export interface InjectionToken<T> {
 }
 
 /** Creates a typed non-class dependency-injection token. */
-export function createInjectionToken<T>(description: string): InjectionToken<T> {
+export function createToken<T>(description: string): InjectionToken<T> {
   return Object.freeze({ id: Symbol(description), description });
 }
 
+/** @deprecated Use {@link createToken}. */
+export const createInjectionToken = createToken;
+
 /** Returns a human-readable provider-token name. */
 export function tokenName<T>(token: ProviderToken<T>): string {
-  return typeof token === "function" ? token.name || "AnonymousProvider" : token.description;
+  if (typeof token === "function") return token.name || "AnonymousProvider";
+  if (typeof token === "string") return token;
+  if (typeof token === "symbol") return token.description ?? token.toString();
+  return token.description;
 }

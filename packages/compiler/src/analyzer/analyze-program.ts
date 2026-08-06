@@ -1,6 +1,6 @@
 import ts from "typescript";
 import type { CompilerContext } from "../project/compiler-context";
-import type { ControllerWIR, ProviderWIR, RouteWIR, SocketEventWIR, SourceLocationWIR } from "../wir/wir";
+import type { CapturedExpressionWIR, ControllerWIR, ProviderWIR, RouteWIR, SocketEventWIR, SourceLocationWIR } from "../wir/wir";
 import { DiagnosticCode, type CompilerDiagnostic } from "../diagnostics/diagnostic";
 
 const CLASS_DECORATORS = new Set(["Graph", "Controller", "SocketController", "Service", "Repository", "Factory", "Resolver", "Gateway", "Injectable"]);
@@ -62,7 +62,7 @@ function analyzeClass(
   const classDecorators = decorators.filter((item) => CLASS_DECORATORS.has(item.name));
   if (classDecorators.length > 1) diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Class "${name}" has multiple Warbler class decorators.`, node, source, classDecorators.map((item) => item.name));
   const graphDecorator = classDecorators.find((item) => item.name === "Graph");
-  if (graphDecorator !== undefined) graphs.push(analyzeGraph(name, graphDecorator.call, node, source, diagnostics));
+  if (graphDecorator !== undefined) graphs.push(analyzeGraph(name, graphDecorator.call, node, source, aliases, providers, diagnostics));
 
   const controllerDecorator = classDecorators.find((item) => item.name === "Controller" || item.name === "SocketController");
   const routes: RouteWIR[] = [];
@@ -133,10 +133,12 @@ function analyzeClass(
   const providerDecorator = classDecorators.find((item) => PROVIDERS.has(item.name));
   if (providerDecorator !== undefined) {
     const kind = PROVIDERS.get(providerDecorator.name)!;
-    const provide = providerScope(providerDecorator.call, aliases);
-    if (provide === undefined) diagnostic(diagnostics, DiagnosticCode.INVALID_PROVIDER_SCOPE, `Provider "${name}" has an invalid provide scope.`, node, source, [name]);
+    const resolved = resolveProvide(providerDecorator.call, aliases);
+    if (resolved === undefined) diagnostic(diagnostics, DiagnosticCode.INVALID_PROVIDER_SCOPE, `Provider "${name}" has an invalid provide scope.`, node, source, [name]);
     const result: ProviderWIR = Object.freeze({
-      ...location(node, source), name, kind, provide: provide ?? "graph",
+      ...location(node, source), name, kind, provide: resolved?.provide ?? "graph",
+      ...(resolved?.token === undefined ? {} : { token: resolved.token }),
+      registration: "class", implementation: name,
       dependencies: Object.freeze([...dependencies]),
     });
     if (providers.has(name)) diagnostic(diagnostics, DiagnosticCode.DUPLICATE_PROVIDER, `Duplicate provider "${name}".`, node, source, [name]);
@@ -144,7 +146,15 @@ function analyzeClass(
   }
 }
 
-function analyzeGraph(name: string, call: ts.CallExpression | undefined, node: ts.Node, source: ts.SourceFile, diagnostics: CompilerDiagnostic[]): AnalyzedGraph {
+function analyzeGraph(
+  name: string,
+  call: ts.CallExpression | undefined,
+  node: ts.Node,
+  source: ts.SourceFile,
+  aliases: ReadonlyMap<string, string>,
+  providers: Map<string, ProviderWIR>,
+  diagnostics: CompilerDiagnostic[],
+): AnalyzedGraph {
   const options = call?.arguments[0];
   if (options !== undefined && !ts.isObjectLiteralExpression(options)) diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `@Graph options for "${name}" must be an object literal.`, options, source, [name]);
   const object = options !== undefined && ts.isObjectLiteralExpression(options) ? options : undefined;
@@ -153,8 +163,103 @@ function analyzeGraph(name: string, call: ts.CallExpression | undefined, node: t
     prefix: objectString(object, "prefix", ""),
     transport: objectTransport(object),
     controllerNames: Object.freeze(objectNames(object, "controllers")),
-    providerNames: Object.freeze(objectNames(object, "providers")),
+    providerNames: Object.freeze(providerElementNames(object, name, aliases, providers, source, diagnostics)),
   });
+}
+
+/** Parses a Graph's `providers: [...]` array, recognizing both bare class references and `Provider({...})` object-literal registrations. */
+function providerElementNames(
+  object: ts.ObjectLiteralExpression | undefined,
+  graphName: string,
+  aliases: ReadonlyMap<string, string>,
+  providers: Map<string, ProviderWIR>,
+  source: ts.SourceFile,
+  diagnostics: CompilerDiagnostic[],
+): string[] {
+  const property = object === undefined ? undefined : findProperty(object, "providers");
+  if (property === undefined || !ts.isPropertyAssignment(property) || !ts.isArrayLiteralExpression(property.initializer)) return [];
+  return property.initializer.elements.map((element, index) => {
+    if (ts.isCallExpression(element) && ts.isIdentifier(element.expression) && (aliases.get(element.expression.text) ?? element.expression.text) === "Provider") {
+      const syntheticName = `${graphName}#Provider${index}`;
+      const registration = analyzeProviderRegistration(syntheticName, element, graphName, aliases, source, diagnostics);
+      if (registration !== undefined) providers.set(syntheticName, registration);
+      return syntheticName;
+    }
+    return referenceName(element);
+  });
+}
+
+/** Parses one `Provider({...})` call into a synthetic ProviderWIR entry. */
+function analyzeProviderRegistration(
+  syntheticName: string,
+  call: ts.CallExpression,
+  graphName: string,
+  aliases: ReadonlyMap<string, string>,
+  source: ts.SourceFile,
+  diagnostics: CompilerDiagnostic[],
+): ProviderWIR | undefined {
+  const object = call.arguments[0];
+  if (object === undefined || !ts.isObjectLiteralExpression(object)) {
+    diagnostic(diagnostics, DiagnosticCode.INVALID_PROVIDER_SCOPE, `Provider(...) in Graph "${graphName}" requires an object literal argument.`, call, source, [graphName]);
+    return undefined;
+  }
+  const provideProperty = findProperty(object, "provide");
+  if (provideProperty === undefined || !ts.isPropertyAssignment(provideProperty)) {
+    diagnostic(diagnostics, DiagnosticCode.INVALID_PROVIDER_SCOPE, `Provider(...) in Graph "${graphName}" is missing a "provide" token.`, call, source, [graphName]);
+    return undefined;
+  }
+  const token = referenceName(provideProperty.initializer);
+  const base = { ...location(call, source), name: syntheticName, kind: "registration" as const, provide: "graph" as const, token };
+
+  const useClass = findProperty(object, "useClass");
+  if (useClass !== undefined && ts.isPropertyAssignment(useClass)) {
+    return Object.freeze({ ...base, registration: "class", implementation: referenceName(useClass.initializer), dependencies: Object.freeze([]) });
+  }
+  const useValue = findProperty(object, "useValue");
+  if (useValue !== undefined && ts.isPropertyAssignment(useValue)) {
+    return Object.freeze({ ...base, registration: "useValue", capturedValue: captureExpression(useValue.initializer, aliases, source), dependencies: Object.freeze([]) });
+  }
+  const useFactory = findProperty(object, "useFactory");
+  const factoryNode = useFactory === undefined ? undefined : ts.isMethodDeclaration(useFactory) ? useFactory : ts.isPropertyAssignment(useFactory) ? useFactory.initializer : undefined;
+  if (factoryNode !== undefined) {
+    const dependencies = new Set<string>();
+    collectInjectDependencies(factoryNode, aliases, dependencies);
+    return Object.freeze({ ...base, registration: "useFactory", capturedFactory: captureExpression(factoryNode, aliases, source), dependencies: Object.freeze([...dependencies]) });
+  }
+  const useExisting = findProperty(object, "useExisting");
+  if (useExisting !== undefined && ts.isPropertyAssignment(useExisting)) {
+    const existing = referenceName(useExisting.initializer);
+    return Object.freeze({ ...base, registration: "useExisting", existing, dependencies: Object.freeze([existing]) });
+  }
+  diagnostic(diagnostics, DiagnosticCode.INVALID_PROVIDER_SCOPE, `Provider(...) in Graph "${graphName}" must declare useClass, useValue, useFactory, or useExisting.`, call, source, [graphName]);
+  return undefined;
+}
+
+/** Captures an expression's verbatim source text plus the free identifiers it references, skipping bound parameter/variable names and property keys. */
+function captureExpression(node: ts.Node, aliases: ReadonlyMap<string, string>, source: ts.SourceFile): CapturedExpressionWIR {
+  const bound = new Set<string>();
+  const captures = new Set<string>();
+  const bindName = (name: ts.BindingName): void => {
+    if (ts.isIdentifier(name)) { bound.add(name.text); return; }
+    for (const element of name.elements) if (!ts.isOmittedExpression(element)) bindName(element.name);
+  };
+  const visit = (child: ts.Node): void => {
+    if (ts.isPropertyAccessExpression(child)) { visit(child.expression); return; }
+    if (ts.isPropertyAssignment(child)) { visit(child.initializer); return; }
+    if (ts.isMethodDeclaration(child) || ts.isFunctionExpression(child) || ts.isArrowFunction(child) || ts.isFunctionDeclaration(child)) {
+      for (const parameter of child.parameters) { bindName(parameter.name); if (parameter.initializer !== undefined) visit(parameter.initializer); }
+      if (child.body !== undefined) visit(child.body);
+      return;
+    }
+    if (ts.isVariableDeclaration(child)) { bindName(child.name); if (child.initializer !== undefined) visit(child.initializer); return; }
+    if (ts.isIdentifier(child)) {
+      if (!bound.has(child.text)) captures.add(aliases.get(child.text) ?? child.text);
+      return;
+    }
+    ts.forEachChild(child, visit);
+  };
+  visit(node);
+  return Object.freeze({ text: node.getText(source), captures: Object.freeze([...captures]) });
 }
 
 interface DecoratorInfo { readonly name: string; readonly call?: ts.CallExpression }
@@ -189,23 +294,25 @@ function collectInjectDependencies(node: ts.Node, aliases: ReadonlyMap<string, s
   };
   visit(node);
 }
-function providerScope(call: ts.CallExpression | undefined, aliases: ReadonlyMap<string, string>): "graph" | "root" | undefined {
+/** Resolves a decorator's `provide:` option into a visibility scope and, when it references anything else, a token alias. */
+function resolveProvide(call: ts.CallExpression | undefined, aliases: ReadonlyMap<string, string>): { readonly provide: "graph" | "root"; readonly token?: string } | undefined {
   const options = call?.arguments[0];
-  if (options === undefined) return "graph";
+  if (options === undefined) return { provide: "graph" };
   if (!ts.isObjectLiteralExpression(options)) return undefined;
   const property = findProperty(options, "provide");
-  if (property === undefined) return "graph";
+  if (property === undefined) return { provide: "graph" };
   if (!ts.isPropertyAssignment(property)) return undefined;
-  if (ts.isStringLiteral(property.initializer) && (property.initializer.text === "graph" || property.initializer.text === "root")) return property.initializer.text;
+  const initializer = property.initializer;
+  if (ts.isStringLiteral(initializer) && (initializer.text === "graph" || initializer.text === "root")) return { provide: initializer.text };
   if (
-    ts.isPropertyAccessExpression(property.initializer) &&
-    ts.isIdentifier(property.initializer.expression) &&
-    (aliases.get(property.initializer.expression.text) ?? property.initializer.expression.text) === "ProviderScope"
+    ts.isPropertyAccessExpression(initializer) &&
+    ts.isIdentifier(initializer.expression) &&
+    (aliases.get(initializer.expression.text) ?? initializer.expression.text) === "ProviderScope"
   ) {
-    if (property.initializer.name.text === "GRAPH") return "graph";
-    if (property.initializer.name.text === "ROOT") return "root";
+    if (initializer.name.text === "GRAPH") return { provide: "graph" };
+    if (initializer.name.text === "ROOT") return { provide: "root" };
   }
-  return undefined;
+  return { provide: "graph", token: referenceName(initializer) };
 }
 function objectString(object: ts.ObjectLiteralExpression | undefined, key: string, fallback: string): string {
   const property = object === undefined ? undefined : findProperty(object, key);
@@ -254,9 +361,15 @@ function stringArgument(call: ts.CallExpression | undefined, index: number, fall
   const argument = call?.arguments[index];
   return argument !== undefined && ts.isStringLiteralLike(argument) ? argument.text : fallback;
 }
+/**
+ * Resolves a WIR-level reference name. String literals are JSON-encoded (e.g. `"cache"`) rather than
+ * returned bare, so downstream phases can tell a literal token apart from an identifier by its leading
+ * quote — no valid JS identifier can start with `"`, so this needs no separate marker field.
+ */
 function referenceName(node: ts.Node): string {
   if (ts.isIdentifier(node)) return node.text;
   if (ts.isPropertyAccessExpression(node)) return node.name.text;
+  if (ts.isStringLiteralLike(node)) return JSON.stringify(node.text);
   return node.getText();
 }
 function propertyName(node: ts.PropertyName | undefined): string | undefined {

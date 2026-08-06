@@ -20,6 +20,9 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
   })))).sort((left, right) => compare(left.key, right.key));
 
   const providerIds = idMap(providerRows.map((row) => row.key));
+  const tokenNames = new Map<string, string>();
+  for (const provider of wir.rootProviders) if (provider.token !== undefined) tokenNames.set(provider.token, provider.name);
+  for (const graph of wir.graphs) for (const provider of graph.providers) if (provider.token !== undefined) tokenNames.set(provider.token, provider.name);
   const controllerIds = idMap(controllerRows.map((row) => row.key));
   const handlerNames = uniqueSorted([
     ...routeRows.map((row) => `${row.graph}:${row.controller}.${row.route.handler}`),
@@ -46,7 +49,8 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
   const providerDependencies: number[] = [];
   const providers: ProviderTableEntry[] = providerRows.map((row) => {
     const dependencyStart = providerDependencies.length;
-    for (const dependency of unique(row.provider.dependencies)) {
+    for (const rawDependency of unique(row.provider.dependencies)) {
+      const dependency = tokenNames.get(rawDependency) ?? rawDependency;
       const rootKey = `root:${dependency}`;
       const localKey = `${row.graph}:${dependency}`;
       providerDependencies.push(providerIds.get(localKey) ?? providerIds.get(rootKey) ?? -1);
