@@ -8,9 +8,10 @@ import {
 } from "@warbler/runtime";
 import { pathToFileURL } from "node:url";
 import { loadCLIConfig, loadEnabledTransportConfigs, resolveEnabledTransports } from "../config";
-import { CLIError } from "../errors";
+import { CLIError, describeErrorChain } from "../errors";
 import { ExitCode } from "../types";
 import type { DevelopmentReporter, DevelopmentRuntimeHandle, DevelopmentRuntimeLauncher, DevelopmentRuntimeOverrides } from "./dev-session";
+import { resolveNetworkAddresses } from "./network-addresses";
 
 const TRANSPORT_PACKAGES: Readonly<Record<TransportName, Readonly<{ packageName: string; factory: string }>>> = Object.freeze({
   http: Object.freeze({ packageName: "@warbler/http", factory: "createHttpRuntimeLauncher" }),
@@ -62,13 +63,18 @@ export class GeneratedBindingsRuntimeLauncher implements DevelopmentRuntimeLaunc
         transportConfigLoader: async (transport) => transportConfigs.get(transport),
       });
     } catch (cause) {
-      report(event("runtime", "failure", safeMessage(cause)));
-      throw new CLIError("CLI2006", "Runtime failed to start from generated application bindings.", ExitCode.RUNTIME_FAILURE, safeMessage(cause));
+      report(event("runtime", "failure", describeErrorChain(cause)));
+      throw new CLIError("CLI2006", "Runtime failed to start from generated application bindings.", ExitCode.RUNTIME_FAILURE, describeErrorChain(cause));
     }
     report(event("transport", "success", "Enabled transports are running.", {
       transports: runtime.transports.map((transport) => transport.kind),
     }));
+    const portTransport = primaryPortTransport(enabledTransports);
+    const network = portTransport === undefined
+      ? undefined
+      : resolveNetworkAddresses(runtimeConfig.network.host, runtimeConfig.transports[portTransport].port ?? 3000);
     return Object.freeze({
+      ...(network === undefined ? {} : { network }),
       stop: () => runtime.stop({
         reason: "development-restart",
         closeActiveConnections: true,
@@ -92,7 +98,7 @@ export async function importGeneratedApplication(entry: string, fingerprint: str
   url.searchParams.set("build", fingerprint);
   let module: unknown;
   try { module = await import(url.href); }
-  catch (cause) { throw new CLIError("CLI2003", "Generated application module could not be imported.", ExitCode.FAILURE, safeMessage(cause)); }
+  catch (cause) { throw new CLIError("CLI2003", "Generated application module could not be imported.", ExitCode.FAILURE, describeErrorChain(cause)); }
   const candidate = generatedExport(module);
   if (!isGeneratedApplicationBindings(candidate)) throw new CLIError("CLI2004", "Generated application module has an invalid export.", ExitCode.FAILURE);
   return candidate;
@@ -122,11 +128,15 @@ export async function loadTransportLaunchers(transports: readonly TransportName[
   }
   return Object.freeze(launchers);
 }
+/** The transport whose port `--port`/the banner treat as "the" dev server port: HTTP if enabled, else WebSocket, else none. */
+function primaryPortTransport(enabled: readonly TransportName[]): TransportName | undefined {
+  return enabled.includes("http") ? "http" : enabled.includes("websocket") ? "websocket" : undefined;
+}
 function applyOverrides(config: RuntimeConfig, overrides: DevelopmentRuntimeOverrides): RuntimeConfig {
   const port = overrides.port === undefined ? undefined : Number(overrides.port);
   if (port !== undefined && (!Number.isSafeInteger(port) || port < 1 || port > 65535)) throw new CLIError("CLI1005", "Development port must be from 1 to 65535.", ExitCode.INVALID_ARGUMENTS);
   const enabled = resolveEnabledTransports(config);
-  const portTransport = enabled.includes("http") ? "http" : enabled.includes("websocket") ? "websocket" : undefined;
+  const portTransport = primaryPortTransport(enabled);
   const transports = Object.freeze(Object.fromEntries(Object.entries(config.transports).map(([name, value]) => [
     name,
     Object.freeze({
@@ -167,7 +177,6 @@ function isRuntimePreparation(value: unknown): value is RuntimePreparation {
     && "enabledTransports" in value && Array.isArray(value.enabledTransports)
     && "transportConfigs" in value && value.transportConfigs instanceof Map;
 }
-function safeMessage(cause: unknown): string { return cause instanceof Error ? cause.message : "Unknown failure"; }
 function event(
   stage: Parameters<DevelopmentReporter>[0]["stage"],
   status: Parameters<DevelopmentReporter>[0]["status"],

@@ -101,6 +101,7 @@ export class WarblerConsole {
       center(input.subtitle ?? "Development Runtime", 62),
       "",
       ...entries.filter((entry) => entry[1] !== undefined).map(([key, value]) => ` ${key.padEnd(12)} ${String(value)}`),
+      ...(input.network === undefined || input.network.length === 0 ? [] : ["", " Network", ...input.network.map((url) => ` ${this.#mark("success")} ${url}`)]),
       ...(input.watching === undefined ? [] : ["", " Watching", ...input.watching.map((path) => ` ${this.#mark("success")} ${path}`)]),
       "",
       rule,

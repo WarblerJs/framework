@@ -128,6 +128,7 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
         version: "0.1.0",
         project: basename(root),
         build: session.buildNumber,
+        ...(session.network === undefined ? {} : { network: session.network }),
         ...(context.flags["no-watch"] === true ? {} : { watching: Object.freeze(["src", "resources", "public"]) }),
       });
       writeResult(

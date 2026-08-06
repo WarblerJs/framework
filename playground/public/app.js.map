@@ -2,9 +2,9 @@
   "version": 3,
   "sources": ["../resources/js/app.ts"],
   "sourcesContent": [
-    "document.documentElement.dataset.warbler = \"ready\";\n \n"
+    "document.documentElement.dataset.warbler = \"ready\";\n\nconst socket = new WebSocket(\"ws://192.168.1.3:3001/chat\");\n\nsocket.addEventListener(\"open\", () => {\n  console.log(\"Connected\");\n\n  socket.send(JSON.stringify({ event: \"ping\", data: {} }));\n  socket.send(JSON.stringify({ event: \"room.join\", data: { roomId: \"general\" } }));\n});\n\nsocket.addEventListener(\"message\", (event) => {\n  const message = JSON.parse(event.data);\n  console.log(message);\n\n  if (message.event === \"room.joined\") {\n    socket.send(JSON.stringify({\n      event: \"chat.message\",\n      data: { roomId: message.data.roomId, content: \"hello from the browser\" },\n    }));\n  }\n});\n\nsocket.addEventListener(\"close\", () => {\n  console.log(\"Disconnected\");\n});\n\nsocket.addEventListener(\"error\", (error) => {\n  console.error(error);\n});\n"
   ],
-  "mappings": ";AAAA,SAAS,gBAAgB,QAAQ,UAAU;",
-  "debugId": "703D587F50AE4AFC64756E2164756E21",
+  "mappings": ";AAAA,SAAS,gBAAgB,QAAQ,UAAU;AAE3C,IAAM,SAAS,IAAI,UAAU,4BAA4B;AAEzD,OAAO,iBAAiB,QAAQ,MAAM;AAAA,EACpC,QAAQ,IAAI,WAAW;AAAA,EAEvB,OAAO,KAAK,KAAK,UAAU,EAAE,OAAO,QAAQ,MAAM,CAAC,EAAE,CAAC,CAAC;AAAA,EACvD,OAAO,KAAK,KAAK,UAAU,EAAE,OAAO,aAAa,MAAM,EAAE,QAAQ,UAAU,EAAE,CAAC,CAAC;AAAA,CAChF;AAED,OAAO,iBAAiB,WAAW,CAAC,UAAU;AAAA,EAC5C,MAAM,UAAU,KAAK,MAAM,MAAM,IAAI;AAAA,EACrC,QAAQ,IAAI,OAAO;AAAA,EAEnB,IAAI,QAAQ,UAAU,eAAe;AAAA,IACnC,OAAO,KAAK,KAAK,UAAU;AAAA,MACzB,OAAO;AAAA,MACP,MAAM,EAAE,QAAQ,QAAQ,KAAK,QAAQ,SAAS,yBAAyB;AAAA,IACzE,CAAC,CAAC;AAAA,EACJ;AAAA,CACD;AAED,OAAO,iBAAiB,SAAS,MAAM;AAAA,EACrC,QAAQ,IAAI,cAAc;AAAA,CAC3B;AAED,OAAO,iBAAiB,SAAS,CAAC,UAAU;AAAA,EAC1C,QAAQ,MAAM,KAAK;AAAA,CACpB;",
+  "debugId": "E246B386B586CCB164756E2164756E21",
   "names": []
 }

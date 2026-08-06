@@ -23,8 +23,10 @@ test("generated WebSocket dispatch invokes Subscribe handlers", async () => {
     log: { error: () => {} },
   };
   try {
+    await captured?.dispatch("ping", { event: "ping", data: {} }, context);
+    expect(sent.at(-1)).toMatchObject({ event: "pong", data: { at: expect.any(Number) } });
     await captured?.dispatch("room.join", { event: "room.join", data: { roomId: "general" } }, context);
-    expect(sent).toEqual([{ event: "room.joined", data: { roomId: "general" } }]);
+    expect(sent.at(-1)).toEqual({ event: "room.joined", data: { roomId: "general" } });
     expect(joined).toEqual(["general"]);
     await captured?.dispatch("room.join", { event: "room.join", data: { roomId: "" } }, context);
     expect(sent.at(-1)).toEqual({

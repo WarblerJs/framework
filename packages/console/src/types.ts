@@ -60,6 +60,8 @@ export interface BannerInput {
   readonly runtimeMs?: number;
   readonly http?: string;
   readonly websocket?: string;
+  /** URLs the dev server is reachable at (e.g. `http://localhost:3000`, LAN addresses), rendered as their own labeled block. */
+  readonly network?: readonly string[];
   readonly watching?: readonly string[];
 }
 export interface BuildInput {

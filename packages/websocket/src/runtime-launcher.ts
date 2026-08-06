@@ -21,6 +21,7 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
       const config = normalizeWebSocketConfig(input.config);
       const value = input.config as Readonly<Record<string, unknown>>;
       const port = value.port;
+      const hostname = typeof value.host === "string" ? value.host : undefined;
       if (config.mode !== "dedicated") throw new TypeError("Independent Runtime WebSocket launcher requires dedicated mode.");
       if (typeof port !== "number" || !Number.isSafeInteger(port) || port < 1 || port > 65535) throw new TypeError("Dedicated WebSocket Runtime port is invalid.");
       const handler: WebSocketHandler<RuntimeSocketData> = {
@@ -65,6 +66,7 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
       };
       const server = Bun.serve<RuntimeSocketData>({
         port,
+        ...(hostname === undefined ? {} : { hostname }),
         fetch(request, native) {
           if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return new Response("Upgrade Required", { status: 426 });
           let protocol: string | undefined;

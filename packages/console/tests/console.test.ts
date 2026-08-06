@@ -72,6 +72,7 @@ describe("professional renderers", () => {
     output.console.banner({
       version: "0.1.0", project: "playground", build: 15, compilerMs: 44,
       runtimeMs: 18, http: "http://127.0.0.1:3000", websocket: "ws://127.0.0.1:3001/chat",
+      network: ["http://localhost:3000", "http://192.168.1.3:3000"],
       watching: ["src", "resources", "public"],
     });
     output.console.table("Routes", { headers: ["Method", "Path"], rows: [["GET", "/"]] });
@@ -84,6 +85,8 @@ describe("professional renderers", () => {
     expect(rendered).toContain("Warbler");
     expect(rendered).toContain("playground");
     expect(rendered).toContain("┌");
+    expect(rendered).toContain("Network");
+    expect(rendered).toContain("http://192.168.1.3:3000");
     expect(rendered).toContain("src/main.ts:4:2");
     expect(rendered).toContain("Runtime Ready");
   });

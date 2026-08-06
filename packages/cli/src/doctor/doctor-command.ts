@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import type { CLIDiagnostic } from "../diagnostics";
 import { cliDiagnostic } from "../diagnostics";
 import { loadCLIConfig, loadEnabledTransportConfigs, resolveEnabledTransports } from "../config";
+import { describeErrorChain } from "../errors";
 import { assertRealPathInside, pathExists, resolveInside } from "../filesystem";
 import type { ProjectLayout } from "../project";
 import { readProjectPackage } from "../project";
@@ -45,10 +46,10 @@ export async function doctorCommand(layout: ProjectLayout): Promise<readonly CLI
         catch { diagnostics.push(cliDiagnostic({ code: "CLI2004", severity: "error", message: "Generated application bindings are incompatible with Runtime." })); }
       }
       try { await loadTransportLaunchers(resolveEnabledTransports(config), layout.root); }
-      catch (cause) { diagnostics.push(cliDiagnostic({ code: "CLI2008", severity: "error", message: safeMessage(cause) })); }
+      catch (cause) { diagnostics.push(cliDiagnostic({ code: "CLI2008", severity: "error", message: describeErrorChain(cause, "Unknown configuration failure") })); }
     }
   } catch (cause) {
-    diagnostics.push(cliDiagnostic({ code: "CLI4004", severity: "error", message: "Runtime or enabled transport configuration is invalid.", metadata: { detail: safeMessage(cause) } }));
+    diagnostics.push(cliDiagnostic({ code: "CLI4004", severity: "error", message: "Runtime or enabled transport configuration is invalid.", metadata: { detail: describeErrorChain(cause, "Unknown configuration failure") } }));
   }
   for (const directory of [".warbler", "dist"] as const) {
     const path = resolveInside(layout.root, directory);
@@ -70,4 +71,3 @@ function packageNames(value: Readonly<Record<string, unknown>>): ReadonlySet<str
   }
   return names;
 }
-function safeMessage(cause: unknown): string { return cause instanceof Error ? cause.message : "Unknown configuration failure"; }

@@ -20,7 +20,13 @@ export default class ChatSocketController {
 
   @OnOpen()
   open(context: SocketContext): void {
+    console.log('Socket,opened')
     context.send({ event: "connection.ready", data: { connectionId: context.connection.id } });
+  }
+
+  @Subscribe("ping")
+  ping(_message: SocketMessage<unknown>, context: SocketContext): void {
+    context.send({ event: "pong", data: { at: Date.now() } });
   }
 
   @Subscribe("room.join", { validator: roomJoinValidator })
@@ -45,11 +51,17 @@ export default class ChatSocketController {
   }
 
   @OnDrain()
-  drain(): void {}
+  drain(): void {
+    console.log('Socket,drain')
+  }
 
   @OnClose()
-  close(): void {}
+  close(): void {
+    console.log('Socket,closed')
+  }
 
   @OnError()
-  error(_error: unknown): void {}
+  error(_error: unknown): void {
+    console.log('Socket,error')
+  }
 }

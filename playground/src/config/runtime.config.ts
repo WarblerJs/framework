@@ -1,5 +1,5 @@
 export default {
-  network: { host: "0.0.0.0", bindInterface: undefined },
+  network: { host: "192.168.1.3", bindInterface: undefined },
   transports: {
     http: { enabled: true, port: 3000 },
     websocket: { enabled: true, mode: "standalone", port: 3001 },
