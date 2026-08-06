@@ -1,6 +1,7 @@
 export { Container } from "./container";
 export { inject, injectOptional } from "./inject";
-export { getActiveContainer, runInInjectionContext } from "./injection-context";
+export { getActiveContainer, runInInjectionContext, runInRequestContext } from "./injection-context";
+export type { InjectionResolver } from "./injection-resolver";
 export { Provider, ProviderScope } from "./provider";
 export { compileProviderScopes, createProviderContainers, withProviderDependencies } from "./provider-scope";
 export { createInjectionToken, createToken, tokenName } from "./token";

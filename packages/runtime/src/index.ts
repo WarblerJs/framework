@@ -49,7 +49,7 @@ export {
   type RuntimeStopOptions,
   type StartRuntimeOptions,
 } from "./lifecycle/runtime-owner";
-export { RootProviderContainer, GraphProviderContainer } from "./container/generated-provider-containers";
+export { GeneratedProviderContainer, RootProviderContainer, GraphProviderContainer, RequestProviderContainer } from "./container/generated-provider-containers";
 export { ControllerInstanceTable } from "./controllers";
 export { RuntimeDiagnosticCode } from "./diagnostics/runtime-diagnostic-codes";
 export { validateApplicationBindings, type ValidatedBindingIndexes } from "./bindings";

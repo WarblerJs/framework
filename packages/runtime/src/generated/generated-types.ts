@@ -3,7 +3,7 @@ export interface RuntimeProviderRecord {
   readonly id: number;
   readonly nameId: number;
   readonly graphId: number;
-  readonly root: boolean;
+  readonly scope: "graph" | "root" | "request";
   readonly dependencyStart: number;
   readonly dependencyCount: number;
 }

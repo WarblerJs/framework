@@ -1,5 +1,6 @@
 import { CircularDependencyError, DuplicateProviderError, ProviderNotFoundError } from "../errors";
 import type { Constructor } from "../types";
+import type { InjectionResolver } from "./injection-resolver";
 import { runInInjectionContext } from "./injection-context";
 import type { FactoryProvider, Provider, ProviderLifetime } from "./provider";
 import type { ProviderToken } from "./token";
@@ -11,12 +12,23 @@ type ProviderRecord<T> =
   | { readonly kind: "value"; readonly useValue: T }
   | { readonly kind: "existing"; readonly useExisting: ProviderToken<T> };
 
-/** Resolves and owns Warbler providers. */
-export class Container {
+/** Sentinel distinguishing "never resolved" from a resolved value of `undefined`. */
+const UNSET: unique symbol = Symbol("unset");
+
+/**
+ * Resolves and owns Warbler providers.
+ *
+ * Internally id-addressed: registration assigns each token a dense local index, and `resolve()` spends
+ * exactly one `Map` lookup translating the token to that index — every subsequent step (cache check,
+ * cycle detection, factory dispatch) is plain array indexing, not further token-keyed lookups.
+ */
+export class Container implements InjectionResolver {
   readonly #parent: Container | undefined;
-  readonly #records = new Map<ProviderToken<unknown>, ProviderRecord<unknown>>();
-  readonly #singletons = new Map<ProviderToken<unknown>, unknown>();
-  readonly #resolving: ProviderToken<unknown>[] = [];
+  readonly #ids = new Map<ProviderToken<unknown>, number>();
+  readonly #tokens: ProviderToken<unknown>[] = [];
+  readonly #records: ProviderRecord<unknown>[] = [];
+  readonly #singletons: unknown[] = [];
+  readonly #creating: number[] = [];
 
   /** Creates an isolated container with an optional O(1) root fallback. */
   public constructor(parent?: Container) {
@@ -26,24 +38,21 @@ export class Container {
   /** Registers one provider definition. */
   register<T>(provider: Provider<T>): this {
     const token = typeof provider === "function" ? provider : provider.token;
-    if (this.#records.has(token)) throw new DuplicateProviderError(tokenName(token));
-    if (typeof provider === "function") {
-      this.#records.set(provider, { kind: "class", useClass: provider, scope: "singleton" });
-      return this;
-    }
-    if ("useValue" in provider) {
-      this.#records.set(provider.token, { kind: "value", useValue: provider.useValue });
-      return this;
-    }
-    if ("useFactory" in provider) {
-      this.#records.set(provider.token, { kind: "factory", useFactory: provider.useFactory, scope: provider.scope ?? "singleton" });
-      return this;
-    }
-    if ("useExisting" in provider) {
-      this.#records.set(provider.token, { kind: "existing", useExisting: provider.useExisting });
-      return this;
-    }
-    this.#records.set(provider.token, { kind: "class", useClass: provider.useClass, scope: provider.scope ?? "singleton" });
+    if (this.#ids.has(token)) throw new DuplicateProviderError(tokenName(token));
+    const record: ProviderRecord<T> = typeof provider === "function"
+      ? { kind: "class", useClass: provider, scope: "singleton" }
+      : "useValue" in provider
+        ? { kind: "value", useValue: provider.useValue }
+        : "useFactory" in provider
+          ? { kind: "factory", useFactory: provider.useFactory, scope: provider.scope ?? "singleton" }
+          : "useExisting" in provider
+            ? { kind: "existing", useExisting: provider.useExisting }
+            : { kind: "class", useClass: provider.useClass, scope: provider.scope ?? "singleton" };
+    const id = this.#records.length;
+    this.#ids.set(token, id);
+    this.#tokens.push(token);
+    this.#records.push(record);
+    this.#singletons.push(UNSET);
     return this;
   }
 
@@ -55,38 +64,43 @@ export class Container {
 
   /** Returns whether a provider token is registered. */
   has<T>(token: ProviderToken<T>): boolean {
-    return this.#records.has(token) || (this.#parent?.has(token) ?? false);
+    return this.#ids.has(token) || (this.#parent?.has(token) ?? false);
   }
 
   /** Resolves a provider token or throws when unavailable. */
   resolve<T>(token: ProviderToken<T>): T {
-    const existing = this.#singletons.get(token);
-    if (existing !== undefined || this.#singletons.has(token)) return existing as T;
-    const record = this.#records.get(token) as ProviderRecord<T> | undefined;
-    if (!record) {
+    const id = this.#ids.get(token);
+    if (id === undefined) {
       if (this.#parent !== undefined) return this.#parent.resolve(token);
       throw new ProviderNotFoundError(tokenName(token));
     }
-
-    const cycleIndex = this.#resolving.indexOf(token);
-    if (cycleIndex !== -1) {
-      const cycle = [...this.#resolving.slice(cycleIndex), token].map(tokenName);
-      throw new CircularDependencyError(cycle);
-    }
-
-    this.#resolving.push(token);
-    try {
-      const value = this.#create(record);
-      if (record.kind === "value" || (record.kind !== "existing" && record.scope === "singleton")) this.#singletons.set(token, value);
-      return value;
-    } finally {
-      this.#resolving.pop();
-    }
+    return this.#resolveById(id) as T;
   }
 
   /** Resolves a provider token or returns undefined when unavailable. */
   resolveOptional<T>(token: ProviderToken<T>): T | undefined {
     return this.has(token) ? this.resolve(token) : undefined;
+  }
+
+  #resolveById(id: number): unknown {
+    const cached = this.#singletons[id]!;
+    if (cached !== UNSET) return cached;
+    const record = this.#records[id]!;
+
+    const cycleIndex = this.#creating.indexOf(id);
+    if (cycleIndex !== -1) {
+      const cycle = [...this.#creating.slice(cycleIndex), id].map((item) => tokenName(this.#tokens[item]!));
+      throw new CircularDependencyError(cycle);
+    }
+
+    this.#creating.push(id);
+    try {
+      const value = this.#create(record);
+      if (record.kind === "value" || (record.kind !== "existing" && record.scope === "singleton")) this.#singletons[id] = value;
+      return value;
+    } finally {
+      this.#creating.pop();
+    }
   }
 
   #create<T>(record: ProviderRecord<T>): T {

@@ -31,7 +31,7 @@ export class ControllerInstanceTable {
         this.#instances[id] = instance;
         this.#created[id] = true;
         this.#creationOrder.push(id);
-        graph.core.register({ token: binding.token, useValue: instance });
+        graph.registerExternal(binding.token, instance);
       } catch (cause) {
         throw new ControllerCreationError(`${RuntimeDiagnosticCode.CONTROLLER_FACTORY_FAILED}: Generated Controller ${id} failed to initialize.`, { cause });
       }
@@ -60,8 +60,8 @@ export class ControllerInstanceTable {
 }
 function context(graph: GraphProviderContainer): ProviderBindingContext {
   return Object.freeze({
-    resolve: <T>(token: ProviderToken<T>): T => graph.core.resolve(token),
-    run: <T>(callback: () => T): T => runInInjectionContext(graph.core, callback),
+    resolve: <T>(token: ProviderToken<T>): T => graph.resolve(token),
+    run: <T>(callback: () => T): T => runInInjectionContext(graph, callback),
   });
 }
 function isThenable<T>(value: T | Promise<T>): value is Promise<T> {

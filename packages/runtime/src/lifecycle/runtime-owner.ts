@@ -7,8 +7,9 @@ import {
 } from "@warbler/config";
 import { Console } from "@warbler/console";
 import { loadProjectTranslator, localizeRequest, type CatalogTranslator } from "@warbler/i18n";
+import { runInRequestContext } from "@warbler/core";
 import { validateApplicationBindings, type ValidatedBindingIndexes } from "../bindings";
-import { RootProviderContainer, GraphProviderContainer } from "../container/generated-provider-containers";
+import { RootProviderContainer, GraphProviderContainer, RequestProviderContainer } from "../container/generated-provider-containers";
 import { ControllerInstanceTable } from "../controllers";
 import { RuntimeDiagnosticCode } from "../diagnostics/runtime-diagnostic-codes";
 import {
@@ -258,12 +259,13 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
   #compileRecordPipeline(record: Readonly<Record<string, unknown>>, http: boolean, socketEvent?: string): (input: unknown) => unknown {
     const handlerId = numberField(record, "handlerId");
     const validatorId = numberField(record, "validatorId");
+    const controllerId = numberField(record, "controllerId");
     const guardIds = rangeIds(record, "guardStart", "guardCount", http ? this.application.application.routeGuards : this.application.application.socketGuards);
     const middlewareIds = rangeIds(record, "middlewareStart", "middlewareCount", http ? this.application.application.routeMiddleware : this.application.application.socketMiddleware);
     const terminal = createMiddlewarePipeline(this.#indexes!.middleware, middlewareIds, (validated) =>
       this.invokeHandler(handlerId, http ? [validated] : socketInputs(validated, socketEvent)),
     );
-    return (input: unknown): unknown => {
+    const core = (input: unknown): unknown => {
       const validationInput = http ? input : socketValidationInput(input, socketEvent);
       return runValidated(this.#indexes!.validators[validatorId], validationInput, (validated) => {
         const pipelineValue = http ? httpValidatedRequest(validationInput, validated) : socketValidatedEnvelope(input, validated);
@@ -272,6 +274,22 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
         return guarded ? terminal(pipelineValue) : http ? forbidden() : undefined;
       }, (outcome) => http ? invalidValidationResponse(outcome.errors, validationInput) : socketValidationFailure(input, outcome.errors));
     };
+    // Only wrap requests in a fresh request-scoped container when the owning Graph actually declares
+    // request-scoped providers — otherwise every request would pay for an unused eager-init pass.
+    const graphId = this.#indexes!.controllers[controllerId]?.graphId;
+    const hasRequestScoped = graphId !== undefined && this.application.providers.some((provider) => provider.scope === "request" && provider.graphId === graphId);
+    if (!hasRequestScoped) return core;
+    const graph = this.#graphMap.get(graphId!)!;
+    return (input: unknown): unknown => this.#runWithRequestScope(graph, graphId!, () => core(input));
+  }
+  async #runWithRequestScope(graph: GraphProviderContainer, graphId: number, callback: () => unknown): Promise<unknown> {
+    const requestContainer = new RequestProviderContainer(this.#indexes!.providers, graphId, graph);
+    await requestContainer.initialize();
+    try {
+      return await runInRequestContext(requestContainer, callback);
+    } finally {
+      await requestContainer.dispose();
+    }
   }
   async #stopTransports(options: RuntimeStopOptions): Promise<void> {
     let failure: unknown;

@@ -57,7 +57,7 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
     }
     return Object.freeze({
       id: providerIds.get(row.key)!, nameId: stringIds.get(row.provider.name)!,
-      graphId: row.graph === "" ? -1 : graphIds[row.graph]!, root: row.provider.provide === "root",
+      graphId: row.graph === "" ? -1 : graphIds[row.graph]!, scope: row.provider.provide,
       dependencyStart, dependencyCount: providerDependencies.length - dependencyStart,
     });
   });

@@ -46,7 +46,7 @@ export interface CapturedExpressionWIR {
 export interface ProviderWIR extends SourceLocationWIR {
   readonly name: string;
   readonly kind: "service" | "repository" | "factory" | "resolver" | "gateway" | "injectable" | "registration";
-  readonly provide: "graph" | "root";
+  readonly provide: "graph" | "root" | "request";
   /** Alias token this provider is also resolvable under, from a `provide:` reference. */
   readonly token?: string;
   /** How the provider's instance is produced. Decorator-based providers are always "class". */

@@ -95,7 +95,7 @@ export class RuntimeProviderContainers {
       if (!isProviderRecord(record) || record.id < 0 || !Number.isSafeInteger(record.id)) {
         throw new ProviderResolutionError("Generated provider table is malformed.");
       }
-      if (record.root) rootRecords[record.id] = record;
+      if (record.scope === "root") rootRecords[record.id] = record;
       else {
         const records = graphRecords.get(record.graphId) ?? [];
         records[record.id] = record;
@@ -133,7 +133,7 @@ function isProviderRecord(value: unknown): value is RuntimeProviderRecord {
   if (typeof value !== "object" || value === null) return false;
   return "id" in value && typeof value.id === "number" &&
     "graphId" in value && typeof value.graphId === "number" &&
-    "root" in value && typeof value.root === "boolean" &&
+    "scope" in value && (value.scope === "graph" || value.scope === "root" || value.scope === "request") &&
     "dependencyStart" in value && typeof value.dependencyStart === "number" &&
     "dependencyCount" in value && typeof value.dependencyCount === "number";
 }

@@ -295,7 +295,7 @@ function collectInjectDependencies(node: ts.Node, aliases: ReadonlyMap<string, s
   visit(node);
 }
 /** Resolves a decorator's `provide:` option into a visibility scope and, when it references anything else, a token alias. */
-function resolveProvide(call: ts.CallExpression | undefined, aliases: ReadonlyMap<string, string>): { readonly provide: "graph" | "root"; readonly token?: string } | undefined {
+function resolveProvide(call: ts.CallExpression | undefined, aliases: ReadonlyMap<string, string>): { readonly provide: "graph" | "root" | "request"; readonly token?: string } | undefined {
   const options = call?.arguments[0];
   if (options === undefined) return { provide: "graph" };
   if (!ts.isObjectLiteralExpression(options)) return undefined;
@@ -303,7 +303,7 @@ function resolveProvide(call: ts.CallExpression | undefined, aliases: ReadonlyMa
   if (property === undefined) return { provide: "graph" };
   if (!ts.isPropertyAssignment(property)) return undefined;
   const initializer = property.initializer;
-  if (ts.isStringLiteral(initializer) && (initializer.text === "graph" || initializer.text === "root")) return { provide: initializer.text };
+  if (ts.isStringLiteral(initializer) && (initializer.text === "graph" || initializer.text === "root" || initializer.text === "request")) return { provide: initializer.text };
   if (
     ts.isPropertyAccessExpression(initializer) &&
     ts.isIdentifier(initializer.expression) &&
@@ -311,6 +311,7 @@ function resolveProvide(call: ts.CallExpression | undefined, aliases: ReadonlyMa
   ) {
     if (initializer.name.text === "GRAPH") return { provide: "graph" };
     if (initializer.name.text === "ROOT") return { provide: "root" };
+    if (initializer.name.text === "REQUEST") return { provide: "request" };
   }
   return { provide: "graph", token: referenceName(initializer) };
 }

@@ -15,3 +15,18 @@ test("production build contains executable application but no compiler or watche
   const manifest = await Bun.file(`${playgroundRoot}/dist/.warbler/build-manifest.json`).json();
   expect(manifest.enabledTransports).toEqual(["http", "websocket"]);
 });
+
+test("production build's generated provider bindings are numeric-ID-shaped, not a hand-rolled token map", async () => {
+  const providersSource = await Bun.file(`${playgroundRoot}/.warbler/generated/providers.generated.ts`).text();
+  // Compiler-generated provider rows: dense numeric id/dependencyIds/scope, not a Map<token, record> literal.
+  expect(providersSource).toMatch(/id:\s*\d+,/u);
+  expect(providersSource).toMatch(/dependencyIds:\s*Object\.freeze\(\[/u);
+  expect(providersSource).toMatch(/scope:\s*"(graph|root|request)"/u);
+  expect(providersSource).not.toContain("new Map<ProviderToken");
+  // @warbler/runtime/@warbler/core stay external (framework internals, including the token->id
+  // index, are never inlined) — only the compiler's own generated bindings are bundled inline.
+  const result = await buildCommand(await validateProject(playgroundRoot), { minify: false, sourcemap: false });
+  const bundled = await Bun.file(result.entry).text();
+  expect(bundled).toMatch(/dependencyIds:\s*Object\.freeze\(\[/u);
+  expect(bundled).toMatch(/scope:\s*"(graph|root|request)"/u);
+});

@@ -1,6 +1,6 @@
 /** Dense immutable compiler table entry for a provider. */
 export interface ProviderTableEntry {
-  readonly id: number; readonly nameId: number; readonly graphId: number; readonly root: boolean;
+  readonly id: number; readonly nameId: number; readonly graphId: number; readonly scope: "graph" | "root" | "request";
   readonly dependencyStart: number; readonly dependencyCount: number;
 }
 /** Dense immutable compiler table entry for a controller. */
