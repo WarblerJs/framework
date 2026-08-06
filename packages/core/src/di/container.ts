@@ -8,7 +8,8 @@ import { tokenName } from "./token";
 type ProviderRecord<T> =
   | { readonly kind: "class"; readonly useClass: Constructor<T>; readonly scope: ProviderLifetime }
   | { readonly kind: "factory"; readonly useFactory: () => T; readonly scope: ProviderLifetime }
-  | { readonly kind: "value"; readonly useValue: T };
+  | { readonly kind: "value"; readonly useValue: T }
+  | { readonly kind: "existing"; readonly useExisting: ProviderToken<T> };
 
 /** Resolves and owns Warbler providers. */
 export class Container {
@@ -36,6 +37,10 @@ export class Container {
     }
     if ("useFactory" in provider) {
       this.#records.set(provider.token, { kind: "factory", useFactory: provider.useFactory, scope: provider.scope ?? "singleton" });
+      return this;
+    }
+    if ("useExisting" in provider) {
+      this.#records.set(provider.token, { kind: "existing", useExisting: provider.useExisting });
       return this;
     }
     this.#records.set(provider.token, { kind: "class", useClass: provider.useClass, scope: provider.scope ?? "singleton" });
@@ -72,7 +77,7 @@ export class Container {
     this.#resolving.push(token);
     try {
       const value = this.#create(record);
-      if (record.kind === "value" || record.scope === "singleton") this.#singletons.set(token, value);
+      if (record.kind === "value" || (record.kind !== "existing" && record.scope === "singleton")) this.#singletons.set(token, value);
       return value;
     } finally {
       this.#resolving.pop();
@@ -86,6 +91,7 @@ export class Container {
 
   #create<T>(record: ProviderRecord<T>): T {
     if (record.kind === "value") return record.useValue;
+    if (record.kind === "existing") return this.resolve(record.useExisting);
     if (record.kind === "factory") return runInInjectionContext(this, record.useFactory);
     return runInInjectionContext(this, () => new record.useClass());
   }

@@ -37,11 +37,26 @@ export interface ControllerWIR extends SourceLocationWIR {
   readonly routes: readonly RouteWIR[];
   readonly socketEvents: readonly SocketEventWIR[];
 }
+/** A statically captured expression: its verbatim source text plus the free identifiers it references. */
+export interface CapturedExpressionWIR {
+  readonly text: string;
+  readonly captures: readonly string[];
+}
 /** Provider metadata owned by a Graph or the application root. */
 export interface ProviderWIR extends SourceLocationWIR {
   readonly name: string;
-  readonly kind: "service" | "repository" | "factory" | "resolver" | "gateway" | "injectable";
+  readonly kind: "service" | "repository" | "factory" | "resolver" | "gateway" | "injectable" | "registration";
   readonly provide: "graph" | "root";
+  /** Alias token this provider is also resolvable under, from a `provide:` reference. */
+  readonly token?: string;
+  /** How the provider's instance is produced. Decorator-based providers are always "class". */
+  readonly registration: "class" | "useValue" | "useFactory" | "useExisting";
+  /** Class reference to construct, for `registration: "class"`. */
+  readonly implementation?: string;
+  readonly capturedValue?: CapturedExpressionWIR;
+  readonly capturedFactory?: CapturedExpressionWIR;
+  /** Token this provider aliases, for `registration: "useExisting"`. */
+  readonly existing?: string;
   readonly dependencies: readonly string[];
 }
 /** Graph metadata and its owned application declarations. */

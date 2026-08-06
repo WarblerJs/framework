@@ -185,7 +185,7 @@ describe("executable bindings", () => {
     expect(providers).toContain("import Binding");
     const generated = await import(join(directory, "application.generated.ts"));
     const runtime = createExecutableBindingsRuntime(generated.default);
-    const users = context.generatedApplication!.bindings!.providers.find((item) => item.symbol.imported === "UsersService")!;
+    const users = context.generatedApplication!.bindings!.providers.find((item) => item.implementation?.imported === "UsersService")!;
     const instance = runtime.resolveProvider(users.graphId, users.id) as { readonly logger: unknown };
     expect(instance.logger).toBeDefined();
     const production = await import(join(directory, "production.generated.ts"));

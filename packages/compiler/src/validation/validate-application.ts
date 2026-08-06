@@ -10,6 +10,10 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
   const rootProviders = new Map<string, ProviderWIR>();
   const result: GraphWIR[] = [];
 
+  /** Resolves a `provide:` token alias back to the provider's canonical WIR name. */
+  const tokenNames = new Map<string, string>();
+  for (const provider of analysis.providers.values()) if (provider.token !== undefined) tokenNames.set(provider.token, provider.name);
+
   for (const graph of analysis.graphs) {
     const priorName = graphNames.get(graph.name);
     if (priorName !== undefined) {
@@ -75,7 +79,7 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
     if (provider.provide === "graph" && !providerOwners.has(provider.name)) add(diagnostics, DiagnosticCode.MISSING_GRAPH, `Graph provider "${provider.name}" is not owned by a Graph.`, provider, [provider.name]);
   }
 
-  validateDependencies(result, rootProviders, providerOwners, diagnostics);
+  validateDependencies(result, rootProviders, providerOwners, tokenNames, diagnostics);
   return Object.freeze({ version: 1, projectRoot, graphs: Object.freeze(result), rootProviders: Object.freeze([...rootProviders.values()]) });
 }
 
@@ -99,19 +103,20 @@ function validateSocketEvents(controllers: readonly ControllerWIR[], diagnostics
     }
   }
 }
-function validateDependencies(graphs: readonly GraphWIR[], roots: ReadonlyMap<string, ProviderWIR>, owners: ReadonlyMap<string, AnalyzedGraph>, diagnostics: CompilerDiagnostic[]): void {
+function validateDependencies(graphs: readonly GraphWIR[], roots: ReadonlyMap<string, ProviderWIR>, owners: ReadonlyMap<string, AnalyzedGraph>, tokenNames: ReadonlyMap<string, string>, diagnostics: CompilerDiagnostic[]): void {
   for (const graph of graphs) {
     const local = new Map(graph.providers.map((provider) => [provider.name, provider]));
-    for (const provider of [...graph.providers, ...roots.values()]) for (const dependency of provider.dependencies) {
+    for (const provider of [...graph.providers, ...roots.values()]) for (const rawDependency of provider.dependencies) {
+      const dependency = tokenNames.get(rawDependency) ?? rawDependency;
       if (roots.has(dependency) || (provider.provide === "graph" && local.has(dependency))) continue;
       const owner = owners.get(dependency);
       if (owner !== undefined) add(diagnostics, DiagnosticCode.PROVIDER_VISIBILITY, `Provider "${dependency}" is scoped to Graph "${owner.name}" and cannot be injected into "${graph.name}". Declare provide: ProviderScope.ROOT if the provider should be globally available.`, provider, [provider.name, dependency, owner.name, graph.name]);
       else add(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Provider "${provider.name}" depends on unknown provider "${dependency}".`, provider, [provider.name, dependency]);
     }
-    detectCycles([...graph.providers, ...roots.values()], diagnostics);
+    detectCycles([...graph.providers, ...roots.values()], tokenNames, diagnostics);
   }
 }
-function detectCycles(providers: readonly ProviderWIR[], diagnostics: CompilerDiagnostic[]): void {
+function detectCycles(providers: readonly ProviderWIR[], tokenNames: ReadonlyMap<string, string>, diagnostics: CompilerDiagnostic[]): void {
   const table = new Map(providers.map((provider) => [provider.name, provider]));
   const state = new Map<string, 0 | 1 | 2>();
   for (const provider of providers) {
@@ -122,7 +127,8 @@ function detectCycles(providers: readonly ProviderWIR[], diagnostics: CompilerDi
       const frame = stack[stack.length - 1]!;
       const current = table.get(frame.name)!;
       if (frame.next >= current.dependencies.length) { state.set(frame.name, 2); stack.pop(); continue; }
-      const dependency = current.dependencies[frame.next++]!;
+      const rawDependency = current.dependencies[frame.next++]!;
+      const dependency = tokenNames.get(rawDependency) ?? rawDependency;
       if (!table.has(dependency)) continue;
       const dependencyState = state.get(dependency) ?? 0;
       if (dependencyState === 1) {
