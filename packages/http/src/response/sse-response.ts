@@ -1,4 +1,5 @@
 import { InvalidRequestError } from "../errors";
+import { type HeadersInput, toHeaders } from "../internal/header-value";
 import type { ServerSentEvent } from "./response-types";
 
 function safeField(value: string, name: string): string {
@@ -28,7 +29,7 @@ export function encodeServerSentEvent(event: ServerSentEvent): string {
 /** Creates a backpressure-aware SSE response without timers or internal polling. */
 export function SseRes(
   events: AsyncIterable<ServerSentEvent>,
-  options: Readonly<{ signal?: AbortSignal; headers?: Bun.HeadersInit }> = {},
+  options: Readonly<{ signal?: AbortSignal; headers?: HeadersInput }> = {},
 ): Response {
   const iterator = events[Symbol.asyncIterator]();
   const stream = new ReadableStream<string>({
@@ -50,7 +51,7 @@ export function SseRes(
       await iterator.return?.();
     },
   });
-  const headers = new Headers(options.headers);
+  const headers = toHeaders(options.headers);
   if (!headers.has("content-type")) headers.set("content-type", "text/event-stream; charset=utf-8");
   if (!headers.has("cache-control")) headers.set("cache-control", "no-cache");
   if (!headers.has("connection")) headers.set("connection", "keep-alive");

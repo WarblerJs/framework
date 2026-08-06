@@ -1,5 +1,5 @@
 /** Supported CLI command names. */
-export type CLICommandName = "dev" | "build" | "start" | "doctor" | "inspect" | "new" | "generate" | "clean" | "version" | "help";
+export type CLICommandName = "dev" | "build" | "start" | "doctor" | "inspect" | "new" | "generate" | "db:pg" | "clean" | "version" | "help";
 /** Parsed flag value. */
 export type CLIFlagValue = string | boolean;
 /** Deterministic parser result. */

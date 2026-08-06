@@ -1,13 +1,15 @@
 import type { CompilerContext } from "@warbler/compiler";
 import { compileProject } from "@warbler/compiler";
 import { atomicWrite, resolveInside } from "../filesystem";
-import { CLIError } from "../errors";
+import { CLIError, describeErrorChain } from "../errors";
 import { ExitCode } from "../types";
 import { SourceWatcher } from "./source-watcher";
 import { DevelopmentViewPipeline } from "./view-pipeline";
 
 /** Managed Runtime handle used by development orchestration. */
 export interface DevelopmentRuntimeHandle {
+  /** URLs the dev server is reachable at (e.g. `http://localhost:3000`, LAN addresses), when a port-bound transport is enabled. */
+  readonly network?: readonly string[];
   stop(): void | Promise<void>;
 }
 /** Runtime launcher abstraction consumed until Compiler emits executable bindings. */
@@ -37,6 +39,8 @@ export interface DevSession {
   readonly state: DevSessionState;
   readonly projectRoot: string;
   readonly buildNumber: number;
+  /** URLs the dev server is reachable at, as last reported by the Runtime launcher. */
+  readonly network?: readonly string[] | undefined;
   stop(): Promise<void>;
   wait(): Promise<void>;
 }
@@ -66,6 +70,7 @@ export class ManagedDevSession implements DevSession {
   public get state(): DevSessionState { return this.#state; }
   public get projectRoot(): string { return this.#projectRoot; }
   public get buildNumber(): number { return this.#buildNumber; }
+  public get network(): readonly string[] | undefined { return this.#runtime?.network; }
   /** Performs initial compilation and starts the Runtime abstraction. */
   public async start(): Promise<this> {
     const preparation = await this.#launcher.prepare?.(this.#projectRoot, this.#overrides, this.#report);
@@ -186,7 +191,7 @@ export class ManagedDevSession implements DevSession {
         throw cause;
       }
     } catch (cause) {
-      this.#emit("rebuild", "failure", safeMessage(cause));
+      this.#emit("rebuild", "failure", describeErrorChain(cause, "Unknown development failure."));
     } finally {
       if (!this.#isStopping()) {
         this.#state = "running";
@@ -211,4 +216,3 @@ function formatCompilerDiagnostic(diagnostic: CompilerContext["diagnostics"][num
   const location = diagnostic.sourceFile.length === 0 ? "" : `${diagnostic.sourceFile}:${diagnostic.line}:${diagnostic.column} `;
   return `${location}${diagnostic.code} ${diagnostic.message}`;
 }
-function safeMessage(cause: unknown): string { return cause instanceof Error ? cause.message : "Unknown development failure."; }

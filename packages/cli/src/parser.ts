@@ -1,9 +1,9 @@
 import { CLIError } from "./errors";
 import { ExitCode, type CLICommandName, type CLIFlagValue, type ParsedCLI } from "./types";
 
-const COMMANDS = new Set<CLICommandName>(["dev", "build", "start", "doctor", "inspect", "new", "generate", "clean", "version", "help"]);
+const COMMANDS = new Set<CLICommandName>(["dev", "build", "start", "doctor", "inspect", "new", "generate", "db:pg", "clean", "version", "help"]);
 const VALUE_FLAGS = new Set(["project", "mode", "host", "port", "out"]);
-const BOOLEAN_FLAGS = new Set(["watch", "no-watch", "minify", "no-minify", "sourcemap", "no-sourcemap", "no-color", "json", "verbose", "quiet", "dry-run", "force", "help"]);
+const BOOLEAN_FLAGS = new Set(["watch", "no-watch", "minify", "no-minify", "sourcemap", "no-sourcemap", "no-color", "json", "verbose", "quiet", "dry-run", "force", "seed", "help"]);
 
 /** Parses CLI arguments without mutating input or retaining global state. */
 export function parseCLI(input: readonly string[]): ParsedCLI {

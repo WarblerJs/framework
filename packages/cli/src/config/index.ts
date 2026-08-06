@@ -1,1 +1,1 @@
-export { loadCLIConfig, loadEnabledTransportConfigs, resolveEnabledTransports } from "./config";
+export { loadCLIConfig, loadDatabaseConfig, loadEnabledTransportConfigs, resolveEnabledTransports } from "./config";

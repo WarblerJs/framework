@@ -2,15 +2,12 @@ import { defineValidator, v, type InferValidatorOutput } from "@warbler/validato
 
 export const loginValidator = defineValidator({
   rules: {
-    username: v.string("validators.username_not_valid").trim().min(1, "validators.username_not_valid"),
+    email: v.string("validators.email_not_valid").trim().email("validators.email_not_valid"),
     password: v.string("invalid_string").min(1, "invalid_string"),
   },
   queryRules: {
-    type: v.number('type_not_existe')
+    type: v.coerce.number('type_not_existe')
   },
-  mapK: {
-    username: 'name'
-  }
 });
 
 export type LoginInput = InferValidatorOutput<typeof loginValidator>;

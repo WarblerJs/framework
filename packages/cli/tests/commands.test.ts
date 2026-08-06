@@ -156,6 +156,99 @@ describe("build and start", () => {
   });
 });
 
+describe("database", () => {
+  const writeDatabaseConfig = (root: string) =>
+    Bun.write(
+      join(root, "src/config/database.config.ts"),
+      `export const databaseConfig = {
+  pg: {
+    connection: {},
+    migrations: {
+      table: "_wrbls_migrations",
+      generated: "database/warbler/pg/generated",
+      path: "database/warbler/pg/migrations",
+      seeds: "database/warbler/pg/seeds",
+    },
+  },
+};
+`,
+    );
+
+  // Note: `db:pg generate`, `db:pg migration` (run), `db:pg reset`, and `db:pg seed` (run) all require
+  // a reachable Postgres connection, which is not available in this environment — only the
+  // config-validation and pure-scaffolding paths (which never connect) are covered here. Run the rest
+  // against a real database before relying on them.
+
+  test("db:pg generate fails clearly when database.config.ts is missing", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    const capture = captureOutput();
+    const code = await runCLI(["db:pg", "generate", "--project", project.root], { output: capture.output });
+    expect(code).toBe(ExitCode.INVALID_PROJECT);
+    expect(capture.errors.join("\n")).toContain("CLI3001");
+  });
+
+  test("db:pg migration fails clearly when database.config.ts is missing", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    const capture = captureOutput();
+    const code = await runCLI(["db:pg", "migration", "--project", project.root], { output: capture.output });
+    expect(code).toBe(ExitCode.INVALID_PROJECT);
+    expect(capture.errors.join("\n")).toContain("CLI3001");
+  });
+
+  test("db:pg migration <kind>:<name> scaffolds a timestamped migration file without connecting to a database", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    await writeDatabaseConfig(project.root);
+    const capture = captureOutput();
+    const code = await runCLI(["db:pg", "migration", "create:table:user", "--project", project.root], { output: capture.output });
+    expect(code).toBe(0);
+    expect(capture.lines.join("\n")).toContain("Generated");
+    const files = [...new Bun.Glob("*.ts").scanSync({ cwd: join(project.root, "database/warbler/pg/migrations") })];
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(/^\d{14}_create_table_user\.ts$/u);
+    const content = await Bun.file(join(project.root, "database/warbler/pg/migrations", files[0]!)).text();
+    expect(content).toContain('pgm.createTable("users"');
+  });
+
+  test("db:pg rejects an unknown action", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    const capture = captureOutput();
+    const code = await runCLI(["db:pg", "migrate", "--project", project.root], { output: capture.output });
+    expect(code).toBe(ExitCode.INVALID_ARGUMENTS);
+    expect(capture.errors.join("\n")).toContain("CLI3002");
+  });
+
+  test("db:pg reset refuses to run without --force", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    await writeDatabaseConfig(project.root);
+    const capture = captureOutput();
+    const code = await runCLI(["db:pg", "reset", "--project", project.root], { output: capture.output });
+    expect(code).toBe(ExitCode.INVALID_ARGUMENTS);
+    expect(capture.errors.join("\n")).toContain("CLI3003");
+  });
+
+  test("db:pg seed fails clearly when database.config.ts is missing", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    const capture = captureOutput();
+    const code = await runCLI(["db:pg", "seed", "--project", project.root], { output: capture.output });
+    expect(code).toBe(ExitCode.INVALID_PROJECT);
+    expect(capture.errors.join("\n")).toContain("CLI3001");
+  });
+
+  test("db:pg seed <name> scaffolds a timestamped seed file without connecting to a database", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    await writeDatabaseConfig(project.root);
+    const capture = captureOutput();
+    const code = await runCLI(["db:pg", "seed", "admin_user", "--project", project.root], { output: capture.output });
+    expect(code).toBe(0);
+    expect(capture.lines.join("\n")).toContain("Generated");
+    const files = [...new Bun.Glob("*.ts").scanSync({ cwd: join(project.root, "database/warbler/pg/seeds") })];
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(/^\d{14}_admin_user\.ts$/u);
+    const content = await Bun.file(join(project.root, "database/warbler/pg/seeds", files[0]!)).text();
+    expect(content).toContain("export const seed: PgSeed");
+  });
+});
+
 describe("process lifecycle", () => {
   test("forwards the exact child exit code without a shell", async () => {
     const owner = new ProcessOwner();

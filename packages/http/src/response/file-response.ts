@@ -1,5 +1,5 @@
 import { StaticFileError } from "../errors";
-import { safeFilename, safeHeaderValue } from "../internal/header-value";
+import { safeFilename, safeHeaderValue, toHeaders } from "../internal/header-value";
 import type { FileResponseOptions } from "./response-types";
 
 function fileResponse(
@@ -9,7 +9,7 @@ function fileResponse(
   options: FileResponseOptions,
 ): Response {
   if (!(file instanceof Blob)) throw new StaticFileError("Invalid file reference", 500);
-  const headers = new Headers(options.headers);
+  const headers = toHeaders(options.headers);
   if (contentType !== undefined && !headers.has("content-type")) headers.set("content-type", contentType);
   if (disposition !== undefined && !headers.has("content-disposition")) {
     const filename = safeFilename(options.filename ?? "download");

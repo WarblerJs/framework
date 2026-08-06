@@ -1,5 +1,6 @@
 {
   "username_not_valid": "Le nom d’utilisateur est invalide.",
+  "email_not_valid": "L’adresse e-mail est invalide.",
   "invalid_page": "La page doit être un nombre positif.",
   "invalid_id": "L’identifiant doit être un nombre positif.",
   "invalid_room": "Le salon est invalide.",

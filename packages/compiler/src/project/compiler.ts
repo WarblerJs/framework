@@ -102,7 +102,7 @@ function isApplicationSource(fileName: string, root: string): boolean {
     !normalized.endsWith(".d.ts") &&
     !normalized.includes("/node_modules/") &&
     !normalized.includes("/dist/") &&
-    !normalized.includes("/generated/");
+    !normalized.includes("/.warbler/generated/");
 }
 function normalizeTypeScriptDiagnostic(input: ts.Diagnostic): CompilerDiagnostic {
   const source = input.file;

@@ -2,6 +2,7 @@ import { CompiledViewEngine } from "./engine";
 import { ViewNotFoundException } from "./errors";
 import type { CompiledViewArtifact, ViewData, ViewResponseOptions } from "./types";
 import { VIEW_DEVELOPMENT_SCRIPT } from "./development";
+import { toHeaders } from "./internal/header-value";
 
 let activeEngine: CompiledViewEngine | undefined;
 let activeArtifact: CompiledViewArtifact | undefined;
@@ -29,7 +30,7 @@ export function View(
 ): Response {
   const engine = activeEngine;
   if (engine === undefined) throw new ViewNotFoundException(name);
-  const headers = new Headers(options.headers);
+  const headers = toHeaders(options.headers);
   if (!headers.has("content-type")) headers.set("content-type", "text/html; charset=utf-8");
   let html = engine.render(name, data);
   if (activeArtifact?.hotReload === true && !html.includes("data-warbler-view")) {

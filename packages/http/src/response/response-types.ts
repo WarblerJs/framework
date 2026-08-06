@@ -1,7 +1,9 @@
+import type { HeadersInput } from "../internal/header-value";
+
 /** Options common to native response helpers. */
 export interface ResponseOptions {
   readonly status?: number;
-  readonly headers?: Bun.HeadersInit;
+  readonly headers?: HeadersInput;
 }
 
 /** Options for file-backed response helpers. */

@@ -4,6 +4,9 @@
   "workspaces": {
     "": {
       "name": "warbler",
+      "devDependencies": {
+        "@types/bun": "^1.3.14",
+      },
     },
     "packages/cli": {
       "name": "@warbler/cli",
@@ -16,6 +19,7 @@
         "@warbler/config": "workspace:*",
         "@warbler/console": "workspace:*",
         "@warbler/core": "workspace:*",
+        "@warbler/database": "workspace:*",
         "@warbler/runtime": "workspace:*",
         "@warbler/view": "workspace:*",
       },
@@ -55,6 +59,14 @@
     },
     "packages/core": {
       "name": "@warbler/core",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.9.2",
+      },
+    },
+    "packages/database": {
+      "name": "@warbler/database",
       "version": "0.1.0",
       "devDependencies": {
         "@types/bun": "latest",
@@ -163,6 +175,7 @@
       "dependencies": {
         "@warbler/config": "workspace:*",
         "@warbler/core": "workspace:*",
+        "@warbler/database": "workspace:*",
         "@warbler/http": "workspace:*",
         "@warbler/runtime": "workspace:*",
         "@warbler/validators": "workspace:*",
@@ -262,6 +275,8 @@
     "@warbler/console": ["@warbler/console@workspace:packages/console"],
 
     "@warbler/core": ["@warbler/core@workspace:packages/core"],
+
+    "@warbler/database": ["@warbler/database@workspace:packages/database"],
 
     "@warbler/http": ["@warbler/http@workspace:packages/http"],
 

@@ -5,7 +5,7 @@ test("Compiler emits executable Playground bindings", async () => {
   const application = await generatedApplication();
   expect(Object.keys(application.application.graphIds)).toEqual(["AuthGraph", "ChatGraph", "HomeGraph"]);
   expect(application.controllers).toHaveLength(3);
-  expect(application.handlers).toHaveLength(18);
+  expect(application.handlers).toHaveLength(19);
   expect(application.http).toBeDefined();
   expect(application.websocket).toBeDefined();
 });

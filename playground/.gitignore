@@ -1,2 +1,3 @@
 .warbler/
 dist/
+database/warbler/pg/generated/

@@ -7,6 +7,10 @@ import { ApplicationEntryRuntimeLauncher } from "./dev/runtime-launcher";
 import { buildCommand } from "./build/build-command";
 import { cleanCommand } from "./clean/clean-command";
 import { cliDiagnostic } from "./diagnostics";
+import { databaseGenerateCommand } from "./db/generate-command";
+import { migrationRunCommand, migrationScaffoldCommand } from "./db/migration-command";
+import { resetCommand } from "./db/reset-command";
+import { seedRunCommand, seedScaffoldCommand } from "./db/seed-command";
 import { doctorCommand } from "./doctor/doctor-command";
 import { CLIError } from "./errors";
 import { generateSource } from "./generate/generate-command";
@@ -63,6 +67,7 @@ export async function runCLI(argv: readonly string[], services: CLIServices = {}
     return await execute(context, commandOutput, services);
   } catch (cause) {
     const known = cause instanceof CLIError;
+
     const diagnostic = known
       ? cliDiagnostic({ code: cause.code, severity: "error", message: cause.message, ...(cause.suggestion === undefined ? {} : { suggestion: cause.suggestion }) })
       : cliDiagnostic({ code: "CLI9000", severity: "error", message: "Unexpected CLI failure." });
@@ -123,6 +128,7 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
         version: "0.1.0",
         project: basename(root),
         build: session.buildNumber,
+        ...(session.network === undefined ? {} : { network: session.network }),
         ...(context.flags["no-watch"] === true ? {} : { watching: Object.freeze(["src", "resources", "public"]) }),
       });
       writeResult(
@@ -164,6 +170,64 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
       await cleanCommand(root, context.flags["dry-run"] === true);
       writeResult(output, context.format, { command: "clean", status: "success", dryRun: context.flags["dry-run"] === true }, context.flags["dry-run"] === true ? "Would remove dist/ and .warbler/." : "Removed dist/ and .warbler/.");
       return ExitCode.SUCCESS;
+    case "db:pg": {
+      assertArgs(context, [1, 2]);
+      const [action, target] = context.args;
+      if (action === "generate") {
+        assertArgs(context, 1);
+        const result = await databaseGenerateCommand(layout);
+        writeResult(
+          output,
+          context.format,
+          { command: "db:pg", status: "success", action: "generate", tables: result.tables, fingerprint: result.fingerprint },
+          `Compiled ${result.tables.length} table(s): ${result.tables.join(", ")}`,
+        );
+        return ExitCode.SUCCESS;
+      }
+      if (action === "migration") {
+        if (target === undefined) {
+          const result = await migrationRunCommand(layout);
+          const message = result.executed.length === 0
+            ? "No pending migrations."
+            : result.executed.map((migration) => `${migration.name} (batch ${migration.batch}, ${migration.executionMs}ms)`).join("\n");
+          writeResult(output, context.format, { command: "db:pg", status: "success", action: "migration", executed: result.executed }, message);
+          return ExitCode.SUCCESS;
+        }
+        const scaffold = await migrationScaffoldCommand(layout, target);
+        writeResult(output, context.format, { command: "db:pg", status: "success", action: "migration", file: scaffold.path }, `Generated ${scaffold.path}`);
+        return ExitCode.SUCCESS;
+      }
+      if (action === "reset") {
+        assertArgs(context, 1);
+        if (context.flags.force !== true) {
+          throw new CLIError(
+            "CLI3003",
+            "db:pg reset drops every table in the database.",
+            ExitCode.INVALID_ARGUMENTS,
+            "Re-run with --force to confirm, optionally with --seed to run seeds afterward.",
+          );
+        }
+        const result = await resetCommand(layout, { seed: context.flags.seed === true });
+        const message = [
+          result.executed.length === 0 ? "No migrations to run." : result.executed.map((migration) => `${migration.name} (batch ${migration.batch}, ${migration.executionMs}ms)`).join("\n"),
+          ...(result.seeded.length === 0 ? [] : [`Seeded: ${result.seeded.join(", ")}`]),
+        ].join("\n");
+        writeResult(output, context.format, { command: "db:pg", status: "success", action: "reset", executed: result.executed, seeded: result.seeded }, message);
+        return ExitCode.SUCCESS;
+      }
+      if (action === "seed") {
+        if (target === undefined) {
+          const result = await seedRunCommand(layout);
+          const message = result.executed.length === 0 ? "No seed files found." : result.executed.join("\n");
+          writeResult(output, context.format, { command: "db:pg", status: "success", action: "seed", executed: result.executed }, message);
+          return ExitCode.SUCCESS;
+        }
+        const scaffold = await seedScaffoldCommand(layout, target);
+        writeResult(output, context.format, { command: "db:pg", status: "success", action: "seed", file: scaffold.path }, `Generated ${scaffold.path}`);
+        return ExitCode.SUCCESS;
+      }
+      throw new CLIError("CLI3002", `Unknown db:pg action: ${action ?? ""}`, ExitCode.INVALID_ARGUMENTS, "Run warbler db:pg generate, migration, reset, or seed.");
+    }
     default: throw new CLIError("CLI1001", `Unsupported command: ${context.command}`, ExitCode.INVALID_ARGUMENTS);
   }
 }
@@ -177,7 +241,14 @@ function writeDevelopmentEvent(output: CLIOutput, format: "human" | "json", verb
   const message = `${marker} ${event.message}`;
   (event.status === "failure" ? output.error : output.write)(message);
 }
-function assertArgs(context: CLIContext, count: number): void {
+function assertArgs(context: CLIContext, count: number | readonly [min: number, max: number]): void {
+  if (Array.isArray(count)) {
+    const [min, max] = count;
+    if (context.args.length < min || context.args.length > max) {
+      throw new CLIError("CLI1009", `${context.command} expects between ${min} and ${max} positional argument(s).`, ExitCode.INVALID_ARGUMENTS);
+    }
+    return;
+  }
   if (context.args.length !== count) throw new CLIError("CLI1009", `${context.command} expects ${count} positional argument(s).`, ExitCode.INVALID_ARGUMENTS);
 }
 function stringFlag(value: string | boolean | undefined): string | undefined { return typeof value === "string" ? value : undefined; }
@@ -191,6 +262,7 @@ function validateCommandFlags(context: CLIContext): void {
     inspect: [...common, "project"],
     new: [...common, "dry-run"],
     generate: [...common, "project", "dry-run", "force"],
+    "db:pg": [...common, "project", "force", "seed"],
     clean: [...common, "project", "dry-run"],
     version: common,
     help: common,
@@ -216,6 +288,10 @@ Usage:
   warbler inspect [graphs|routes|providers|transports|config]
   warbler new <name>
   warbler generate <kind> <name>
+  warbler db:pg migration [<kind>:<name>]
+  warbler db:pg generate
+  warbler db:pg reset --force [--seed]
+  warbler db:pg seed [<name>]
   warbler clean
   warbler version
 

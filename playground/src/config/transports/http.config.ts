@@ -36,7 +36,7 @@ export const httpConfig = {
   },
   security: {
     enabled: true,
-    contentSecurityPolicy: "default-src 'self'",
+    contentSecurityPolicy: "default-src 'self'; connect-src 'self' ws://192.168.1.3:3001 ws://localhost:3001 ws://127.0.0.1:3001 ",
     frameOptions: "DENY",
   },
   static: {
