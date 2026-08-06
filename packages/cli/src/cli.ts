@@ -9,6 +9,8 @@ import { cleanCommand } from "./clean/clean-command";
 import { cliDiagnostic } from "./diagnostics";
 import { databaseGenerateCommand } from "./db/generate-command";
 import { migrationRunCommand, migrationScaffoldCommand } from "./db/migration-command";
+import { resetCommand } from "./db/reset-command";
+import { seedRunCommand, seedScaffoldCommand } from "./db/seed-command";
 import { doctorCommand } from "./doctor/doctor-command";
 import { CLIError } from "./errors";
 import { generateSource } from "./generate/generate-command";
@@ -65,6 +67,7 @@ export async function runCLI(argv: readonly string[], services: CLIServices = {}
     return await execute(context, commandOutput, services);
   } catch (cause) {
     const known = cause instanceof CLIError;
+
     const diagnostic = known
       ? cliDiagnostic({ code: cause.code, severity: "error", message: cause.message, ...(cause.suggestion === undefined ? {} : { suggestion: cause.suggestion }) })
       : cliDiagnostic({ code: "CLI9000", severity: "error", message: "Unexpected CLI failure." });
@@ -193,7 +196,36 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
         writeResult(output, context.format, { command: "db:pg", status: "success", action: "migration", file: scaffold.path }, `Generated ${scaffold.path}`);
         return ExitCode.SUCCESS;
       }
-      throw new CLIError("CLI3002", `Unknown db:pg action: ${action ?? ""}`, ExitCode.INVALID_ARGUMENTS, "Run warbler db:pg generate or warbler db:pg migration.");
+      if (action === "reset") {
+        assertArgs(context, 1);
+        if (context.flags.force !== true) {
+          throw new CLIError(
+            "CLI3003",
+            "db:pg reset drops every table in the database.",
+            ExitCode.INVALID_ARGUMENTS,
+            "Re-run with --force to confirm, optionally with --seed to run seeds afterward.",
+          );
+        }
+        const result = await resetCommand(layout, { seed: context.flags.seed === true });
+        const message = [
+          result.executed.length === 0 ? "No migrations to run." : result.executed.map((migration) => `${migration.name} (batch ${migration.batch}, ${migration.executionMs}ms)`).join("\n"),
+          ...(result.seeded.length === 0 ? [] : [`Seeded: ${result.seeded.join(", ")}`]),
+        ].join("\n");
+        writeResult(output, context.format, { command: "db:pg", status: "success", action: "reset", executed: result.executed, seeded: result.seeded }, message);
+        return ExitCode.SUCCESS;
+      }
+      if (action === "seed") {
+        if (target === undefined) {
+          const result = await seedRunCommand(layout);
+          const message = result.executed.length === 0 ? "No seed files found." : result.executed.join("\n");
+          writeResult(output, context.format, { command: "db:pg", status: "success", action: "seed", executed: result.executed }, message);
+          return ExitCode.SUCCESS;
+        }
+        const scaffold = await seedScaffoldCommand(layout, target);
+        writeResult(output, context.format, { command: "db:pg", status: "success", action: "seed", file: scaffold.path }, `Generated ${scaffold.path}`);
+        return ExitCode.SUCCESS;
+      }
+      throw new CLIError("CLI3002", `Unknown db:pg action: ${action ?? ""}`, ExitCode.INVALID_ARGUMENTS, "Run warbler db:pg generate, migration, reset, or seed.");
     }
     default: throw new CLIError("CLI1001", `Unsupported command: ${context.command}`, ExitCode.INVALID_ARGUMENTS);
   }
@@ -229,7 +261,7 @@ function validateCommandFlags(context: CLIContext): void {
     inspect: [...common, "project"],
     new: [...common, "dry-run"],
     generate: [...common, "project", "dry-run", "force"],
-    "db:pg": [...common, "project"],
+    "db:pg": [...common, "project", "force", "seed"],
     clean: [...common, "project", "dry-run"],
     version: common,
     help: common,
@@ -257,6 +289,8 @@ Usage:
   warbler generate <kind> <name>
   warbler db:pg migration [<kind>:<name>]
   warbler db:pg generate
+  warbler db:pg reset --force [--seed]
+  warbler db:pg seed [<name>]
   warbler clean
   warbler version
 

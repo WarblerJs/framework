@@ -50,5 +50,13 @@ export class MigrationChecksumError extends DatabaseError {
   }
 }
 
+/** Error thrown when a seed file doesn't export a valid `seed` function, or a seed name is invalid. */
+export class SeedError extends DatabaseError {
+  public constructor(public readonly seedName: string, detail: string) {
+    super(`Seed "${seedName}" is invalid: ${detail}`, "DB2003");
+    this.name = "SeedError";
+  }
+}
+
 /** Checks whether a failure belongs to the Warbler database package. */
 export const isDatabaseError = (value: unknown): value is DatabaseError => value instanceof DatabaseError;

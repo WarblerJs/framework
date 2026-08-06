@@ -1,15 +1,18 @@
 import { Repository } from "@warbler/core";
+import { WlbPg } from "../../../database/warbler/pg/generated/client";
 
 export interface PlaygroundUser {
   readonly id: string;
-  readonly username: string;
+  readonly email: string;
 }
 
 @Repository()
 export default class AuthRepository {
-  find(username: string, password: string): PlaygroundUser | undefined {
-    return username === "warbler" && password === "secure-pass"
-      ? Object.freeze({ id: "user-1", username })
-      : undefined;
+  async find(email: string, password: string): Promise<PlaygroundUser | undefined> {
+    const user = await WlbPg.user.findUnique({ email });
+    if (user === null || !user.isActive) return undefined;
+
+    const valid = await Bun.password.verify(password, user.passwordHash);
+    return valid ? Object.freeze({ id: user.id, email: user.email }) : undefined;
   }
 }

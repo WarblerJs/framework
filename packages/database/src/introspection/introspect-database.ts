@@ -1,5 +1,5 @@
 import type { SQL } from "bun";
-import { tableNameToClientKey, tableNameToModelName } from "../naming";
+import { columnNameToFieldName, tableNameToClientKey, tableNameToModelName } from "../naming";
 import type {
   CheckConstraintMetadata,
   ColumnMetadata,
@@ -235,7 +235,7 @@ export async function introspectDatabase(sql: SQL, options: IntrospectDatabaseOp
       const comment = commentByColumn.get(row.columnName);
       const enumMetadata = mapped.pgType === "enum" ? enumsByName.get(mapped.sqlType) : undefined;
       return Object.freeze({
-        fieldName: row.columnName,
+        fieldName: columnNameToFieldName(row.columnName),
         columnName: row.columnName,
         pgType: mapped.pgType,
         sqlType: mapped.sqlType,

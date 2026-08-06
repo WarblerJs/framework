@@ -11,6 +11,7 @@ export {
   DatabaseError,
   MigrationChecksumError,
   MigrationScaffoldError,
+  SeedError,
   isDatabaseError,
 } from "./errors";
 
@@ -18,6 +19,8 @@ export { createCompiledDatabaseArtifact } from "./artifact";
 export type { CompiledDatabaseArtifact, CompiledDatabaseArtifactInput } from "./artifact";
 
 export { createPgConnection } from "./runtime/create-connection";
+export { withQueryLogging } from "./runtime/query-logger";
+export type { QueryLogEntry, QueryLogger } from "./runtime/query-logger";
 
 export { introspectDatabase } from "./introspection/introspect-database";
 export type { IntrospectDatabaseOptions } from "./introspection/introspect-database";
@@ -57,6 +60,14 @@ export { runMigrations } from "./migrations/run-migrations";
 export type { ExecutedMigration, MigrationRunResult, RunMigrationsOptions } from "./migrations/run-migrations";
 export { scaffoldMigration } from "./migrations/scaffold-migration";
 export type { ScaffoldedMigration } from "./migrations/scaffold-migration";
+export { resetDatabase } from "./migrations/reset-database";
+
+export { runSeeds } from "./seeds/run-seeds";
+export type { RunSeedsOptions, RunSeedsResult } from "./seeds/run-seeds";
+export { scaffoldSeed } from "./seeds/scaffold-seed";
+export type { ScaffoldedSeed } from "./seeds/scaffold-seed";
+export type { PgSeed } from "./seeds/types";
+
 export type {
   AlterColumnChanges,
   AlterEnumChanges,

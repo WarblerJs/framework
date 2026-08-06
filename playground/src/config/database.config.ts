@@ -6,6 +6,8 @@ import {
 
 export const databaseConfig = {
   pg: {
+    log: envBoolean("DB_LOG_QUERIES", false),
+
     connection: {
       adapter: "postgres" as const,
 

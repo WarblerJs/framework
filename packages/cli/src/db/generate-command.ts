@@ -22,7 +22,7 @@ export async function databaseGenerateCommand(layout: ProjectLayout): Promise<Da
     );
   }
   const config = await loadDatabaseConfig(layout.root);
-  const sql = createPgConnection(config.connection);
+  const sql = createPgConnection(config.connection, config.log === true);
   try {
     const result = await generateFromDatabase(sql, { projectRoot: layout.root, config });
     return Object.freeze({

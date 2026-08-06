@@ -30,6 +30,9 @@ import { envBoolean, envNumber, envString } from "@warbler/config";
 
 export const databaseConfig = {
   pg: {
+    // Logs every executed query (including inside transactions) when true.
+    log: envBoolean("DB_LOG_QUERIES", false),
+
     connection: {
       adapter: "postgres" as const,
       url: envString("DATABASE_URL", ""),

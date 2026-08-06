@@ -17,11 +17,11 @@ test("generated native HTTP routes invoke real controllers and validation", asyn
     const invalid = await routes["/api/auth/login"]!.POST!(new Request("http://127.0.0.1/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ username: "", password: 4 }),
+      body: JSON.stringify({ email: "", password: 4 }),
     }));
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toEqual({
-      username: "Username is invalid.",
+      email: "Email is invalid.",
       password: "This value must be a string.",
       type: "Type is not exist .",
     });

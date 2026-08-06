@@ -7,9 +7,9 @@ export default class AuthService {
   readonly #repository = inject(AuthRepository);
   readonly #logger = inject(ApplicationLogger);
 
-  login(username: string, password: string): Readonly<Record<string, unknown>> {
+  async login(email: string, password: string): Promise<Readonly<Record<string, unknown>>> {
     this.#logger.log("auth.login");
-    const user = this.#repository.find(username, password);
+    const user = await this.#repository.find(email, password);
     return user === undefined
       ? Object.freeze({ authenticated: false })
       : Object.freeze({ authenticated: true, user });

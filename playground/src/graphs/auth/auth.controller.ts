@@ -26,10 +26,10 @@ export default class AuthController {
   readonly #auth = inject(AuthService);
 
   @Post("/login", { validator: loginValidator, csrf: false })
-  login(request: AppRequest<LoginInput>): Response {
+  async login(request: AppRequest<LoginInput>): Promise<Response> {
     return JsonRes({
-      name: request.body.name,
-      d: this.#auth.login(request.body.name, request.body.password)
+      email: request.body.email,
+      d: await this.#auth.login(request.body.email, request.body.password)
     });
   }
 

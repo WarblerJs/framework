@@ -32,5 +32,12 @@ export {
   type MigrationRunCommandResult,
   type MigrationScaffoldCommandResult,
 } from "./db/migration-command";
+export { resetCommand, type ResetCommandOptions, type ResetCommandResult } from "./db/reset-command";
+export {
+  seedRunCommand,
+  seedScaffoldCommand,
+  type SeedRunCommandResult,
+  type SeedScaffoldCommandResult,
+} from "./db/seed-command";
 export { ProcessOwner } from "./process/process-owner";
 export { resolveInside } from "./filesystem";

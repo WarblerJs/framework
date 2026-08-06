@@ -13,7 +13,7 @@ export function generateRuntimeClientSource(config: DatabaseProjectConfig): stri
     'import { createPgConnection } from "@warbler/database";',
     `import { databaseConfig } from ${JSON.stringify(configImport)};`,
     "",
-    "export const pg = createPgConnection(databaseConfig.pg.connection);",
+    "export const pg = createPgConnection(databaseConfig.pg.connection, databaseConfig.pg.log === true);",
     "",
   ].join("\n");
 }

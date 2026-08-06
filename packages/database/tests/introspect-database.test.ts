@@ -78,6 +78,8 @@ describe("introspectDatabase", () => {
 
     const roleId = users.columns.find((column) => column.columnName === "role_id")!;
     expect(roleId.comment).toBe("Owning role");
+    expect(roleId.fieldName).toBe("roleId");
+    expect(email.fieldName).toBe("email");
     expect(users.foreignKeys).toEqual([
       { column: "role_id", referencesTable: "roles", referencesColumn: "id", onDelete: "CASCADE", onUpdate: "NO ACTION" },
     ]);

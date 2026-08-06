@@ -27,4 +27,6 @@ export interface PgMigrationsConfig {
 export interface DatabaseProjectConfig {
   readonly connection: PgConnectionConfig;
   readonly migrations: PgMigrationsConfig;
+  /** When `true`, every SQL query executed through this connection (including inside transactions) is logged. @default false */
+  readonly log?: boolean;
 }

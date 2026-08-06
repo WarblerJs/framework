@@ -1,5 +1,6 @@
 import { MigrationScaffoldError } from "../errors";
 import { deriveTableName } from "../naming";
+import { formatTimestamp } from "../utils/timestamp";
 
 const KINDS = [
   "create:table",
@@ -35,18 +36,6 @@ function parseKindAndName(arg: string): Readonly<{ kind: MigrationKind; name: st
     }
   }
   throw new MigrationScaffoldError(`Unknown migration kind in "${arg}". Supported: ${KINDS.join(", ")}.`);
-}
-
-function formatTimestamp(date: Date): string {
-  const pad = (value: number): string => String(value).padStart(2, "0");
-  return [
-    date.getUTCFullYear(),
-    pad(date.getUTCMonth() + 1),
-    pad(date.getUTCDate()),
-    pad(date.getUTCHours()),
-    pad(date.getUTCMinutes()),
-    pad(date.getUTCSeconds()),
-  ].join("");
 }
 
 const header = 'import type { PgMigration } from "@warbler/database";\n';

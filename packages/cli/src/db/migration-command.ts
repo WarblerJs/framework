@@ -1,9 +1,7 @@
-import { createPgConnection, runMigrations, scaffoldMigration, type DatabaseProjectConfig, type ExecutedMigration } from "@warbler/database";
-import { loadDatabaseConfig } from "../config";
+import { createPgConnection, runMigrations, scaffoldMigration, type ExecutedMigration } from "@warbler/database";
 import { atomicWrite } from "../filesystem";
-import { CLIError } from "../errors";
 import type { ProjectLayout } from "../project";
-import { ExitCode } from "../types";
+import { requireDatabaseConfig } from "./shared";
 
 export interface MigrationRunCommandResult {
   readonly executed: readonly ExecutedMigration[];
@@ -13,23 +11,10 @@ export interface MigrationScaffoldCommandResult {
   readonly path: string;
 }
 
-async function requireDatabaseConfig(layout: ProjectLayout): Promise<DatabaseProjectConfig> {
-  const configPath = `${layout.root}/src/config/database.config.ts`;
-  if (!await Bun.file(configPath).exists()) {
-    throw new CLIError(
-      "CLI3001",
-      "src/config/database.config.ts was not found.",
-      ExitCode.INVALID_PROJECT,
-      "Create src/config/database.config.ts to use the database ORM.",
-    );
-  }
-  return loadDatabaseConfig(layout.root);
-}
-
 /** `warbler db:pg migration`: runs every pending migration against the live database. */
 export async function migrationRunCommand(layout: ProjectLayout): Promise<MigrationRunCommandResult> {
   const config = await requireDatabaseConfig(layout);
-  const sql = createPgConnection(config.connection);
+  const sql = createPgConnection(config.connection, config.log === true);
   try {
     const result = await runMigrations(sql, {
       projectRoot: layout.root,
