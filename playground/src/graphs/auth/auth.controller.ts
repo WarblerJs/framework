@@ -25,6 +25,11 @@ let validationCalls = 0;
 export default class AuthController {
   readonly #auth = inject(AuthService);
 
+  @Get("/login", {  })
+  async getUsers(request: AppRequest): Promise<Response> {
+    return JsonRes( await this.#auth.findAllService() );
+  }
+
   @Post("/login", { validator: loginValidator, csrf: false })
   async login(request: AppRequest<LoginInput>): Promise<Response> {
     return JsonRes({

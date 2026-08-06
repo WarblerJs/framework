@@ -1,9 +1,9 @@
 import { InvalidRequestError } from "../errors";
-import { safeHeaderValue } from "../internal/header-value";
+import { type HeadersInput, safeHeaderValue, toHeaders } from "../internal/header-value";
 import type { ResponseOptions } from "./response-types";
 
-function headersWithDefault(input: Bun.HeadersInit | undefined, name: string, value: string): Headers {
-  const headers = new Headers(input);
+function headersWithDefault(input: HeadersInput | undefined, name: string, value: string): Headers {
+  const headers = toHeaders(input);
   if (!headers.has(name)) headers.set(name, value);
   return headers;
 }
@@ -38,14 +38,14 @@ export function TextRes(value: string, options: ResponseOptions = {}): Response 
  * This rejects header injection but callers must independently restrict untrusted targets to
  * prevent open redirects.
  */
-export function RedirectRes(location: string, status = 302, headers?: Bun.HeadersInit): Response {
+export function RedirectRes(location: string, status = 302, headers?: HeadersInput): Response {
   if (![301, 302, 303, 307, 308].includes(status)) throw new InvalidRequestError("Invalid redirect status", 500);
-  const output = new Headers(headers);
+  const output = toHeaders(headers);
   if (!output.has("location")) output.set("location", safeHeaderValue(location, "location"));
   return new Response(null, { status, headers: output });
 }
 
 /** Creates an empty native response. */
-export function EmptyRes(status = 204, headers?: Bun.HeadersInit): Response {
-  return new Response(null, { status, headers: new Headers(headers) });
+export function EmptyRes(status = 204, headers?: HeadersInput): Response {
+  return new Response(null, { status, headers: toHeaders(headers) });
 }

@@ -1,3 +1,4 @@
+import { toHeaders } from "../internal/header-value";
 import type { ResponseOptions } from "./response-types";
 
 /** A pull-based source accepted by streaming response helpers. */
@@ -34,7 +35,7 @@ export function HtmlStreamRes(
   source: StreamSource,
   options: ResponseOptions & Readonly<{ signal?: AbortSignal }> = {},
 ): Response {
-  const headers = new Headers(options.headers);
+  const headers = toHeaders(options.headers);
   if (!headers.has("content-type")) headers.set("content-type", "text/html; charset=utf-8");
   const body = source instanceof ReadableStream ? source : iterableStream(source, options.signal);
   return new Response(body, { status: options.status, headers });

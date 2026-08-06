@@ -13,6 +13,7 @@ export type ViewData = Readonly<Record<string, ViewDataValue>>;
 
 export type CompiledTemplateMap = Readonly<Record<string, string>>;
 import type { TemplateAst } from "./ast";
+import type { HeadersInput } from "./internal/header-value";
 
 export type CompiledAstMap = Readonly<Record<string, TemplateAst>>;
 export type ViewDependencyMap = Readonly<Record<string, readonly string[]>>;
@@ -84,7 +85,7 @@ export type CompiledTemplate = (data?: ViewData) => string;
 
 export interface ViewResponseOptions {
   readonly status?: number;
-  readonly headers?: Bun.HeadersInit;
+  readonly headers?: HeadersInput;
 }
 
 export interface ViewProjectConfig {

@@ -1,6 +1,9 @@
 import { Service, inject } from "@warbler/core";
 import ApplicationLogger from "../home/application-logger";
 import AuthRepository from "./auth.repository";
+import type { UserRow } from "@pg/client/user";
+// import type { UserRow } from "../../../database/warbler/pg/generated/client/user";
+//import type { UserRow } from "@pg/client/user";
 
 @Service()
 export default class AuthService {
@@ -17,5 +20,9 @@ export default class AuthService {
 
   profile(): Readonly<Record<string, string>> {
     return Object.freeze({ id: "user-1", username: "warbler" });
+  }
+
+  async findAllService(): Promise<UserRow[] | undefined> {
+    return await this.#repository.finAll();
   }
 }
