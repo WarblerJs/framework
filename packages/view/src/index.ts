@@ -5,6 +5,7 @@ export { compileViewProject, type CompileViewProjectOptions } from "./compiler";
 export { buildTailwindCss, type TailwindBuildOptions } from "./tailwind";
 export { activateCompiledViews, activeCompiledViews, View } from "./view";
 export {
+  closeViewDevelopmentClients,
   createViewDevelopmentRoutes,
   publishViewDevelopmentUpdate,
   type ViewDevelopmentUpdate,

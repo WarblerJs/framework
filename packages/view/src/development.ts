@@ -11,11 +11,19 @@ export function publishViewDevelopmentUpdate(type: ViewDevelopmentUpdate, build:
   }
 }
 
+/** Cleanly ends every connected development stream; call before the native HTTP server is torn down or replaced. */
+export function closeViewDevelopmentClients(): void {
+  for (const controller of subscribers) {
+    try { controller.close(); } catch { /* already closing */ }
+  }
+  subscribers.clear();
+}
+
 /** Routes mounted only by the HTTP development launcher. */
-export function createViewDevelopmentRoutes(): Readonly<Record<string, Readonly<Record<string, () => Response>>>> {
+export function createViewDevelopmentRoutes(): Readonly<Record<string, Readonly<Record<string, (request: Request, server: Bun.Server<undefined>) => Response>>>> {
   return Object.freeze({
     "/__warbler/view/events": Object.freeze({
-      GET: () => {
+      GET: (request: Request, server: Bun.Server<undefined>) => {
         let active: ReadableStreamDefaultController<Uint8Array> | undefined;
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {
@@ -25,6 +33,9 @@ export function createViewDevelopmentRoutes(): Readonly<Record<string, Readonly<
           },
           cancel() { if (active !== undefined) subscribers.delete(active); },
         });
+        // Long-lived streams must opt out of Bun's per-request idle timeout, mirroring the
+        // RouteFlag.SSE handling in @warbler/http's compiled route pipeline (see bun-route-handler.ts).
+        server.timeout(request, 0);
         return new Response(stream, { headers: {
           "cache-control": "no-cache, no-store",
           "content-type": "text/event-stream",

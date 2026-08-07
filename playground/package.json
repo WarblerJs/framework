@@ -26,6 +26,7 @@
     "@warbler/websocket": "workspace:*"
   },
   "devDependencies": {
+    "@warbler/cli": "workspace:*",
     "@warbler/compiler": "workspace:*",
     "@warbler/transport": "workspace:*",
     "@types/bun": "latest",
