@@ -25,7 +25,7 @@ export interface LiteralTokenReference {
 /** A provider/existing token: either an imported declaration or an inline literal. */
 export type TokenReference = BindingImport | LiteralTokenReference;
 export interface ProviderBindingPlan {
-  readonly id: number; readonly graphId: number; readonly scope: "graph" | "root";
+  readonly id: number; readonly graphId: number; readonly scope: "graph" | "root" | "request";
   readonly registration: "class" | "useValue" | "useFactory" | "useExisting";
   readonly dependencyIds: readonly number[]; readonly token: TokenReference;
   readonly implementation?: BindingImport;
@@ -107,7 +107,7 @@ export function analyzeExecutableBindings(
   const providers: ProviderBindingPlan[] = [];
   for (const row of optimized.providers) {
     const name = optimized.strings[row.nameId]!;
-    const ownerEntry = [...providerOwners.entries()].find(([key]) => key === (row.root ? `root:${name}` : `${graphName(optimized, row.graphId)}:${name}`));
+    const ownerEntry = [...providerOwners.entries()].find(([key]) => key === (row.scope === "root" ? `root:${name}` : `${graphName(optimized, row.graphId)}:${name}`));
     if (ownerEntry === undefined) { failed = true; continue; }
     const owner = ownerEntry[1];
     const provider = owner.provider;
@@ -127,7 +127,7 @@ export function analyzeExecutableBindings(
     const capturedFactory = registration === "useFactory" ? resolveCaptured(provider.capturedFactory) : undefined;
 
     providers.push(Object.freeze({
-      id: row.id, graphId: row.graphId, scope: row.root ? "root" : "graph", registration,
+      id: row.id, graphId: row.graphId, scope: row.scope, registration,
       dependencyIds: Object.freeze(dependencyIds), token,
       ...(implementation === undefined ? {} : { implementation }),
       ...(capturedValue === undefined ? {} : { capturedValue }),

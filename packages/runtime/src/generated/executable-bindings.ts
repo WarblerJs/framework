@@ -10,7 +10,7 @@ export type ProviderBindingFactory<T = unknown> = (context: ProviderBindingConte
 export interface ProviderBinding<T = unknown> {
   readonly id: number;
   readonly token: ProviderToken<T>;
-  readonly scope: "graph" | "root";
+  readonly scope: "graph" | "root" | "request";
   readonly graphId?: number;
   readonly dependencyIds: readonly number[];
   readonly factory: ProviderBindingFactory<T>;

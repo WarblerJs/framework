@@ -20,10 +20,10 @@ const generated: RuntimeGeneratedApplication = Object.freeze({
   strings: Object.freeze(["Logger", "UsersService", "AdminService", "UserOnly"]),
   graphIds: Object.freeze({ UserGraph: 0, AdminGraph: 1 }),
   providerTable: Object.freeze([
-    Object.freeze({ id: 0, nameId: 0, graphId: -1, root: true, dependencyStart: 0, dependencyCount: 0 }),
-    Object.freeze({ id: 1, nameId: 1, graphId: 0, root: false, dependencyStart: 0, dependencyCount: 1 }),
-    Object.freeze({ id: 2, nameId: 2, graphId: 1, root: false, dependencyStart: 1, dependencyCount: 1 }),
-    Object.freeze({ id: 3, nameId: 3, graphId: 0, root: false, dependencyStart: 2, dependencyCount: 0 }),
+    Object.freeze({ id: 0, nameId: 0, graphId: -1, scope: "root", dependencyStart: 0, dependencyCount: 0 }),
+    Object.freeze({ id: 1, nameId: 1, graphId: 0, scope: "graph", dependencyStart: 0, dependencyCount: 1 }),
+    Object.freeze({ id: 2, nameId: 2, graphId: 1, scope: "graph", dependencyStart: 1, dependencyCount: 1 }),
+    Object.freeze({ id: 3, nameId: 3, graphId: 0, scope: "graph", dependencyStart: 2, dependencyCount: 0 }),
   ]),
   providerDependencies: Object.freeze([0, 0]),
   routeTable: Object.freeze([Object.freeze({ id: 0 })]),
@@ -85,7 +85,7 @@ describe("generated artifacts and providers", () => {
 
   test("performs direct cached lookup for large provider tables", () => {
     const count = 5_000;
-    const records = Array.from({ length: count }, (_, id) => Object.freeze({ id, nameId: id, graphId: -1, root: true, dependencyStart: 0, dependencyCount: 0 }));
+    const records = Array.from({ length: count }, (_, id) => Object.freeze({ id, nameId: id, graphId: -1, scope: "root", dependencyStart: 0, dependencyCount: 0 }));
     const artifact = Object.freeze({ ...generated, strings: Object.freeze(records.map((record) => String(record.id))), providerTable: Object.freeze(records), providerDependencies: Object.freeze([]) });
     const providers = new RuntimeProviderContainers(artifact, records.map((record) => () => record.id));
     expect(providers.resolveRoot(count - 1)).toBe(count - 1);

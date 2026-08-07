@@ -46,8 +46,8 @@ function application(events: string[], valid = true): GeneratedApplicationBindin
     application: Object.freeze({
       strings: Object.freeze([]), graphIds: Object.freeze({ UsersGraph: 0 }),
       providerTable: Object.freeze([
-        Object.freeze({ id: 0, nameId: 0, graphId: -1, root: true, dependencyStart: 0, dependencyCount: 0 }),
-        Object.freeze({ id: 1, nameId: 1, graphId: 0, root: false, dependencyStart: 0, dependencyCount: 1 }),
+        Object.freeze({ id: 0, nameId: 0, graphId: -1, scope: "root", dependencyStart: 0, dependencyCount: 0 }),
+        Object.freeze({ id: 1, nameId: 1, graphId: 0, scope: "graph", dependencyStart: 0, dependencyCount: 1 }),
       ]),
       providerDependencies: Object.freeze([0]),
       routeTable: Object.freeze([Object.freeze({

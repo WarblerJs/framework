@@ -8,6 +8,7 @@ export type ProviderLifetime = "singleton" | "transient";
 export const ProviderScope = Object.freeze({
   GRAPH: "graph",
   ROOT: "root",
+  REQUEST: "request",
 } as const);
 
 /** Provider visibility across Graph boundaries. */

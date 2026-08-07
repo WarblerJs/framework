@@ -39,7 +39,7 @@ export function validateApplicationBindings(application: GeneratedApplicationBin
   for (const binding of application.providers) {
     if (binding.scope === "root") {
       if (binding.graphId !== undefined) fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Root provider has Graph ownership.", { providerId: binding.id });
-    } else if (binding.scope === "graph") {
+    } else if (binding.scope === "graph" || binding.scope === "request") {
       if (binding.graphId === undefined || !graphIds.has(binding.graphId)) fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Graph provider has invalid ownership.", { providerId: binding.id });
     } else fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Provider scope is invalid.", { providerId: binding.id });
     for (const dependencyId of binding.dependencyIds) {
@@ -47,7 +47,14 @@ export function validateApplicationBindings(application: GeneratedApplicationBin
       if (providers[dependencyId] === undefined) fail(RuntimeDiagnosticCode.PROVIDER_NOT_FOUND, "Provider dependency binding is missing.", { providerId: binding.id, dependencyId });
       const dependency = providers[dependencyId]!;
       if (binding.scope === "root" && dependency.scope !== "root") fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Root provider cannot depend on a Graph provider.", { providerId: binding.id, dependencyId });
-      if (binding.scope === "graph" && dependency.scope === "graph" && dependency.graphId !== binding.graphId) {
+      if ((binding.scope === "graph" || binding.scope === "root") && dependency.scope === "request") {
+        fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Startup-scoped provider cannot depend on a request-scoped provider.", { providerId: binding.id, dependencyId });
+      }
+      if (
+        (binding.scope === "graph" || binding.scope === "request") &&
+        (dependency.scope === "graph" || dependency.scope === "request") &&
+        dependency.graphId !== binding.graphId
+      ) {
         fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Provider dependency belongs to another Graph.", { providerId: binding.id, dependencyId });
       }
     }

@@ -54,7 +54,7 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
         continue;
       }
       localProviderNames.add(name);
-      if (provider.provide === "graph") {
+      if (provider.provide === "graph" || provider.provide === "request") {
         const owner = providerOwners.get(name);
         if (owner !== undefined && owner !== graph) {
           add(diagnostics, DiagnosticCode.DUPLICATE_PROVIDER, `Graph provider "${name}" belongs to both "${owner.name}" and "${graph.name}".`, provider, [name, owner.name, graph.name]);
@@ -76,7 +76,7 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
     if (!controllerOwners.has(controller.name)) add(diagnostics, DiagnosticCode.MISSING_GRAPH, `Controller "${controller.name}" is not owned by a Graph.`, controller, [controller.name]);
   }
   for (const provider of analysis.providers.values()) {
-    if (provider.provide === "graph" && !providerOwners.has(provider.name)) add(diagnostics, DiagnosticCode.MISSING_GRAPH, `Graph provider "${provider.name}" is not owned by a Graph.`, provider, [provider.name]);
+    if ((provider.provide === "graph" || provider.provide === "request") && !providerOwners.has(provider.name)) add(diagnostics, DiagnosticCode.MISSING_GRAPH, `Graph provider "${provider.name}" is not owned by a Graph.`, provider, [provider.name]);
   }
 
   validateDependencies(result, rootProviders, providerOwners, tokenNames, diagnostics);
