@@ -128,7 +128,8 @@ describe("integration contracts", () => {
     expect(request instanceof Request).toBe(true);
     expect(request.params.id).toBe("10");
     expect(request.query.tag).toEqual(["one", "two"]);
-    expect(request.cookies.session).toBe("abc");
+    expect(request.cookies).toBeInstanceOf(Bun.CookieMap);
+    expect(request.cookies.get("session")).toBe("abc");
     expect(request.locale).toBe("fr");
     expect(request.tr("welcome", { name: "Habib" })).toBe("Bienvenue, Habib!");
     expect(localizeRequest(native, translator, normalized)).toBe(request);

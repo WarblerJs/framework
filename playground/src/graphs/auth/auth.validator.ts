@@ -1,7 +1,7 @@
 import { defineValidator, v, type InferValidatorOutput } from "@warbler/validators";
 
 export const loginValidator = defineValidator({
-  rules: {
+  bodyRules: {
     email: v.string("validators.email_not_valid").trim().email("validators.email_not_valid"),
     password: v.string("invalid_string").min(1, "invalid_string"),
   },
@@ -15,7 +15,7 @@ export type LoginInput = InferValidatorOutput<typeof loginValidator>;
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
 export const uploadAvatarValidator = defineValidator({
-  rules: {
+  bodyRules: {
     avatar: v
       .file("validators.avatar_required")
       .max(MAX_AVATAR_BYTES, "validators.file_too_large:allowed::entered")
@@ -30,7 +30,7 @@ export type UploadAvatarInput =
   InferValidatorOutput<typeof uploadAvatarValidator>;
 
 export const requestSourcesValidator = defineValidator({
-  rules: {
+  bodyRules: {
     username: v.string("validators.username_not_valid").trim().min(1, "validators.username_not_valid"),
     password: v.string("invalid_string").trim().min(1, "invalid_string"),
   },
@@ -38,7 +38,7 @@ export const requestSourcesValidator = defineValidator({
     page: v.coerce.number("validators.invalid_page").int("validators.invalid_page").positive("validators.invalid_page"),
     type: v.string("validators.invalid_type"),
   },
-  pathRules: {
+  paramRules: {
     id: v.coerce.number("validators.invalid_id").int("validators.invalid_id").positive("validators.invalid_id"),
   },
   headerRules: {

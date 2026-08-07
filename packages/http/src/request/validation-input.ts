@@ -1,5 +1,5 @@
 import { ValidatorSourceFlag, type ValidationInput } from "@warbler/validators";
-import { parseCookies } from "../cookies";
+import { cookieMapRecord, requestCookieMap } from "../cookies";
 import { parseRequestQuery } from "./request-query";
 
 /** Parses only sources required by one precompiled validator before Runtime execution. */
@@ -11,7 +11,7 @@ export async function prepareHttpValidationInput(request: Request, flags: number
   if ((flags & ValidatorSourceFlag.QUERY) !== 0) result.query = parseRequestQuery(new URL(request.url), 100);
   if ((flags & ValidatorSourceFlag.PATH) !== 0) result.path = nativeParams(request);
   if ((flags & ValidatorSourceFlag.HEADERS) !== 0) result.headers = headersRecord(request.headers);
-  if ((flags & ValidatorSourceFlag.COOKIES) !== 0) result.cookies = parseCookies(request.headers.get("cookie"));
+  if ((flags & ValidatorSourceFlag.COOKIES) !== 0) result.cookies = cookieMapRecord(requestCookieMap(request));
   return Object.freeze(result);
 }
 async function parseBody(request: Request): Promise<unknown> {

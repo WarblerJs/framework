@@ -1,6 +1,7 @@
-import type { Guard } from "@warbler/core";
+import type { Guard } from "@warbler/http";
 
-export const authGuard: Guard = (input): boolean => {
+export const authGuard: Guard = (request, context): boolean => {
+  context.set("requestId", crypto.randomUUID());
   return true;
-  //return input instanceof Request && input.headers.get("authorization") === "Bearer playground";
+  //return request.headers.get("authorization") === "Bearer playground";
 };

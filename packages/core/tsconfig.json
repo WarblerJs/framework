@@ -7,7 +7,6 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "useDefineForClassFields": true,
-    "experimentalDecorators": true,
     "noEmit": true,
     "types": ["bun"]
   },

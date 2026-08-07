@@ -1,6 +1,10 @@
 export { Controller } from "./controller";
 export { Delete, Get, Head, Options, Patch, Post, Put, Sse } from "./route";
-export { prepareHttpValidationInput, type AppRequest, type RequestContext } from "./request";
+export {
+  prepareHttpValidationInput, RequestContextFrozenError,
+  type AppRequest, type Guard, type Middleware, type MiddlewareNext,
+  type RequestContextHandle, type WarblerRequestContext,
+} from "./request";
 export {
   ArchiveRes,
   DownloadRes,

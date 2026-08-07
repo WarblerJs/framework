@@ -529,9 +529,9 @@ export default class AuthController {
   private readonly authService =
     inject(AuthService);
 
-  @Post("/login")
+  @Post("/login", { validator: loginValidator })
   async login(
-    request: AppRequest<LoginInput>,
+    request: AppRequest<typeof loginValidator>,
   ): Promise<Response> {
     const result =
       await this.authService.login(
@@ -560,6 +560,17 @@ AuthController → provider 2
 ```
 
 Request-scoped injection must use safe asynchronous context management. A single global mutable active container is not safe for concurrent request scopes.
+
+**Not to be confused with request *context*** (§18a): request-scoped DI
+providers (above) are resolved via `inject()` from an `AsyncLocalStorage`-backed
+container, because `inject()` is called ambiently with no request object in
+scope. `req.context` is a different, simpler mechanism — a plain per-request
+object threaded explicitly as a guard/middleware argument, populated by
+`context.set(...)` and read via `req.context.someKey` in the controller. Use
+request-scoped providers for services that need their own per-request
+instance and lifecycle (`dispose()`); use request context for passing
+already-computed per-request values (the authenticated user, a resolved
+tenant) downstream to guards, middleware, and the handler.
 
 ---
 
@@ -767,6 +778,13 @@ export interface CompiledHttpRoute {
 
 The WIR should contain execution-ready information rather than raw decorator text.
 
+One compiler output is intentionally *not* a runtime artifact: the analysis
+of every `context.set(...)` call in every referenced guard/middleware (§18a)
+resolves each call's key and value type using the same `TypeChecker`-backed
+declaration resolution the compiler already uses for provider/controller/
+validator bindings, and feeds a pure type-level `.d.ts` generator instead of
+a `.generated.ts` value module.
+
 ---
 
 ## 13. String Tables
@@ -954,53 +972,48 @@ const server = Bun.serve({
 
 ## 17. HTTP Controller Example
 
+`AppRequest`'s first generic accepts a validator itself — not a hand-built body
+type — and derives `body`/`params`/`query` from its `bodyRules`/`paramRules`/
+`queryRules` sections automatically. Bare `AppRequest` (no generics at all) is
+also valid: `body`/`params`/`query` stay permissive, but `context` is always
+fully typed against the compiler-generated `WarblerRequestContext` (§18a)
+regardless of whether a generic was supplied.
+
 ```ts
 import { inject } from "@warbler/core";
+import { Controller, Get, Post, JsonRes, defineValidator, v, type AppRequest } from "@warbler/http";
 
-import {
-  Controller,
-  Get,
-  Post,
-  JsonRes,
-  type AppRequest,
-} from "@warbler/http";
+const createUserValidator = defineValidator({
+  bodyRules: { email: v.string(), password: v.string() },
+});
+const showUserValidator = defineValidator({
+  paramRules: { id: v.string() },
+});
 
 @Controller("/users")
 export default class UserController {
-  private readonly service =
-    inject(UserService);
+  private readonly service = inject(UserService);
 
-  @Get("/:id")
-  async show(
-    request: AppRequest<
-      unknown,
-      { readonly id: string }
-    >,
-  ): Promise<Response> {
-    const user =
-      await this.service.findById(
-        request.params.id,
-      );
-
+  @Get("/:id", { validator: showUserValidator })
+  async show(request: AppRequest<typeof showUserValidator>): Promise<Response> {
+    const user = await this.service.findById(request.params.id);
     return JsonRes(user);
   }
 
-  @Post("/")
-  async create(
-    request: AppRequest<CreateUserInput>,
-  ): Promise<Response> {
-    const user =
-      await this.service.create(
-        request.body,
-      );
-
-    return JsonRes(
-      user,
-      { status: 201 },
-    );
+  @Post("/", { validator: createUserValidator })
+  async create(request: AppRequest<typeof createUserValidator>): Promise<Response> {
+    const user = await this.service.create(request.body);
+    return JsonRes(user, { status: 201 });
   }
 }
 ```
+
+A route with no validator just takes `AppRequest` (bare): `async list(request: AppRequest)`.
+
+TypeScript decorators cannot contextually type an unannotated handler
+parameter (the decorated method's type is checked against the decorator, not
+inferred from it), so the single-generic annotation above is required — it
+isn't optional sugar the way `AppRequest<CreateUserInput>` used to be.
 
 ---
 
@@ -1023,9 +1036,13 @@ Body parsing when required
         ↓
 Input validation
         ↓
-Guards
+AppRequest construction (every route, validator or not)
         ↓
-Policies
+Guards — (req, context) => boolean
+        ↓
+Middleware — (req, context, next) => Response
+        ↓
+Request context settle() — freezes req.context
         ↓
 Controller handler
         ↓
@@ -1033,6 +1050,104 @@ Response security headers
 ```
 
 The compiler should generate only the steps required by each route.
+
+Every route builds a real `AppRequest` now, whether or not it declares a
+validator — previously, a route with no validator handed the raw native
+`Request` straight to guards/middleware/handler despite being typed as
+`AppRequest`. `req.headers` is always the real `Headers` object and
+`req.cookies` is always a `Bun.CookieMap`; validation of headers/cookies
+(`headerRules`/`cookieRules`) is a pass/fail gate only — it never swaps
+`req.headers`/`req.cookies` for a different value, unlike `req.body`.
+
+---
+
+## 18a. Guards, Middleware, and Request Context
+
+Guards and middleware receive the same `AppRequest` the controller handler
+will see, plus a request-scoped context handle:
+
+```ts
+import type { Guard, Middleware } from "@warbler/http";
+
+export const authGuard: Guard = async (req, context) => {
+  const user = await authenticate(req);
+  if (user === undefined) return false;
+  context.set("user", user);
+  return true;
+};
+
+export const auditMiddleware: Middleware = async (req, context, next) => {
+  context.set("tenant", () => resolveTenant(req)); // sync factory
+  context.set("requestId", async () => generateRequestId()); // async factory
+  return next();
+};
+```
+
+`context.set(key, value)` accepts:
+
+- a plain value — `context.set("user", user)`, type inferred;
+- an explicit generic — `context.set<User>("user", user)`;
+- a synchronous factory — `context.set("requestId", () => makeId())`;
+- an asynchronous factory — `context.set("session", async () => loadSession())`.
+
+The context handle also has `.get(key)`, so a later guard or middleware can
+read back what an earlier one set. Async factories are resolved once,
+immediately before the controller handler runs; a guard/middleware running
+between the `.set()` call and that point may see `undefined` for that key if
+it reads it back before the factory settles.
+
+Guards run in order first; a `false` return short-circuits the request as
+`403 Forbidden`. Middleware then wraps the remaining pipeline exactly like
+Express/Koa middleware — call `next()` to continue, or return a value
+directly to short-circuit. `req.context` is mutable while guards/middleware
+run and frozen the moment the controller handler is about to be invoked;
+guards, middleware, and the handler all see the same `req` object end to end
+(the underlying context store transitions from mutable to frozen in place —
+nothing is rebuilt or reallocated).
+
+This is deliberately a *different* mechanism from Core's request-scoped
+dependency injection (§8): request-scoped providers use an
+`AsyncLocalStorage`-backed container because `inject()` is called ambiently,
+with no request object in scope. Request context is threaded as an explicit
+parameter through calls the pipeline already makes, so it needs neither
+`AsyncLocalStorage` nor a `Map` — the store is a plain, per-request object.
+
+### Generated `WarblerRequestContext`
+
+The compiler statically analyzes every `context.set(...)` call site in every
+guard and middleware the application references, extracting each call's key
+and value type, and emits a `WarblerRequestContext` interface via TypeScript
+declaration merging:
+
+```ts
+// .warbler/generated/context.generated.d.ts — regenerated on every compile
+import type { User } from "../../src/graphs/auth/user.entity";
+import type { Tenant } from "../../src/graphs/tenant/tenant.entity";
+
+declare module "@warbler/http" {
+  interface WarblerRequestContext {
+    readonly user?: User;
+    readonly tenant?: Tenant;
+  }
+}
+```
+
+Every key is optional: the compiler can't statically prove every request
+path actually calls `.set()` for it. This is the one generated artifact
+that's pure type-level — unlike every other `.generated.ts` file, it has no
+runtime import/export.
+
+`AppRequest`'s `TContext` generic defaults to this same `WarblerRequestContext`
+interface, so `req.context.user`/`req.context.tenant` are fully typed with
+IntelliSense in every controller, with **zero generics** — this works even
+for a bare `AppRequest` annotation, since context is app-wide rather than
+derived per-route from a validator.
+
+For this to type-check, the project's `tsconfig.json` needs `warbler-env.d.ts`
+(written to the project root by `warbler dev`/`warbler build`, alongside
+`.warbler/generated/`) included — the same pattern Next.js uses for
+`next-env.d.ts`. A newly scaffolded Warbler project has this wired up
+automatically.
 
 ---
 
@@ -1993,9 +2108,9 @@ export default class AuthController {
   private readonly service =
     inject(AuthService);
 
-  @Post("/login")
+  @Post("/login", { validator: loginValidator })
   login(
-    request: AppRequest<LoginInput>,
+    request: AppRequest<typeof loginValidator>,
   ) {
     return JsonRes(
       this.service.login(

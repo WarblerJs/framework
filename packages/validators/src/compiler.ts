@@ -1,4 +1,5 @@
 import * as z from "zod";
+import { resolveAliasedSection } from "./definition";
 import { ValidatorError, ValidatorErrorCode } from "./errors";
 import { applyKeyMap, validateKeyMap } from "./mapping";
 import { issueMessage } from "./messages";
@@ -25,12 +26,21 @@ const selectedHeaderKeys = new WeakMap<z.ZodType, readonly string[]>();
 
 export function compileValidator<T extends RequestValidator>(definition: T, id = 0): CompiledValidator {
   if (!isRecord(definition) || !Number.isSafeInteger(id) || id < 0) throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, "Validator definition or ID is invalid.");
-  const allowed = new Set(["rules", "queryRules", "pathRules", "headerRules", "cookieRules", "messageRules", "metadataRules", "mapV", "mapK"]);
+  const allowed = new Set(["rules", "bodyRules", "queryRules", "pathRules", "paramRules", "headerRules", "cookieRules", "messageRules", "metadataRules", "mapV", "mapK"]);
   if (Object.keys(definition).some((key) => !allowed.has(key))) throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, "Validator definition contains an unknown property.");
+  const normalized = {
+    rules: resolveAliasedSection(definition.bodyRules as RuleShape | undefined, definition.rules as RuleShape | undefined, "bodyRules", "rules"),
+    queryRules: definition.queryRules as RuleShape | undefined,
+    pathRules: resolveAliasedSection(definition.paramRules as RuleShape | undefined, definition.pathRules as RuleShape | undefined, "paramRules", "pathRules"),
+    headerRules: definition.headerRules as RuleShape | undefined,
+    cookieRules: definition.cookieRules as RuleShape | undefined,
+    messageRules: definition.messageRules as RuleShape | undefined,
+    metadataRules: definition.metadataRules as RuleShape | undefined,
+  };
   const schemas: Partial<Record<SchemaProperty, z.ZodType>> = {};
   let flags = 0;
   for (const [definitionKey, , schemaKey, , flag] of SECTIONS) {
-    const shape = definition[definitionKey] as RuleShape | undefined;
+    const shape = normalized[definitionKey];
     if (shape === undefined) continue;
     const schema = compileShape(shape, definitionKey === "headerRules");
     schemas[schemaKey] = schema;
@@ -39,7 +49,7 @@ export function compileValidator<T extends RequestValidator>(definition: T, id =
   }
   if (flags === 0) throw new ValidatorError(ValidatorErrorCode.INVALID_RULES, "Validator must define at least one rule section.");
   if (definition.mapV !== undefined && typeof definition.mapV !== "function") throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, "mapV must be synchronous function.");
-  const knownKeys = new Set(Object.keys(definition.rules ?? {}));
+  const knownKeys = new Set(Object.keys(normalized.rules ?? {}));
   const keyMap = definition.mapK === undefined ? undefined : validateKeyMap(definition.mapK, definition.mapV === undefined ? knownKeys : undefined);
   const compiledBase = {
     id, flags, ...schemas,

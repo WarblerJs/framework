@@ -1,2 +1,5 @@
-/** Application context associated with an HTTP request. */
-export type RequestContext<T = unknown> = Readonly<T>;
+/**
+ * Re-exported from `@warbler/core`, which owns the implementation so it's usable
+ * from `@warbler/runtime` without giving the runtime an HTTP package dependency.
+ */
+export { RequestContextFrozenError, RequestContextStore, type RequestContextHandle } from "@warbler/core";

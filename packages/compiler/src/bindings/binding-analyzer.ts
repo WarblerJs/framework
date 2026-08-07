@@ -176,7 +176,8 @@ export function analyzeExecutableBindings(
   return failed ? undefined : result;
 }
 
-function collectDeclarations(context: CompilerContext): ReadonlyMap<string, readonly ts.Declaration[]> {
+/** Maps every top-level declaration name (and every imported binding name) in the application to its declaration node(s). */
+export function collectDeclarations(context: CompilerContext): ReadonlyMap<string, readonly ts.Declaration[]> {
   const result = new Map<string, ts.Declaration[]>();
   for (const source of context.sourceFiles) {
     const visit = (node: ts.Node): void => {
@@ -203,7 +204,8 @@ function collectDeclarations(context: CompilerContext): ReadonlyMap<string, read
   }
   return result;
 }
-function exportKind(node: ts.Declaration): BindingImport["kind"] | undefined {
+/** Determines whether a declaration is exported, and if so, whether it's the module's default export. */
+export function exportKind(node: ts.Declaration): BindingImport["kind"] | undefined {
   const statement = nearestStatement(node);
   if (statement !== undefined && hasModifier(statement, ts.SyntaxKind.DefaultKeyword)) return "default";
   if (statement !== undefined && hasModifier(statement, ts.SyntaxKind.ExportKeyword)) return "named";
@@ -221,20 +223,23 @@ function nearestStatement(node: ts.Node): ts.Statement | undefined {
   while (current !== undefined && !ts.isStatement(current)) current = current.parent;
   return current;
 }
-function declarationName(node: ts.Declaration): ts.DeclarationName | undefined {
+/** The declared identifier name for declaration kinds where the export name can differ from the lookup key (aliased imports). */
+export function declarationName(node: ts.Declaration): ts.DeclarationName | undefined {
   if (ts.isClassDeclaration(node) || ts.isFunctionDeclaration(node) || ts.isVariableDeclaration(node)) return node.name;
   return undefined;
 }
 function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean { return ts.canHaveModifiers(node) && (ts.getModifiers(node)?.some((modifier) => modifier.kind === kind) ?? false); }
 function isTypeOnly(node: ts.Declaration): boolean { return ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node); }
-function generatedImportPath(root: string, file: string): string {
+/** Resolves the relative import specifier a `.warbler/generated` module uses to reach a source declaration. */
+export function generatedImportPath(root: string, file: string): string {
   const path = relative(`${root}/.warbler/generated`, file).replaceAll("\\", "/").replace(/\.(?:tsx?|mts|cts)$/u, "");
   return path.startsWith(".") ? path : `./${path}`;
 }
 function graphName(optimized: OptimizedApplication, id: number): string {
   return Object.entries(optimized.graphIds).find(([, value]) => value === id)?.[0] ?? "";
 }
-function safeLocal(name: string, index: number): string { return `Binding${index}_${name.replace(/[^A-Za-z0-9_$]/gu, "_")}`; }
+/** Produces a collision-safe local identifier for a generated import binding. */
+export function safeLocal(name: string, index: number): string { return `Binding${index}_${name.replace(/[^A-Za-z0-9_$]/gu, "_")}`; }
 function isImport(value: BindingImport | undefined): value is BindingImport { return value !== undefined; }
 function isDefined<T>(value: T | undefined): value is T { return value !== undefined; }
 /** A WIR reference name produced from a string-literal token (see `referenceName` in the analyzer) starts with `"`, which no identifier can. */

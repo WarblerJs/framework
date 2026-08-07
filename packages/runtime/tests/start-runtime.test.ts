@@ -84,7 +84,7 @@ function application(events: string[], valid = true): GeneratedApplicationBindin
       Object.freeze({ id: 0, execute: () => { events.push("guard"); return true; } }),
     ]),
     middleware: Object.freeze([
-      Object.freeze({ id: 0, execute: (input: unknown, next: (value: unknown) => unknown) => { events.push("middleware"); return next(input); } }),
+      Object.freeze({ id: 0, execute: (input: unknown, context: unknown, next: (value: unknown) => unknown) => { events.push("middleware"); return next(input); } }),
     ]),
     validators: Object.freeze([
       Object.freeze({ id: 0, validate: (input: unknown) => valid ? input : Object.freeze({ valid: false }) }),
@@ -238,11 +238,11 @@ describe("binding validation and Guard execution", () => {
       { id: 0, execute: () => { calls.push(0); return true; } },
       { id: 1, execute: () => { calls.push(1); return false; } },
       { id: 2, execute: () => { calls.push(2); return true; } },
-    ], [0, 1, 2], {});
+    ], [0, 1, 2], {}, undefined);
     expect(sync).toBe(false);
     expect(sync).not.toBeInstanceOf(Promise);
     expect(calls).toEqual([0, 1]);
-    expect(await executeGuardRange([{ id: 0, execute: async () => true }], [0], {})).toBe(true);
-    expect(() => executeGuardRange([{ id: 0, execute: () => "yes" }], [0], {})).toThrow(InvalidGuardResultError);
+    expect(await executeGuardRange([{ id: 0, execute: async () => true }], [0], {}, undefined)).toBe(true);
+    expect(() => executeGuardRange([{ id: 0, execute: () => "yes" }], [0], {}, undefined)).toThrow(InvalidGuardResultError);
   });
 });

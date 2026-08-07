@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { defineValidator, v } from "@warbler/validators";
 import { Delete, Get, Head, Options, Patch, Post, Put, Sse, getRouteMetadata } from "../src/route";
+import type { AppRequest, Guard, Middleware } from "../src/request";
 
 describe("route decorators", () => {
   test("records every HTTP method and SSE metadata", () => {
@@ -21,5 +23,72 @@ describe("route decorators", () => {
     expect(getRouteMetadata(Controller.prototype.options)?.method).toBe("OPTIONS");
     expect(getRouteMetadata(Controller.prototype.head)?.method).toBe("HEAD");
     expect(getRouteMetadata(Controller.prototype.events)?.stream).toBe("sse");
+  });
+
+  test("infers body/params/query from a single AppRequest<typeof validator> generic", () => {
+    const loginValidator = defineValidator({
+      bodyRules: { email: v.string() },
+      paramRules: { id: v.coerce.number() },
+      queryRules: { page: v.coerce.number() },
+    });
+    let observedEmail: string | undefined;
+    let observedId: number | undefined;
+    let observedPage: number | undefined;
+    class Controller {
+      @Post("/login/:id", { validator: loginValidator })
+      login(req: AppRequest<typeof loginValidator>) {
+        observedEmail = req.body.email;
+        observedId = req.params.id;
+        observedPage = req.query.page;
+      }
+    }
+    const metadata = getRouteMetadata(Controller.prototype.login);
+    // HttpRouteMetadata's own `validator` field stays untyped (V defaults to
+    // `undefined`) since it's a generic storage slot read by the compiler/runtime,
+    // not something callers of `getRouteMetadata` narrow at the type level.
+    expect(metadata?.validator as unknown).toBe(loginValidator);
+    new Controller().login({
+      body: { email: "a@b.com" }, params: { id: 1 }, query: { page: 2 },
+    } as AppRequest<typeof loginValidator>);
+    expect(observedEmail).toBe("a@b.com");
+    expect(observedId).toBe(1);
+    expect(observedPage).toBe(2);
+  });
+
+  test("guards/middleware type-check against the route's inferred AppRequest shape", () => {
+    const idValidator = defineValidator({ paramRules: { id: v.coerce.number() } });
+    let guardSawId: number | undefined;
+    class Controller {
+      @Get("/:id", {
+        validator: idValidator,
+        guards: [(req, context) => { guardSawId = req.params.id; context.set("checked", true); return true; }],
+        middleware: [(req, context, next) => { context.set("seen", req.params.id); return next(); }],
+      })
+      show(req: AppRequest<typeof idValidator>) { return req.params.id; }
+    }
+    const metadata = getRouteMetadata(Controller.prototype.show);
+    expect(metadata?.guards?.length).toBe(1);
+    expect(metadata?.middleware?.length).toBe(1);
+    expect(guardSawId).toBeUndefined(); // guard not invoked here — this test only checks it type-checks and records metadata.
+  });
+
+  test("bare AppRequest (no generics) keeps body permissive but still compiles", () => {
+    class Controller {
+      @Get("/whoami")
+      whoami(req: AppRequest) { return typeof req.body; }
+    }
+    expect(getRouteMetadata(Controller.prototype.whoami)?.method).toBe("GET");
+  });
+
+  test("bare Guard/Middleware (no generics) type-check on a route with no validator", () => {
+    const authGuard: Guard = (req, context) => { context.set("checked", true); return true; };
+    const auditMiddleware: Middleware = (req, context, next) => next();
+    class Controller {
+      @Get("/profile/:id", { guards: [authGuard], middleware: [auditMiddleware] })
+      profile(req: AppRequest) { return req.params; }
+    }
+    const metadata = getRouteMetadata(Controller.prototype.profile);
+    expect(metadata?.guards?.length).toBe(1);
+    expect(metadata?.middleware?.length).toBe(1);
   });
 });

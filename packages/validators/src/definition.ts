@@ -1,3 +1,4 @@
+import { ValidatorError, ValidatorErrorCode } from "./errors";
 import type { RuleShape, InferRuleShape } from "./types";
 
 type EmptyShape = Readonly<Record<never, never>>;
@@ -13,16 +14,40 @@ export type ValidatorDefinition<
   TMapped = InferRuleShape<TRules>,
   TKeyMap extends Readonly<Record<string, string>> = EmptyShape,
 > = Readonly<{
-  rules?: TRules;
+  bodyRules?: TRules;
   queryRules?: TQuery;
-  pathRules?: TPath;
+  paramRules?: TPath;
   headerRules?: THeaders;
   cookieRules?: TCookies;
   messageRules?: TMessage;
   metadataRules?: TMetadata;
   mapV?: (value: InferRuleShape<TRules>) => TMapped;
   mapK?: TKeyMap;
+  /** @deprecated use `bodyRules` */
+  rules?: TRules;
+  /** @deprecated use `paramRules` */
+  pathRules?: TPath;
 }>;
+
+/**
+ * Resolves a rule section that can be supplied under either its canonical name or
+ * its deprecated alias. Supplying both for the same section is an ambiguous
+ * definition, not a silent merge, so it throws.
+ */
+export function resolveAliasedSection<T>(
+  newValue: T | undefined,
+  oldValue: T | undefined,
+  newKey: string,
+  oldKey: string,
+): T | undefined {
+  if (newValue !== undefined && oldValue !== undefined) {
+    throw new ValidatorError(
+      ValidatorErrorCode.INVALID_DEFINITION,
+      `Validator definition cannot specify both "${newKey}" and "${oldKey}".`,
+    );
+  }
+  return newValue ?? oldValue;
+}
 
 /**
  * Defines a validator without widening its rule keys, Zod outputs, mapV result,
@@ -41,10 +66,14 @@ export function defineValidator<
 >(
   definition: ValidatorDefinition<TRules, TQuery, TPath, THeaders, TCookies, TMessage, TMetadata, TMapped, TKeyMap>,
 ): ValidatorDefinition<TRules, TQuery, TPath, THeaders, TCookies, TMessage, TMetadata, TMapped, TKeyMap> {
+  resolveAliasedSection(definition.bodyRules, definition.rules, "bodyRules", "rules");
+  resolveAliasedSection(definition.paramRules, definition.pathRules, "paramRules", "pathRules");
   return Object.freeze({
     ...definition,
+    ...(definition.bodyRules === undefined ? {} : { bodyRules: Object.freeze({ ...definition.bodyRules }) }),
     ...(definition.rules === undefined ? {} : { rules: Object.freeze({ ...definition.rules }) }),
     ...(definition.queryRules === undefined ? {} : { queryRules: Object.freeze({ ...definition.queryRules }) }),
+    ...(definition.paramRules === undefined ? {} : { paramRules: Object.freeze({ ...definition.paramRules }) }),
     ...(definition.pathRules === undefined ? {} : { pathRules: Object.freeze({ ...definition.pathRules }) }),
     ...(definition.headerRules === undefined ? {} : { headerRules: Object.freeze({ ...definition.headerRules }) }),
     ...(definition.cookieRules === undefined ? {} : { cookieRules: Object.freeze({ ...definition.cookieRules }) }),

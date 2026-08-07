@@ -2,23 +2,8 @@ import { inject } from "@warbler/core";
 import { Controller, Get, JsonRes, Post, type AppRequest } from "@warbler/http";
 import { authGuard } from "./auth.guard";
 import AuthService from "./auth.service";
-import {
-  type LoginInput,
-  type RequestSourcesBody,
-  type UploadAvatarInput,
-  loginValidator,
-  requestSourcesValidator,
-  uploadAvatarValidator,
-} from "./auth.validator";
+import { loginValidator, requestSourcesValidator, uploadAvatarValidator } from "./auth.validator";
 
-type SourcesRequest = AppRequest<
-  RequestSourcesBody,
-  { readonly id: number },
-  { readonly page: number; readonly type: string },
-  unknown,
-  { readonly "x-retries": number },
-  { readonly session: string }
->;
 let validationCalls = 0;
 
 @Controller()
@@ -31,7 +16,7 @@ export default class AuthController {
   }
 
   @Post("/login", { validator: loginValidator, csrf: false })
-  async login(request: AppRequest<LoginInput>): Promise<Response> {
+  async login(request: AppRequest<typeof loginValidator>): Promise<Response> {
     return JsonRes({
       email: request.body.email,
       d: await this.#auth.login(request.body.email, request.body.password)
@@ -39,7 +24,7 @@ export default class AuthController {
   }
 
   @Post("/avatar", { validator: uploadAvatarValidator, csrf: false })
-  uploadAvatar(request: AppRequest<UploadAvatarInput>): Response {
+  uploadAvatar(request: AppRequest<typeof uploadAvatarValidator>): Response {
     return JsonRes({
       filename: request.body.avatar.name,
       mimeType: request.body.avatar.type,
@@ -48,14 +33,15 @@ export default class AuthController {
   }
 
   @Post("/validate/:id", { validator: requestSourcesValidator, csrf: false })
-  validateSources(request: SourcesRequest): Response {
+  validateSources(request: AppRequest<typeof requestSourcesValidator>): Response {
     validationCalls += 1;
+    const retries = Number(request.headers.get("x-retries"));
     return JsonRes({
       body: request.body,
       page: request.query.page,
       id: request.params.id,
-      retries: request.headers["x-retries"],
-      session: request.cookies.session,
+      retries: Number.isNaN(retries) ? undefined : retries,
+      session: request.cookies.get("session"),
       calls: validationCalls,
     });
   }
@@ -67,6 +53,7 @@ export default class AuthController {
     console.log('----');
     return JsonRes({
       tr: request.tr('welcome',{name:'habib'}) ,
+      requestId: request.context.requestId,
       repo:this.#auth.profile()
     });
   }
