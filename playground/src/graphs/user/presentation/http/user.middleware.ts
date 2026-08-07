@@ -1,8 +1,5 @@
-import type { AppRequest } from "@warbler/http";
+import type { AppRequest, Middleware } from "@warbler/http";
 
-export async function userRequestMiddleware(
-  context: AppRequest,
-  next: () => Promise<Response>,
-): Promise<Response> {
-  return next();
-}
+export const userRequestMiddleware: Middleware<AppRequest> = async (request, context, next) => {
+  return next(request);
+};

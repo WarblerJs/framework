@@ -20,11 +20,16 @@ export function createSocketTranslation(translator: Translator, config: I18nConf
 export interface LocalizedRequest extends Request, TranslationAccessor {
   readonly params: Readonly<Record<string, string>>;
   readonly query: Readonly<Record<string, string | readonly string[]>>;
-  readonly cookies: Readonly<Record<string, string>>;
+  readonly cookies: Bun.CookieMap;
   readonly context: unknown;
 }
 
-/** Augments Bun's native request once while preserving Request identity for guards and validators. */
+/**
+ * Augments Bun's native request once while preserving Request identity for guards and validators.
+ *
+ * `maxCookies` is accepted for backward compatibility but no longer enforced:
+ * cookies are now parsed by `Bun.CookieMap`, which has no count cap of its own.
+ */
 export function localizeRequest(
   native: Request,
   translator: Translator,
@@ -33,8 +38,8 @@ export function localizeRequest(
 ): LocalizedRequest {
   if (isLocalizedRequest(native)) return native;
   const url = new URL(native.url);
-  const cookies = parseCookieHeader(native.headers.get("cookie"), options.maxCookies ?? 50);
-  const locale = resolveLocale(config, { url, cookies, headers: native.headers });
+  const cookies = requestCookieMap(native);
+  const locale = resolveLocale(config, { url, cookies: Object.fromEntries(cookies), headers: native.headers });
   const properties: PropertyDescriptorMap = {
     query: immutableValue(parseQuery(url, options.maxQueryParameters ?? 100)),
     cookies: immutableValue(cookies),
@@ -45,6 +50,19 @@ export function localizeRequest(
   if (!("params" in native)) properties.params = immutableValue(Object.freeze(Object.create(null) as Record<string, string>));
   Object.defineProperties(native, properties);
   return native as LocalizedRequest;
+}
+/**
+ * Reuses `BunRequest.cookies` when present (already lazily parsed by Bun for every
+ * request served through `Bun.serve({ routes })`); falls back to explicit
+ * construction otherwise. Duplicated in miniature from `@warbler/http`'s
+ * `requestCookieMap` rather than imported from it: `@warbler/i18n` is a
+ * transport-agnostic package `@warbler/http` itself depends on, so the reverse
+ * dependency isn't available.
+ */
+function requestCookieMap(request: Request): Bun.CookieMap {
+  const native = request as Request & { readonly cookies?: unknown };
+  if (native.cookies instanceof Bun.CookieMap) return native.cookies;
+  return new Bun.CookieMap(request.headers.get("cookie") ?? "");
 }
 
 function isLocalizedRequest(value: Request): value is LocalizedRequest {
@@ -60,19 +78,6 @@ function parseQuery(url: URL, limit: number): Readonly<Record<string, string | r
     if (++count > limit) break;
     const current = result[key];
     result[key] = current === undefined ? value : typeof current === "string" ? Object.freeze([current, value]) : Object.freeze([...current, value]);
-  }
-  return Object.freeze(result);
-}
-function parseCookieHeader(header: string | null, limit: number): Readonly<Record<string, string>> {
-  const result: Record<string, string> = Object.create(null);
-  if (header === null || header.length === 0) return Object.freeze(result);
-  const entries = header.split(";", limit + 1);
-  for (let index = 0; index < Math.min(entries.length, limit); index++) {
-    const entry = entries[index]!;
-    const separator = entry.indexOf("=");
-    if (separator <= 0) continue;
-    const name = entry.slice(0, separator).trim();
-    try { result[name] = decodeURIComponent(entry.slice(separator + 1).trim()); } catch {}
   }
   return Object.freeze(result);
 }

@@ -1,5 +1,20 @@
 import { InvalidRequestError } from "../errors";
 
+/**
+ * Rejects an oversized or cookie-flooded `Cookie` header before it's handed to
+ * `Bun.CookieMap`, which parses leniently (silently drops malformed pairs) and
+ * has no built-in size/count ceiling of its own.
+ */
+export function assertCookieHeaderWithinLimits(
+  header: string | null,
+  maxCount = 50,
+  maxSize = 8 * 1024,
+): void {
+  if (header === null || header.length === 0) return;
+  if (new TextEncoder().encode(header).byteLength > maxSize) throw new InvalidRequestError("Cookie header limit exceeded");
+  if (header.split(";").length > maxCount) throw new InvalidRequestError("Cookie count limit exceeded");
+}
+
 /** Parses a Cookie header into an immutable null-prototype record. */
 export function parseCookies(
   header: string | null,

@@ -29,9 +29,9 @@ export interface HandlerBinding<TController = unknown> {
   readonly controllerId: number;
   readonly invoke: unknown;
 }
-export type RuntimeGuard = (input: unknown) => boolean | Promise<boolean>;
+export type RuntimeGuard = (input: unknown, context: unknown) => boolean | Promise<boolean>;
 export type RuntimeMiddlewareNext = (input?: unknown) => unknown;
-export type RuntimeMiddleware = (input: unknown, next: RuntimeMiddlewareNext) => unknown;
+export type RuntimeMiddleware = (input: unknown, context: unknown, next: RuntimeMiddlewareNext) => unknown;
 export type RuntimeValidator = (input: unknown) => unknown;
 export interface GuardBinding { readonly id: number; readonly execute: unknown }
 export interface MiddlewareBinding { readonly id: number; readonly execute: unknown }

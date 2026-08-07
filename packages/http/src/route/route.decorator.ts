@@ -4,7 +4,12 @@ import type { HttpMethodValue } from "./http-method";
 import { setRouteMetadata } from "./route.metadata";
 import type { HttpRouteOptions } from "./route.types";
 
-type RouteHandler = (this: object, ...args: readonly unknown[]) => unknown;
+// `args` is deliberately `any[]`, not `unknown[]`: under native (stage-3) decorator
+// checking, a rest-parameter type of `unknown[]` makes the target contravariantly
+// incompatible with any concretely-typed handler (e.g. `(req: AppRequest<X>) => Y`),
+// since `unknown` isn't assignable to `X`. `any[]` is TypeScript's own documented
+// pattern for a decorator meant to accept an arbitrary real method signature.
+type RouteHandler = (this: object, ...args: readonly any[]) => unknown;
 type StandardRouteDecorator = <T extends RouteHandler>(handler: T, context: ClassMethodDecoratorContext) => T;
 type CompatibleRouteDecorator = MethodDecorator & StandardRouteDecorator;
 

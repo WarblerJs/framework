@@ -8,7 +8,7 @@ import type { ApplicationWIR } from "../wir/wir";
 import { CompilerContext } from "./compiler-context";
 import { optimizeWIR } from "../optimizer/optimize-wir";
 import { generateArtifacts, writeArtifacts } from "../generator/generate-artifacts";
-import { analyzeExecutableBindings } from "../bindings";
+import { analyzeContextBindings, analyzeExecutableBindings } from "../bindings";
 
 /** Phase 1 compiler facade. One instance performs one project compilation at a time. */
 export class Compiler {
@@ -55,7 +55,8 @@ export class Compiler {
       Console.compiler("Generating executable bindings", "started", { compileId });
       const bindings = analyzeExecutableBindings(context, context.applicationWIR, optimized);
       if (bindings !== undefined) {
-        context.generatedApplication = generateArtifacts(optimized, bindings);
+        const contextEntries = analyzeContextBindings(context, optimized);
+        context.generatedApplication = generateArtifacts(optimized, bindings, contextEntries);
         context.fingerprint = Bun.hash(JSON.stringify({
           generated: context.generatedApplication.files,
           sources: sourceFiles.map((source) => [source.fileName, source.text]),

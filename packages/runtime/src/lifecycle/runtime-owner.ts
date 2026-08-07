@@ -7,7 +7,7 @@ import {
 } from "@warbler/config";
 import { Console } from "@warbler/console";
 import { loadProjectTranslator, localizeRequest, type CatalogTranslator } from "@warbler/i18n";
-import { runInRequestContext } from "@warbler/core";
+import { RequestContextStore, runInRequestContext } from "@warbler/core";
 import { validateApplicationBindings, type ValidatedBindingIndexes } from "../bindings";
 import { RootProviderContainer, GraphProviderContainer, RequestProviderContainer } from "../container/generated-provider-containers";
 import { ControllerInstanceTable } from "../controllers";
@@ -262,16 +262,25 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     const controllerId = numberField(record, "controllerId");
     const guardIds = rangeIds(record, "guardStart", "guardCount", http ? this.application.application.routeGuards : this.application.application.socketGuards);
     const middlewareIds = rangeIds(record, "middlewareStart", "middlewareCount", http ? this.application.application.routeMiddleware : this.application.application.socketMiddleware);
-    const terminal = createMiddlewarePipeline(this.#indexes!.middleware, middlewareIds, (validated) =>
-      this.invokeHandler(handlerId, http ? [validated] : socketInputs(validated, socketEvent)),
-    );
+    // For HTTP, `context` is the request's RequestContextStore: guards/middleware may
+    // still call `.set(...)` right up until this terminal step, so it's settled here —
+    // right before the handler runs — rather than eagerly. `settle()` keeps its own
+    // synchronous fast path when nothing async was set, matching `runValidated`'s.
+    const terminal = createMiddlewarePipeline(this.#indexes!.middleware, middlewareIds, (pipelineValue, context) => {
+      if (!http) return this.invokeHandler(handlerId, socketInputs(pipelineValue, socketEvent));
+      const settled = (context as RequestContextStore).settle();
+      if (isThenable(settled)) return settled.then(() => this.invokeHandler(handlerId, [pipelineValue]));
+      return this.invokeHandler(handlerId, [pipelineValue]);
+    });
     const core = (input: unknown): unknown => {
       const validationInput = http ? input : socketValidationInput(input, socketEvent);
       return runValidated(this.#indexes!.validators[validatorId], validationInput, (validated) => {
-        const pipelineValue = http ? httpValidatedRequest(validationInput, validated) : socketValidatedEnvelope(input, validated);
-        const guarded = executeGuardRange(this.#indexes!.guards, guardIds, pipelineValue);
-        if (isThenable(guarded)) return guarded.then((allowed) => allowed ? terminal(pipelineValue) : http ? forbidden() : undefined);
-        return guarded ? terminal(pipelineValue) : http ? forbidden() : undefined;
+        const requestContext = new RequestContextStore();
+        const pipelineValue = http ? buildAppRequest(validationInput, validated, requestContext) : socketValidatedEnvelope(input, validated);
+        const guardContext = http ? requestContext : socketConnectionContext(pipelineValue);
+        const guarded = executeGuardRange(this.#indexes!.guards, guardIds, pipelineValue, guardContext);
+        if (isThenable(guarded)) return guarded.then((allowed) => allowed ? terminal(pipelineValue, guardContext) : http ? forbidden() : undefined);
+        return guarded ? terminal(pipelineValue, guardContext) : http ? forbidden() : undefined;
       }, (outcome) => http ? invalidValidationResponse(outcome.errors, validationInput) : socketValidationFailure(input, outcome.errors));
     };
     // Only wrap requests in a fresh request-scoped container when the owning Graph actually declares
@@ -373,7 +382,20 @@ function socketValidatedEnvelope(original: unknown, validated: unknown): unknown
     context: original.context,
   });
 }
-function httpValidatedRequest(validationInput: unknown, body: unknown): unknown {
+/**
+ * Builds the `AppRequest`-shaped object passed to every HTTP controller handler —
+ * unconditionally, whether or not the route declared a validator (previously this
+ * only ran for validated routes; unvalidated routes fell through to the raw native
+ * `Request`, missing `.body`/`.native` despite being typed as `AppRequest`).
+ *
+ * `headers` is always the real native `Headers` — never the plain record `headerRules`
+ * validation produces internally, which stays a pass/fail gate, not a value swap.
+ * `cookies` is always a `Bun.CookieMap`, likewise never replaced by validated output.
+ * `context` is a live getter into `requestContext`: mutable while guards/middleware
+ * run, frozen once the pipeline's `settle()` step completes, but always the same
+ * object identity end to end.
+ */
+function buildAppRequest(validationInput: unknown, body: unknown, requestContext: RequestContextStore): unknown {
   if (typeof validationInput !== "object" || validationInput === null || !("__request" in validationInput)) return body;
   const request = validationInput.__request;
   if (!(request instanceof Request)) return body;
@@ -384,12 +406,29 @@ function httpValidatedRequest(validationInput: unknown, body: unknown): unknown 
     body: outcome?.value ?? body,
     params: outcome?.path ?? source.params ?? Object.freeze({}),
     query: outcome?.query ?? source.query ?? Object.freeze({}),
-    headers: outcome?.headers ?? request.headers,
-    cookies: outcome?.cookies ?? source.cookies ?? Object.freeze({}),
-    context: source.context,
+    headers: request.headers,
+    cookies: requestCookieMap(request),
+    get context(): Readonly<Record<string, unknown>> { return requestContext.currentView(); },
     locale: typeof source.locale === "string" ? source.locale : "en",
     tr: typeof source.tr === "function" ? source.tr : (key: string) => key,
   });
+}
+/**
+ * Reuses `BunRequest.cookies` when present (already lazily parsed by Bun for every
+ * request served through `Bun.serve({ routes })`); falls back to explicit
+ * construction otherwise (plain `Request`, e.g. in tests). Duplicated in miniature
+ * from `@warbler/http`'s `requestCookieMap` rather than imported from it: the
+ * Runtime deliberately has no dependency on the HTTP package, since it also drives
+ * WebSocket dispatch — `buildAppRequest` above structurally mirrors `AppRequest`
+ * for the same reason, without importing the type itself.
+ */
+function requestCookieMap(request: Request): Bun.CookieMap {
+  const native = request as Request & { readonly cookies?: unknown };
+  if (native.cookies instanceof Bun.CookieMap) return native.cookies;
+  return new Bun.CookieMap(request.headers.get("cookie") ?? "");
+}
+function socketConnectionContext(pipelineValue: unknown): unknown {
+  return typeof pipelineValue === "object" && pipelineValue !== null && "context" in pipelineValue ? pipelineValue.context : undefined;
 }
 function validationOutcome(value: unknown): Readonly<Record<string, unknown>> | undefined {
   return typeof value === "object" && value !== null && "valid" in value && value.valid === true && "value" in value

@@ -10,13 +10,13 @@ import type {
 } from "../generated/executable-bindings";
 
 /** Executes generated Guards in order while retaining a synchronous fast path. */
-export function executeGuardRange(bindings: readonly (GuardBinding | undefined)[], ids: readonly number[], input: unknown): boolean | Promise<boolean> {
+export function executeGuardRange(bindings: readonly (GuardBinding | undefined)[], ids: readonly number[], input: unknown, context: unknown): boolean | Promise<boolean> {
   for (let index = 0; index < ids.length; index++) {
     const guardId = ids[index]!;
     const execute = bindings[guardId]?.execute;
     if (typeof execute !== "function") invalidBinding(`Guard binding ${guardId} is not executable.`);
-    const result = (execute as RuntimeGuard)(input);
-    if (isThenable(result)) return continueGuards(result, bindings, ids, input, index + 1);
+    const result = (execute as RuntimeGuard)(input, context);
+    if (isThenable(result)) return continueGuards(result, bindings, ids, input, context, index + 1);
     if (typeof result !== "boolean") throw new InvalidGuardResultError(`${RuntimeDiagnosticCode.GUARD_RESULT_INVALID}: Guard ${guardId} returned a non-boolean result.`);
     if (!result) return false;
   }
@@ -68,12 +68,16 @@ export function executeHandler(binding: HandlerBinding, controller: unknown, inp
   const invoke = binding.invoke as (instance: unknown, ...values: readonly unknown[]) => unknown;
   return invoke(controller, ...input);
 }
-/** Precompiles generated middleware ordering once during startup. */
+/**
+ * Precompiles generated middleware ordering once during startup. `context` is
+ * threaded through at call time (not build time) since it's request-scoped, while
+ * the pipeline closure itself is built once and reused across every request.
+ */
 export function createMiddlewarePipeline(
   bindings: readonly (MiddlewareBinding | undefined)[],
   ids: readonly number[],
-  terminal: (input: unknown) => unknown,
-): (input: unknown) => unknown {
+  terminal: (input: unknown, context: unknown) => unknown,
+): (input: unknown, context: unknown) => unknown {
   let pipeline = terminal;
   for (let index = ids.length - 1; index >= 0; index--) {
     const middlewareId = ids[index]!;
@@ -81,14 +85,14 @@ export function createMiddlewarePipeline(
     if (typeof execute !== "function") invalidBinding(`Middleware binding ${middlewareId} is not executable.`);
     const middleware = execute as RuntimeMiddleware;
     const next = pipeline;
-    pipeline = (input: unknown): unknown => {
+    pipeline = (input: unknown, context: unknown): unknown => {
       let called = false;
       const continuePipeline = (nextInput: unknown = input): unknown => {
         if (called) invalidBinding(`Middleware ${middlewareId} called next() more than once.`);
         called = true;
-        return next(nextInput);
+        return next(nextInput, context);
       };
-      return middleware(input, continuePipeline);
+      return middleware(input, context, continuePipeline);
     };
   }
   return pipeline;
@@ -98,6 +102,7 @@ async function continueGuards(
   bindings: readonly (GuardBinding | undefined)[],
   ids: readonly number[],
   input: unknown,
+  context: unknown,
   start: number,
 ): Promise<boolean> {
   const initial = await first;
@@ -107,7 +112,7 @@ async function continueGuards(
     const guardId = ids[index]!;
     const execute = bindings[guardId]?.execute;
     if (typeof execute !== "function") invalidBinding(`Guard binding ${guardId} is not executable.`);
-    const result = (execute as RuntimeGuard)(input);
+    const result = (execute as RuntimeGuard)(input, context);
     const allowed = isThenable(result) ? await result : result;
     if (typeof allowed !== "boolean") throw new InvalidGuardResultError(`${RuntimeDiagnosticCode.GUARD_RESULT_INVALID}: Guard ${guardId} returned a non-boolean result.`);
     if (!allowed) return false;

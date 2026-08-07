@@ -14,15 +14,19 @@ export interface RequestValidator<
   TMetadata extends RuleShape = RuleShape,
   TMapped = InferShape<TRules>,
 > {
-  readonly rules?: TRules;
+  readonly bodyRules?: TRules;
   readonly queryRules?: TQuery;
-  readonly pathRules?: TPath;
+  readonly paramRules?: TPath;
   readonly headerRules?: THeaders;
   readonly cookieRules?: TCookies;
   readonly messageRules?: TMessage;
   readonly metadataRules?: TMetadata;
   readonly mapV?: (value: InferShape<TRules>) => TMapped;
   readonly mapK?: Readonly<Record<string, string>>;
+  /** @deprecated use `bodyRules` */
+  readonly rules?: TRules;
+  /** @deprecated use `paramRules` */
+  readonly pathRules?: TPath;
 }
 
 export interface ValidationInput {
@@ -68,17 +72,20 @@ export interface CompiledValidator<TOutput = unknown> {
 export type InferRuleShape<T> = T extends RuleShape ? z.output<z.ZodObject<T>> : unknown;
 type InferShape<T> = InferRuleShape<T>;
 type RulesOf<T, K extends PropertyKey> = K extends keyof T ? NonNullable<T[K]> extends RuleShape ? InferShape<NonNullable<T[K]>> : unknown : unknown;
+/** Prefers the section given under `NewKey`, falling back to the deprecated `OldKey` alias. */
+type PreferredRules<T, NewKey extends PropertyKey, OldKey extends PropertyKey> =
+  NewKey extends keyof T ? RulesOf<T, NewKey> : RulesOf<T, OldKey>;
 type MapValueOutput<T> = "mapV" extends keyof T
-  ? NonNullable<T["mapV"]> extends (...input: readonly never[]) => infer O ? O : RulesOf<T, "rules">
-  : RulesOf<T, "rules">;
+  ? NonNullable<T["mapV"]> extends (...input: readonly never[]) => infer O ? O : InferValidatorBody<T>
+  : InferValidatorBody<T>;
 type StringKeys<T> = Extract<keyof T, string>;
 type MapRecord<T> = "mapK" extends keyof T ? NonNullable<T["mapK"]> extends Readonly<Record<string, string>> ? NonNullable<T["mapK"]> : {} : {};
 type MapTargets<M> = M[keyof M] & string;
 type RenameKeys<T, M extends Readonly<Record<string, string>>> =
   Omit<T, Extract<keyof M, keyof T>> & { readonly [K in MapTargets<M>]: T[Extract<{ [S in keyof M]: M[S] extends K ? S : never }[keyof M], keyof T>] };
 
-export type InferValidatorBody<T> = RulesOf<T, "rules">;
+export type InferValidatorBody<T> = PreferredRules<T, "bodyRules", "rules">;
 export type InferValidatorQuery<T> = RulesOf<T, "queryRules">;
-export type InferValidatorPath<T> = RulesOf<T, "pathRules">;
+export type InferValidatorPath<T> = PreferredRules<T, "paramRules", "pathRules">;
 export type InferValidatorOutput<T> = RenameKeys<MapValueOutput<T>, MapRecord<T>>;
 export type ValidationTranslator = (key: string, parameters?: TranslationParameters) => string;
