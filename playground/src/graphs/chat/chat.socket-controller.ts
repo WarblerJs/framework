@@ -41,6 +41,7 @@ export default class ChatSocketController {
     rateLimit: { limit: 50, windowMs: 1_000 },
   })
   message(message: SocketMessage<ChatMessageInput>, context: SocketContext): void {
+    console.log('Chat.message',message.data.roomId, message.data.content)
     const saved = this.#chat.createMessage(message.data.roomId, message.data.content);
     context.publish(message.data.roomId, { event: "chat.message.created", data: saved });
   }

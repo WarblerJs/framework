@@ -105,6 +105,7 @@ export class ManagedDevSession implements DevSession {
   public async stop(): Promise<void> {
     if (this.#state === "stopped" || this.#state === "stopping") return;
     this.#state = "stopping"; this.#watcher?.stop(); this.#removeSignals();
+    this.#views?.close();
     await this.#runtime?.stop(); this.#runtime = undefined;
     this.#state = "stopped"; this.#closed.resolve();
   }
@@ -171,6 +172,7 @@ export class ManagedDevSession implements DevSession {
       this.#emit("restart", "started", `Stopping Runtime #${previousBuild}.`, { build: previousBuild });
       const previousCompiler = this.#activeCompiler;
       const previousPreparation = this.#activePreparation;
+      this.#views?.close();
       await this.#runtime?.stop();
       this.#runtime = undefined;
       this.#emit("runtime", "success", `Runtime #${previousBuild} disposed.`, { build: previousBuild });

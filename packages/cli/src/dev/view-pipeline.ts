@@ -1,5 +1,6 @@
 import {
   activateCompiledViews,
+  closeViewDevelopmentClients,
   compileViewProject,
   publishViewDevelopmentUpdate,
   type CompiledViewArtifact,
@@ -91,6 +92,11 @@ export class DevelopmentViewPipeline {
       path.startsWith(viewPrefix) || isScript(path) || isStyle(path) ||
       (tailwindSource(path) && !path.startsWith("src/"))
     );
+  }
+
+  /** Cleanly ends active View development SSE streams before the native HTTP server is torn down or replaced. */
+  public close(): void {
+    closeViewDevelopmentClients();
   }
 
   async #compile(changedTemplates?: readonly string[], buildAssets = true): Promise<void> {
