@@ -18,4 +18,29 @@ describe("SSE", () => {
     expect(response.headers.has("content-length")).toBe(false);
     expect(await response.text()).toBe("data: ready\n\n");
   });
+
+  describe("unified exception boundary", () => {
+    test("a generator that throws mid-stream emits a safe error event and closes cleanly, not a raw stream error", async () => {
+      async function* events() {
+        yield { event: "ready", data: { ok: true } };
+        throw new Error("upstream feed disconnected");
+      }
+      const response = SseRes(events());
+      const body = await response.text();
+      expect(body).toBe(
+        'event: ready\ndata: {"ok":true}\n\n' +
+        'event: error\ndata: {"code":"INTERNAL_SERVER_ERROR","message":"Internal Server Error"}\n\n',
+      );
+    });
+
+    test("the client never sees the original error's message", async () => {
+      async function* events(): AsyncGenerator<never> {
+        throw new Error("connection string: postgres://user:pw@host/db");
+      }
+      const response = SseRes(events());
+      const body = await response.text();
+      expect(body).not.toContain("postgres://");
+      expect(body).toContain('"code":"INTERNAL_SERVER_ERROR"');
+    });
+  });
 });

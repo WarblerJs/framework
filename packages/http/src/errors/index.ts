@@ -9,3 +9,5 @@ export {
   StaticFileError,
   UnsupportedContentTypeError,
 } from "./http-errors";
+export { toNormalizedHttpError } from "./normalize-http-error";
+export { renderRequestError } from "./request-error-response";

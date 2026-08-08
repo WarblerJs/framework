@@ -1,5 +1,6 @@
 import { inject } from "@warbler/core";
 import { Controller, Get, JsonRes, Post, type AppRequest, view } from "@warbler/http";
+import { AppErrorCode } from "../../../../shared/errors/app-error-code";
 import { CreateUserUseCase } from "../../application/use-cases/create-user.use-case";
 import { FindUserUseCase } from "../../application/use-cases/find-user.use-case";
 import { ListUsersUseCase } from "../../application/use-cases/list-users.use-case";
@@ -16,6 +17,7 @@ export class UserController {
 
   @Get("/")
   async list() {
+    
     return JsonRes( await this.#listUsers.execute(10, 0));
   }
 

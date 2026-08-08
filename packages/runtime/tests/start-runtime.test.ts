@@ -354,6 +354,15 @@ describe("validator onValidationError", () => {
     await runtime.stop();
   });
 
+  // The unified exception boundary (@warbler/http's `createBunRouteHandler`, one layer
+  // above the Runtime pipeline tested here) now catches exactly this rejection and
+  // renders it safely — see packages/http/tests/native-server.test.ts's "unified
+  // exception boundary" suite. This test's contract is intentionally unchanged: the
+  // Runtime pipeline itself still propagates raw, by design, so any HTTP-transport-
+  // specific concern (JSON/text rendering, dev vs prod, Console logging) stays out of
+  // the transport-agnostic Runtime layer. It also directly proves `onValidationError`
+  // throwing does not get swallowed or recursively re-enter validation — `events` never
+  // gains a "middleware" entry, meaning it never falls through to the success path.
   test("lets a throwing handler propagate instead of swallowing or recursing", async () => {
     const events: string[] = [];
     const base = application(events);

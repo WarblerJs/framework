@@ -75,7 +75,7 @@ Both access styles — the automatic `csrfField`/`csrfToken` built-ins and expli
 
 `view()`/`csrf()` may be called from anywhere that runs inside an active HTTP request — controller methods, guards, middleware, and validator `onValidationError` callbacks — without needing an `AppRequest` parameter. Calling either outside of a request throws a clear `ServerStateError`.
 
-### Errors
+### View rendering errors
 
 Every failure that can occur while rendering a view — parsing, compilation, expression evaluation, a failing built-in (`route()`/`asset()`/`tr()`), a missing template, a reserved-name collision, or the final render itself — is caught by `view()` and turned into a `Response`, never a thrown exception or a native Bun error page.
 
@@ -85,3 +85,59 @@ Every failure that can occur while rendering a view — parsing, compilation, ex
 Full details are always logged server-side via the existing console logger, in both modes.
 
 Optional/missing application data is not, by itself, a rendering error — `@if(errors.email) { ... }` renders fine whether or not `errors.email` is set, as long as `errors` itself was passed to `view()`. Only genuinely invalid usage (an undefined variable, an unknown helper call, an unknown route name) fails.
+
+## Unified exception boundary
+
+Every route runs inside one exception boundary, in `createBunRouteHandler`. A controller,
+service, repository, guard, middleware, or a validator's `onValidationError` throwing —
+synchronously, or in a rejected promise after an `await` — is caught exactly once and rendered
+as a safe `Response`. Application code never needs a `try/catch` for this:
+
+```ts
+import { NotFoundError } from "@warbler/core";
+
+@Get("/users/:id")
+async show(req: AppRequest) {
+  return this.users.find(req.params.id); // throws NotFoundError deep inside — no try/catch here
+}
+```
+
+The boundary reuses `@warbler/core`'s `WarblerError`/`normalizeError` (see that package's
+README) — `HttpError` and its subclasses (`CsrfError`, ...) are translated into a
+`WarblerError` first, so they're rendered identically to an application-thrown one.
+
+**Rendering** is content-negotiated: requests whose `Accept` header prefers `text/html` get
+plain text; everything else (the default for `fetch`/API clients) gets
+`JsonRes({code, message}, {status})`:
+
+```json
+{ "code": "USER_NOT_FOUND", "message": "User not found" }
+```
+
+An unexpected error (a plain `Error`, or any `WarblerError` created with `expose: false`)
+always renders the generic `{"code":"INTERNAL_SERVER_ERROR","message":"Internal Server
+Error"}` — its real message never reaches the client, only the server-side log
+(`Console.error`). In development, both the JSON and text responses additionally include safe,
+request-scoped diagnostics (`transport`, `request`, `reason`, `requestId`) — never a stack,
+source path, or secret. The text path's development body mirrors the view boundary's format:
+
+```
+WARBLER_REQUEST_ERROR
+
+Code: INTERNAL_SERVER_ERROR
+Transport: HTTP
+Request: GET /users/123
+Reason: Database connection failed
+RequestId: req_...
+```
+
+**SSE**: a failure before `SseRes(...)` is called is an ordinary HTTP error, handled the same
+way as above. A failure *after* streaming has started (headers already committed) can't fall
+back to a normal response — the stream instead emits one final `event: error` frame
+(`{code, message}`, same normalization) and closes cleanly.
+
+**WebSocket** has its own boundary — see `@warbler/websocket`'s README.
+
+A route handler throwing repeatedly never affects other requests or crashes the process — only
+a call to `@warbler/runtime`'s `installFatalErrorHandlers` (wired into the CLI's production
+entrypoint, not into ordinary request handling) exists for that.

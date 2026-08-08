@@ -2,8 +2,9 @@ import type { RuntimeTransportLauncher, RuntimeTransportStartInput, RuntimeTrans
 import { Console, createCorrelationId } from "@warbler/console";
 import type { ServerWebSocket, WebSocketHandler } from "bun";
 import { normalizeWebSocketConfig, type WebSocketConfig } from "./config";
-import { createSocketContext } from "./context";
+import { createSocketContext, type SocketContext } from "./context";
 import { decodeSocketMessage } from "./message";
+import { handleSocketError } from "./socket-error-boundary";
 import { validateOrigin, validateSubprotocol } from "./upgrade";
 
 interface RuntimeSocketData { readonly connectionId: string; readonly connectedAt: number }
@@ -38,18 +39,26 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
         },
         message(socket, raw) {
           const context = socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection);
+          let message: ReturnType<typeof decodeSocketMessage>;
           try {
-            const message = decodeSocketMessage(raw, {
+            message = decodeSocketMessage(raw, {
               format: config.messages.format,
               maxEventNameLength: config.messages.maxEventNameLength,
               maxMessageIdLength: config.messages.maxMessageIdLength,
             });
-            const known = input.bindings.compiled?.events?.[message.event] !== undefined;
-            Console.socket({ action: "incoming", event: message.event, connectionId: socket.data.connectionId, size: rawSize(raw) });
-            const result = input.bindings.dispatch(known ? message.event : "message", message, context);
-            settle(result, socket);
           } catch {
+            // Malformed wire format — unrelated to application logic, can't even tell
+            // which event was intended. Stays connection-fatal, unlike a handler throw.
             socket.close(1008, "Invalid WebSocket message");
+            return;
+          }
+          const known = input.bindings.compiled?.events?.[message.event] !== undefined;
+          Console.socket({ action: "incoming", event: message.event, connectionId: socket.data.connectionId, size: rawSize(raw) });
+          try {
+            const result = input.bindings.dispatch(known ? message.event : "message", message, context);
+            settle(result, socket, context, input.bindings);
+          } catch (error) {
+            handleSocketError(error, socket, context, input.bindings.dispatch);
           }
         },
         drain(socket) {
@@ -92,31 +101,25 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
 function rawSize(value: string | ArrayBuffer | Uint8Array): number {
   return typeof value === "string" ? new TextEncoder().encode(value).byteLength : value.byteLength;
 }
-function socketContext(socket: ServerWebSocket<RuntimeSocketData>, format: "json" | "text" | "binary", subscriptionLimit: number) {
+function socketContext(socket: ServerWebSocket<RuntimeSocketData>, format: "json" | "text" | "binary", subscriptionLimit: number): SocketContext {
   return createSocketContext(socket, { id: socket.data.connectionId, connectedAt: socket.data.connectedAt }, { format, subscriptionLimit });
 }
 function isThenable(value: unknown): value is Promise<unknown> {
   return typeof value === "object" && value !== null && "then" in value && typeof value.then === "function";
 }
-function settle(value: unknown, socket: ServerWebSocket<RuntimeSocketData>): void {
-  if (isThenable(value)) value.catch((error: unknown) => {
-    try {
-      socket.close(1011, "Internal WebSocket error");
-    } finally {
-      void error;
-    }
-  });
+function settle(value: unknown, socket: ServerWebSocket<RuntimeSocketData>, context: SocketContext, bindings: WebSocketRuntimeBindings): void {
+  if (isThenable(value)) value.catch((error: unknown) => handleSocketError(error, socket, context, bindings.dispatch));
 }
 function dispatchLifecycle(
   bindings: WebSocketRuntimeBindings,
   lifecycle: "open" | "drain" | "close",
   message: unknown,
-  context: unknown,
+  context: SocketContext,
   socket: ServerWebSocket<RuntimeSocketData>,
 ): void {
   try {
-    settle(bindings.dispatch(lifecycle, message, context), socket);
-  } catch {
-    socket.close(1011, "Internal WebSocket error");
+    settle(bindings.dispatch(lifecycle, message, context), socket, context, bindings);
+  } catch (error) {
+    handleSocketError(error, socket, context, bindings.dispatch);
   }
 }

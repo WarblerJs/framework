@@ -14,3 +14,4 @@ export * from "./server";
 export * from "./upgrade";
 export * from "./validation";
 export { createWebSocketRuntimeLauncher } from "./runtime-launcher";
+export { handleSocketError } from "./socket-error-boundary";

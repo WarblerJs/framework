@@ -1,11 +1,16 @@
-import { Service, inject } from "@warbler/core";
+import { NotFoundError, Service, inject } from "@warbler/core";
+import { AppErrorCode } from "../../../../shared/errors/app-error-code";
 import { UserRepositoryPort } from "../../domain/ports/user.repository.port";
 
 @Service()
 export class FindUserUseCase {
   readonly #users = inject(UserRepositoryPort);
 
-  execute(id: string) {
-    return this.#users.findById(id);
+  async execute(id: string) {
+    const user = await this.#users.findById(id);
+    if (!user) {
+      throw new NotFoundError(AppErrorCode.USER_NOT_FOUND, "User not found");
+    }
+    return user;
   }
 }

@@ -1,3 +1,5 @@
+import { Console } from "@warbler/console";
+import { normalizeError } from "@warbler/core";
 import { InvalidRequestError } from "../errors";
 import { type HeadersInput, toHeaders } from "../internal/header-value";
 import type { ServerSentEvent } from "./response-types";
@@ -44,7 +46,21 @@ export function SseRes(
         if (result.done) controller.close();
         else controller.enqueue(encodeServerSentEvent(result.value));
       } catch (error) {
-        controller.error(error);
+        // Headers/status are already committed once streaming has started — there is no
+        // "normal HTTP error response" to fall back to. Emit one final safe SSE error
+        // event and close gracefully; only if that itself fails (stream already
+        // errored/closed) do we fall back to the raw stream error.
+        const normalized = normalizeError(error);
+        Console.error("SSE stream failed.", { code: normalized.code, status: normalized.status });
+        try {
+          controller.enqueue(encodeServerSentEvent({
+            event: "error",
+            data: { code: normalized.code, message: normalized.message },
+          }));
+          controller.close();
+        } catch {
+          controller.error(error);
+        }
       }
     },
     async cancel() {

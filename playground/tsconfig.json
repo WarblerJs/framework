@@ -15,7 +15,9 @@
     "strict": true,
     "target": "ESNext",
     "paths": {
-      "@pg/*": ["database/warbler/pg/generated/*"]
+      "@pg/*": ["database/warbler/pg/generated/*"],
+      "@errors/*": ["src/shared/errors/*"],
+      "@functions/*": ["src/shared/functions/*"],
     }
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "database/**/*.ts"]

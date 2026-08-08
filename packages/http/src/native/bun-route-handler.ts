@@ -1,6 +1,6 @@
 import { csrfFailureResponse, stripCsrfBodyField, type CsrfPolicy, CsrfVerifier } from "../csrf";
 import { Console, type RequestHandle } from "@warbler/console";
-import { HttpError } from "../errors";
+import { HttpError, renderRequestError } from "../errors";
 import { RouteFlag } from "../compiled";
 import {
   applySecurityHeaders,
@@ -65,7 +65,21 @@ function createViewRequestScope(
   });
 }
 
-/** Builds the fixed-order pre-handler pipeline once while retaining synchronous fast paths. */
+/** Reuses `HttpError`'s own stable code where one exists, for consistent `logResponse` metadata. */
+function errorCode(error: unknown): string | undefined {
+  return error instanceof HttpError ? error.code : undefined;
+}
+
+/**
+ * Builds the fixed-order pre-handler pipeline once while retaining synchronous fast paths.
+ *
+ * The unified exception boundary lives here: whatever `options.handler(...)` throws
+ * synchronously *or* its returned promise rejects with — a controller, service, repository,
+ * guard, middleware, or validator's `onValidationError` throw, anywhere in the compiled
+ * pipeline — is rendered through `renderRequestError` exactly once, through the same code
+ * path for both cases. Nothing past this function ever sees a rejected route-handler
+ * promise or a native Bun error page.
+ */
 export function createBunRouteHandler(options: BunRouteHandlerOptions): BunRouteHandler {
   const csrfEnabled = (options.flags & RouteFlag.CSRF_ENABLED) !== 0;
   const sse = (options.flags & RouteFlag.SSE) !== 0;
@@ -73,6 +87,8 @@ export function createBunRouteHandler(options: BunRouteHandlerOptions): BunRoute
     const url = new URL(request.url);
     const requestLog = Console.request({ method: request.method, path: url.pathname });
     const scope = createViewRequestScope(request, options);
+    const onError = (error: unknown): Response =>
+      logResponse(requestLog, renderRequestError(error, request, requestLog, options.development), errorCode(error));
     const dispatch = (): Response | Promise<Response> => runInViewRequestScope(scope, () => {
       if (csrfEnabled) {
         const csrf = options.csrf;
@@ -95,10 +111,10 @@ export function createBunRouteHandler(options: BunRouteHandlerOptions): BunRoute
       validateRequestHeaders(request, options.headers);
       validateRequestHost(request, options.allowedHosts);
       if (sse) server.timeout(request, 0);
-      return dispatch();
+      const result = dispatch();
+      return result instanceof Promise ? result.catch(onError) : result;
     } catch (error) {
-      if (error instanceof HttpError) return logResponse(requestLog, error.toResponse(), error.code);
-      return logResponse(requestLog, new Response("Internal Server Error", { status: 500 }), "UNEXPECTED_EXCEPTION");
+      return onError(error);
     }
   };
 }

@@ -28,3 +28,31 @@ Messages default to strict JSON envelopes with `event`, optional `id`, and `data
 `normalizeWebSocketConfig` strictly parses payload, timeout, compression, backpressure, and connection limits. Compression is opt-in. Bun's `-1`, `0`, and positive send results become `backpressure`, `dropped`, and `sent`; retry scheduling is deliberately application-owned and resumes through `@OnDrain`.
 
 Shared HTTP mode exposes `fetch` and `websocket` handlers for an existing server. Dedicated mode creates one `Bun.serve` listener owned by an idempotently stoppable `WebSocketServerOwner`. Native subscriptions are used without a JavaScript room registry.
+
+## Exception boundary
+
+A subscribed event handler, or an `@OnOpen`/`@OnDrain`/`@OnClose` lifecycle callback, throwing
+— synchronously or in a rejected promise — never crashes the connection or the process. It's
+normalized (`@warbler/core`'s `normalizeError`), logged, and handled one of two ways:
+
+- **Recoverable (the default)**: the client receives a safe envelope and the connection stays
+  open and usable for the next message —
+  ```json
+  { "event": "error", "data": { "code": "USER_NOT_FOUND", "message": "User not found" } }
+  ```
+- **Connection-fatal**: only when the normalized error is a `WarblerError` constructed with
+  `fatal: true` — the connection closes with code `1011`, and only that connection; unrelated
+  sockets are unaffected.
+
+A declared `@OnError()` handler is also invoked, with the normalized `(error, context)` — for
+logging/observability, independent of the envelope sent above:
+
+```ts
+@OnError()
+error(error: unknown, context: SocketContext) {
+  context.log.error(error);
+}
+```
+
+A malformed message (unparseable wire format — not an application error) is unrelated to this
+boundary and still closes the connection with code `1008`, unchanged.

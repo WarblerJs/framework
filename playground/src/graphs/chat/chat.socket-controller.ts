@@ -1,4 +1,4 @@
-import { inject } from "@warbler/core";
+import { inject, NotFoundError } from "@warbler/core";
 import {
   OnClose,
   OnDrain,
@@ -10,6 +10,7 @@ import {
   type SocketContext,
   type SocketMessage,
 } from "@warbler/websocket";
+import { AppErrorCode } from "../../shared/errors/app-error-code";
 import { chatGuard } from "./chat.guard";
 import ChatService from "./chat.service";
 import { type ChatMessageInput, chatMessageValidator, roomJoinValidator } from "./chat.validator";
@@ -27,6 +28,17 @@ export default class ChatSocketController {
   @Subscribe("ping")
   ping(_message: SocketMessage<unknown>, context: SocketContext): void {
     context.send({ event: "pong", data: { at: Date.now() } });
+  }
+
+  /**
+   * Demonstrates the unified WebSocket exception boundary: a typed throw here does not
+   * kill the connection. The client receives a safe `{event:"error", data:{code,message}}`
+   * envelope, the `@OnError()` handler below still fires, and the connection remains
+   * usable for the next message (try `ping` right after).
+   */
+  @Subscribe("crash")
+  crash(message: SocketMessage<{ readonly roomId?: string }>): void {
+    throw new NotFoundError(AppErrorCode.ROOM_NOT_FOUND, `Room "${message.data.roomId ?? "unknown"}" does not exist.`);
   }
 
   @Subscribe("room.join", { validator: roomJoinValidator })
@@ -62,7 +74,8 @@ export default class ChatSocketController {
   }
 
   @OnError()
-  error(_error: unknown): void {
-    console.log('Socket,error')
+  error(error: unknown, context: SocketContext): void {
+    console.log('Socket,error', error)
+    context.log.error(error)
   }
 }

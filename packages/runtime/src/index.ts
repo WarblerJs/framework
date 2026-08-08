@@ -49,6 +49,7 @@ export {
   type RuntimeStopOptions,
   type StartRuntimeOptions,
 } from "./lifecycle/runtime-owner";
+export { installFatalErrorHandlers } from "./lifecycle/fatal-shutdown";
 export { GeneratedProviderContainer, RootProviderContainer, GraphProviderContainer, RequestProviderContainer } from "./container/generated-provider-containers";
 export { ControllerInstanceTable } from "./controllers";
 export { RuntimeDiagnosticCode } from "./diagnostics/runtime-diagnostic-codes";
