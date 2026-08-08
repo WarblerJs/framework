@@ -1,6 +1,5 @@
 import { inject } from "@warbler/core";
-import { ArchiveRes, Controller, Get, ImageRes, JsonRes, PdfRes, Sse, SseRes, TextRes } from "@warbler/http";
-import { View } from "@warbler/view";
+import { ArchiveRes, Controller, Get, ImageRes, JsonRes, PdfRes, Sse, SseRes, TextRes, csrf, view } from "@warbler/http";
 import HomeService from "./home.service";
 
 @Controller()
@@ -19,10 +18,18 @@ export default class HomeController {
 
   @Get("/page")
   page(): Response {
-    return View("home.index", {
+    return view("home.index", {
       title: "Warbler Playground",
       hello: 'World',
       test1: 'Awsdvf'
+    });
+  }
+
+  @Get("/form")
+  form(): Response {
+    return view("home.form", {
+      title: "Example Form",
+      security: csrf(),
     });
   }
 

@@ -8,6 +8,12 @@ import { createStaticRouteTable } from "../static";
 import { createHttpServerOwner } from "./create-http-server-owner";
 import type { HttpServer } from "./http-server.types";
 import { createViewDevelopmentRoutes } from "@warbler/view";
+import {
+  buildNamedRouteTable,
+  createAssetResolver,
+  createRouteResolver,
+  decodeNamedRouteRows,
+} from "../view/builtin-resolvers";
 
 /** Generated HTTP bindings supplied by Runtime after one-time pipeline compilation. */
 export interface HttpRuntimeBindings {
@@ -25,13 +31,21 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
         ...await createStaticRouteTable(process.cwd(), config.static, config.development),
         ...(config.development ? createViewDevelopmentRoutes() : {}),
       };
-      const csrf = config.csrf.enabled
-        ? Object.freeze({
-          verifier: await CsrfVerifier.create(process.env.WARBLER_CSRF_SECRET ?? crypto.randomUUID().replaceAll("-", "").repeat(2)),
-          policy: config.csrf,
-        })
-        : undefined;
+      // Always minted (even when global CSRF enforcement is disabled): token *issuance*
+      // for csrfField/csrfToken/csrf() is independent of whether routes enforce
+      // verification, and CsrfVerifier.verify() already no-ops per-request when
+      // policy.enabled is false and verification isn't forced by a route flag.
+      const csrf = Object.freeze({
+        verifier: await CsrfVerifier.create(process.env.WARBLER_CSRF_SECRET ?? crypto.randomUUID().replaceAll("-", "").repeat(2)),
+        policy: config.csrf,
+      });
       const securityHeaders = createSecurityHeaderTemplate(config.security);
+      const strings = input.bindings.strings ?? [];
+      const routeNameTable = buildNamedRouteTable(decodeNamedRouteRows(input.bindings.routeRecords ?? [], strings));
+      const builtins = Object.freeze({
+        asset: createAssetResolver(config.static),
+        route: createRouteResolver(routeNameTable),
+      });
       for (const [path, methods] of Object.entries(input.bindings.routes)) {
         if (typeof methods !== "object" || methods === null || methods instanceof Response || methods instanceof Blob) {
           routes[path] = methods;
@@ -50,7 +64,9 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
             allowedHosts: config.allowedHosts,
             headers: config.limits.headers,
             securityHeaders,
-            ...(csrf === undefined ? {} : { csrf }),
+            csrf,
+            builtins,
+            development: config.development,
           });
         }
         routes[path] = Object.freeze(wrapped);

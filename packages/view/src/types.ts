@@ -11,6 +11,14 @@ export type ViewDataValue =
 
 export type ViewData = Readonly<Record<string, ViewDataValue>>;
 
+/**
+ * Framework built-ins (`tr`, `asset`, `route`, `csrfField`, `csrfToken`, ...) made
+ * available to expressions alongside `data`. Kept as a separate channel rather than
+ * folded into `ViewData` because built-ins may be functions, which `ViewDataValue`
+ * deliberately excludes.
+ */
+export type ViewBuiltins = Readonly<Record<string, unknown>>;
+
 export type CompiledTemplateMap = Readonly<Record<string, string>>;
 import type { TemplateAst } from "./ast";
 import type { HeadersInput } from "./internal/header-value";
@@ -70,6 +78,7 @@ export interface RenderCompiledViewOptions {
   readonly name: string;
   readonly data?: ViewData;
   readonly translate?: (key: string) => string;
+  readonly builtins?: ViewBuiltins;
 }
 
 export interface RendererContext {
@@ -77,15 +86,17 @@ export interface RendererContext {
   readonly renderTemplate: (
     name: string,
     data: ViewData,
+    builtins?: ViewBuiltins,
   ) => string;
   readonly translate?: (key: string) => string;
 }
 
-export type CompiledTemplate = (data?: ViewData) => string;
+export type CompiledTemplate = (data?: ViewData, builtins?: ViewBuiltins) => string;
 
 export interface ViewResponseOptions {
   readonly status?: number;
   readonly headers?: HeadersInput;
+  readonly builtins?: ViewBuiltins;
 }
 
 export interface ViewProjectConfig {

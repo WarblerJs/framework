@@ -80,7 +80,22 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
   }
 
   validateDependencies(result, rootProviders, providerOwners, tokenNames, diagnostics);
+  validateRouteNames(result, diagnostics);
   return Object.freeze({ version: 1, projectRoot, graphs: Object.freeze(result), rootProviders: Object.freeze([...rootProviders.values()]) });
+}
+
+/** Route `name`s are a single application-wide namespace (`route("users.show")`), not per-graph. */
+function validateRouteNames(graphs: readonly GraphWIR[], diagnostics: CompilerDiagnostic[]): void {
+  const names = new Map<string, string>();
+  for (const graph of graphs) for (const controller of graph.controllers) for (const route of controller.routes) {
+    if (route.name === undefined) continue;
+    const prior = names.get(route.name);
+    if (prior !== undefined) {
+      add(diagnostics, DiagnosticCode.DUPLICATE_ROUTE_NAME, `Duplicate route name "${route.name}".`, route, [prior, controller.name]);
+      continue;
+    }
+    names.set(route.name, controller.name);
+  }
 }
 
 function validateRoutes(graph: AnalyzedGraph, controllers: readonly ControllerWIR[], diagnostics: CompilerDiagnostic[]): void {

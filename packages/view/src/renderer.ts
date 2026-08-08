@@ -3,6 +3,7 @@ import { evaluateExpression } from "./evaluator";
 import type {
   CompiledTemplate,
   RendererContext,
+  ViewBuiltins,
   ViewData,
   ViewDataValue,
 } from "./types";
@@ -44,9 +45,10 @@ const renderNodes = (
   nodes: readonly AstNode[],
   data: ViewData,
   context: RendererContext,
+  builtins: ViewBuiltins | undefined,
 ): string => {
   const output: string[] = [];
- 
+
   for (const node of nodes) {
     switch (node.kind) {
       case "text": {
@@ -57,7 +59,7 @@ const renderNodes = (
       case "expression": {
         const key = translationKey(node.expression);
         const value = key === undefined
-          ? evaluateExpression(node.expression, data, context.viewName)
+          ? evaluateExpression(node.expression, data, context.viewName, builtins, node.offset)
           : context.translate?.(key) ?? key;
 
         output.push(node.raw ? String(value ?? "") : escapeHtml(value));
@@ -68,9 +70,9 @@ const renderNodes = (
         for (const branch of node.branches) {
           if (
             branch.condition === null ||
-            Boolean(evaluateExpression(branch.condition, data, context.viewName))
+            Boolean(evaluateExpression(branch.condition, data, context.viewName, builtins))
           ) {
-            output.push(renderNodes(branch.body, data, context));
+            output.push(renderNodes(branch.body, data, context, builtins));
             break;
           }
         }
@@ -80,7 +82,7 @@ const renderNodes = (
 
       case "for": {
         const items = toIterable(
-          evaluateExpression(node.iterable, data, context.viewName),
+          evaluateExpression(node.iterable, data, context.viewName, builtins),
         );
 
         for (let index = 0; index < items.length; index += 1) {
@@ -98,6 +100,7 @@ const renderNodes = (
               node.body,
               Object.freeze(childData),
               context,
+              builtins,
             ),
           );
         }
@@ -106,7 +109,7 @@ const renderNodes = (
       }
 
       case "switch": {
-        const switchValue = evaluateExpression(node.expression, data, context.viewName);
+        const switchValue = evaluateExpression(node.expression, data, context.viewName, builtins);
         let defaultCase: (typeof node.cases)[number] | undefined;
 
         for (const caseNode of node.cases) {
@@ -118,11 +121,11 @@ const renderNodes = (
           if (
             Object.is(
               switchValue,
-              evaluateExpression(caseNode.expression, data, context.viewName),
+              evaluateExpression(caseNode.expression, data, context.viewName, builtins),
             )
           ) {
             output.push(
-              renderNodes(caseNode.body, data, context),
+              renderNodes(caseNode.body, data, context, builtins),
             );
             defaultCase = undefined;
             break;
@@ -131,7 +134,7 @@ const renderNodes = (
 
         if (defaultCase !== undefined) {
           output.push(
-            renderNodes(defaultCase.body, data, context),
+            renderNodes(defaultCase.body, data, context, builtins),
           );
         }
 
@@ -139,7 +142,7 @@ const renderNodes = (
       }
 
       case "import": {
-        output.push(context.renderTemplate(node.name, data));
+        output.push(context.renderTemplate(node.name, data, builtins));
         break;
       }
 
@@ -157,5 +160,5 @@ export const compileRenderer = (
   ast: TemplateAst,
   context: RendererContext,
 ): CompiledTemplate =>
-  (data: ViewData = Object.freeze({})) =>
-    renderNodes(ast.body, data, context);
+  (data: ViewData = Object.freeze({}), builtins?: ViewBuiltins) =>
+    renderNodes(ast.body, data, context, builtins);

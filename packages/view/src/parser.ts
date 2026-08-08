@@ -136,30 +136,36 @@ class Parser {
 
       if (this.scanner.startsWith("{{{")) {
         this.scanner.advance(3);
+        const offset = this.scanner.position;
         nodes.push({
           kind: "expression",
           expression: this.scanner.readUntil("}}}").trim(),
           raw: true,
+          offset,
         });
         continue;
       }
 
       if (this.scanner.startsWith("{!!")) {
         this.scanner.advance(3);
+        const offset = this.scanner.position;
         nodes.push({
           kind: "expression",
           expression: this.scanner.readUntil("!!}").trim(),
           raw: true,
+          offset,
         });
         continue;
       }
 
       if (this.scanner.startsWith("{{")) {
         this.scanner.advance(2);
+        const offset = this.scanner.position;
         nodes.push({
           kind: "expression",
           expression: this.scanner.readUntil("}}").trim(),
           raw: false,
+          offset,
         });
         continue;
       }

@@ -16,6 +16,8 @@ export interface ExpressionNode {
   readonly kind: "expression";
   readonly expression: string;
   readonly raw: boolean;
+  /** Character offset of the expression's first character in its template source. */
+  readonly offset: number;
 }
 
 export interface IfBranch {

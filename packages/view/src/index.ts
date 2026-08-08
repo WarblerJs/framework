@@ -21,6 +21,8 @@ export {
   ViewNotFoundException,
   TemplateCompilationError,
   TemplateExpressionError,
+  ViewReservedVariableError,
+  assertNoReservedViewData,
   formatViewError,
   isViewError,
 } from "./errors";
@@ -45,6 +47,11 @@ export {
   TemplateSyntaxError,
 } from "./scanner";
 
+export {
+  offsetToLineColumn,
+  type SourcePosition,
+} from "./internal/source-position";
+
 export type {
   AstNode,
   ExpressionNode,
@@ -68,6 +75,7 @@ export type {
   CompiledViewArtifactInput,
   RenderCompiledViewOptions,
   RendererContext,
+  ViewBuiltins,
   ViewData,
   ViewDataValue,
   ViewToolingHook,

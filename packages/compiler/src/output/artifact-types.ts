@@ -12,6 +12,8 @@ export interface RouteTableEntry {
   readonly id: number; readonly methodId: number; readonly pathId: number; readonly controllerId: number;
   readonly handlerId: number; readonly validatorId: number; readonly middlewareStart: number;
   readonly middlewareCount: number; readonly guardStart: number; readonly guardCount: number; readonly flags: number;
+  /** String-table id of the route's logical `name`, or `-1` when unnamed. */
+  readonly nameId: number;
 }
 /** Dense immutable compiler table entry for a socket event. */
 export interface SocketTableEntry {

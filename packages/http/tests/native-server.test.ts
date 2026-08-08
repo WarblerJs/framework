@@ -10,6 +10,8 @@ describe("native request pipeline", () => {
       allowedHosts: ["example.com"],
       headers: { maxCount: 10, maxSize: 1000, maxNameSize: 100, maxValueSize: 500 },
       securityHeaders: { "x-content-type-options": "nosniff" },
+      builtins: { asset: (path: string) => path, route: () => "" },
+      development: false,
     });
     const result = handler(
       new Request("http://example.com", { headers: { host: "example.com" } }),

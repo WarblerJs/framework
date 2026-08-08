@@ -6,8 +6,9 @@ describe("public API", () => {
     expect(Object.keys(api).sort()).toEqual([
       "ArchiveRes", "Controller", "Delete", "DownloadRes", "EmptyRes", "FileRes", "Get",
       "Head", "HtmlRes", "HtmlStreamRes", "ImageRes", "JsonRes", "Options", "Patch", "PdfRes",
-      "Post", "Put", "RedirectRes", "RequestContextFrozenError", "Sse", "SseRes", "TextRes",
-      "createHttpRuntimeLauncher", "prepareHttpValidationInput",
+      "Post", "Put", "RESERVED_VIEW_BUILTIN_NAMES", "RedirectRes", "RequestContextFrozenError",
+      "Sse", "SseRes", "TextRes",
+      "createHttpRuntimeLauncher", "csrf", "prepareHttpValidationInput", "view",
     ]);
   });
 });

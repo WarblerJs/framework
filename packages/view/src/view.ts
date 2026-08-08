@@ -32,7 +32,7 @@ export function View(
   if (engine === undefined) throw new ViewNotFoundException(name);
   const headers = toHeaders(options.headers);
   if (!headers.has("content-type")) headers.set("content-type", "text/html; charset=utf-8");
-  let html = engine.render(name, data);
+  let html = engine.render(name, data, options.builtins);
   if (activeArtifact?.hotReload === true && !html.includes("data-warbler-view")) {
     html = html.includes("</body>")
       ? html.replace("</body>", `${VIEW_DEVELOPMENT_SCRIPT}</body>`)

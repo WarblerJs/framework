@@ -40,7 +40,7 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
     ...graphKeys,
     ...providerRows.flatMap((row) => [row.provider.name, ...row.provider.dependencies]),
     ...controllerRows.map((row) => row.controller.name),
-    ...routeRows.flatMap((row) => [row.route.method, row.path, row.route.handler]),
+    ...routeRows.flatMap((row) => [row.route.method, row.path, row.route.handler, ...(row.route.name === undefined ? [] : [row.route.name])]),
     ...socketRows.flatMap((row) => [row.event.event, row.event.handler]),
     ...handlerNames, ...validatorNames, ...middlewareNames, ...guardNames,
   ]);
@@ -75,6 +75,7 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
       controllerId: controllerIds.get(`${row.graph}:${row.controller}`)!,
       handlerId: handlerIds.get(`${row.graph}:${row.controller}.${row.route.handler}`)!,
       validatorId: row.route.validator === undefined ? -1 : validatorIds.get(row.route.validator)!,
+      nameId: row.route.name === undefined ? -1 : stringIds.get(row.route.name)!,
       middlewareStart, middlewareCount: routeMiddleware.length - middlewareStart,
       guardStart, guardCount: routeGuards.length - guardStart, flags: routeFlags(row.route),
     });

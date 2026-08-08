@@ -8,6 +8,8 @@ export interface SourceLocationWIR {
 export interface RouteWIR extends SourceLocationWIR {
   readonly method: string;
   readonly path: string;
+  /** Logical route name (`{name: "users.show"}`) resolved by the `route()` view built-in. */
+  readonly name?: string;
   readonly handler: string;
   readonly validator?: string;
   readonly middleware: readonly string[];
