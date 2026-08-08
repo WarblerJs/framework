@@ -8,6 +8,6 @@ export { messageDescriptorCacheSize, parseMessageDescriptor } from "./messages";
 export { firstTranslatedValidationErrors, translateValidationErrors, type TranslatedValidationErrors } from "./translation";
 export type {
   CompiledValidator, InferRuleShape, InferValidatorBody, InferValidatorOutput, InferValidatorPath,
-  InferValidatorQuery, RequestValidator, RuleShape, ValidationErrors, ValidationInput,
-  ValidationIssue, ValidationResult, ValidationSource, ValidationTranslator,
+  InferValidatorQuery, MaybePromise, RequestValidator, RuleShape, ValidationErrorHandler, ValidationErrors,
+  ValidationInput, ValidationIssue, ValidationRequest, ValidationResult, ValidationSource, ValidationTranslator,
 } from "./types";

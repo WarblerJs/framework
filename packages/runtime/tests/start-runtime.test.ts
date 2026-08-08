@@ -246,3 +246,138 @@ describe("binding validation and Guard execution", () => {
     expect(() => executeGuardRange([{ id: 0, execute: () => "yes" }], [0], {}, undefined)).toThrow(InvalidGuardResultError);
   });
 });
+
+describe("validator onValidationError", () => {
+  const errors = Object.freeze({ "body.name": Object.freeze([Object.freeze({
+    source: "body", path: Object.freeze(["name"]), field: "name", code: "invalid_type",
+    message: Object.freeze({ key: "validators.invalid_name", parameters: Object.freeze({}) }),
+  })]) });
+
+  function invalidApplication(
+    events: string[],
+    validate: (input: unknown) => unknown,
+  ): GeneratedApplicationBindings {
+    const base = application(events);
+    return Object.freeze({
+      ...base,
+      validators: Object.freeze([Object.freeze({ id: 0, validate })]),
+    });
+  }
+
+  test("runs the compiled handler with the raw request and structured errors, and skips the default response", async () => {
+    const events: string[] = [];
+    const seen: { req?: unknown; errors?: unknown } = {};
+    const base = application(events);
+    const app = Object.freeze({
+      ...base,
+      validators: Object.freeze([Object.freeze({
+        id: 0,
+        validate: () => Object.freeze({ valid: false, errors }),
+        onValidationError: (req: unknown, receivedErrors: unknown) => {
+          seen.req = req; seen.errors = receivedErrors;
+          return Response.json({ custom: true }, { status: 422 });
+        },
+      })]),
+      http: Object.freeze({
+        routes: Object.freeze([Object.freeze({ id: 0 })]),
+        createRoutes: (execute: HttpRouteExecutor) => Object.freeze({
+          "/users": Object.freeze({
+            GET: (request: Request) => execute(0, request, Object.freeze({
+              value: Object.freeze({ name: 5 }), query: Object.freeze({}), path: Object.freeze({ id: "1" }),
+              headers: Object.freeze({}), cookies: Object.freeze({}),
+            })),
+          }),
+        }),
+      }),
+    });
+    let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
+    const http: RuntimeTransportLauncher = { kind: "http", start(input) { routes = (input.bindings as { readonly routes: typeof routes }).routes; return Object.freeze({}); } };
+    const runtime = await startRuntime({ application: app, runtimeConfig: runtimeConfig(true), transportLaunchers: [http] });
+    // Real BunRequest instances carry `.params` populated by Bun's router before Warbler
+    // ever sees the request; a plain `Request` doesn't, so it's attached here to match.
+    const request = new Request("http://localhost/users/1");
+    Object.defineProperty(request, "params", { value: Object.freeze({ id: "1" }) });
+    const response = await routes["/users"]!.GET!(request);
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ custom: true });
+    expect(events).not.toContain("middleware");
+    expect(seen.errors).toEqual(errors);
+    const req = seen.req as { body: unknown; params: unknown; headers: unknown; cookies: unknown; native: unknown };
+    expect(req.body).toEqual({ name: 5 });
+    expect(req.params).toEqual({ id: "1" });
+    expect(req.headers).toBeInstanceOf(Headers);
+    expect(req.cookies).toBeInstanceOf(Bun.CookieMap);
+    expect(req.native).toBeInstanceOf(Request);
+    await runtime.stop();
+  });
+
+  test("awaits an async handler and returns its response", async () => {
+    const events: string[] = [];
+    const base = application(events);
+    const app = Object.freeze({
+      ...base,
+      validators: Object.freeze([Object.freeze({
+        id: 0,
+        validate: () => Object.freeze({ valid: false, errors }),
+        onValidationError: async (): Promise<Response> => { await Bun.sleep(0); return Response.json({ async: true }, { status: 422 }); },
+      })]),
+      http: Object.freeze({
+        routes: Object.freeze([Object.freeze({ id: 0 })]),
+        createRoutes: (execute: HttpRouteExecutor) => Object.freeze({ "/users": Object.freeze({ GET: (request: Request) => execute(0, request, Object.freeze({})) }) }),
+      }),
+    });
+    let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
+    const http: RuntimeTransportLauncher = { kind: "http", start(input) { routes = (input.bindings as { readonly routes: typeof routes }).routes; return Object.freeze({}); } };
+    const runtime = await startRuntime({ application: app, runtimeConfig: runtimeConfig(true), transportLaunchers: [http] });
+    const response = await routes["/users"]!.GET!(new Request("http://localhost/users"));
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({ async: true });
+    await runtime.stop();
+  });
+
+  test("falls back to the existing default validation response when no handler is compiled", async () => {
+    const events: string[] = [];
+    let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
+    const http: RuntimeTransportLauncher = {
+      kind: "http",
+      start(input) { routes = (input.bindings as { readonly routes: typeof routes }).routes; return Object.freeze({}); },
+    };
+    const runtime = await startRuntime({
+      application: invalidApplication(events, () => Object.freeze({ valid: false, errors })),
+      runtimeConfig: runtimeConfig(true),
+      transportLaunchers: [http],
+    });
+    const response = await routes["/users"]!.GET!(new Request("http://localhost/users"));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ name: "validators.invalid_name" });
+    expect(events).not.toContain("middleware");
+    await runtime.stop();
+  });
+
+  test("lets a throwing handler propagate instead of swallowing or recursing", async () => {
+    const events: string[] = [];
+    const base = application(events);
+    const app = Object.freeze({
+      ...base,
+      validators: Object.freeze([Object.freeze({
+        id: 0,
+        validate: () => Object.freeze({ valid: false, errors }),
+        onValidationError: () => { throw new Error("handler failure"); },
+      })]),
+      http: Object.freeze({
+        routes: Object.freeze([Object.freeze({ id: 0 })]),
+        // Mirrors the compiler-generated wiring (`prepareHttpValidationInput(...).then((input) =>
+        // executeHttpRoute(...))`), where `execute` always runs inside a `.then()` — a synchronous
+        // throw inside it becomes a promise rejection, exactly like a controller throwing today.
+        createRoutes: (execute: HttpRouteExecutor) => Object.freeze({
+          "/users": Object.freeze({ GET: (request: Request) => Promise.resolve().then(() => execute(0, request, Object.freeze({}))) }),
+        }),
+      }),
+    });
+    let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
+    const http: RuntimeTransportLauncher = { kind: "http", start(input) { routes = (input.bindings as { readonly routes: typeof routes }).routes; return Object.freeze({}); } };
+    const runtime = await startRuntime({ application: app, runtimeConfig: runtimeConfig(true), transportLaunchers: [http] });
+    await expect(routes["/users"]!.GET!(new Request("http://localhost/users"))).rejects.toThrow("handler failure");
+    await runtime.stop();
+  });
+});

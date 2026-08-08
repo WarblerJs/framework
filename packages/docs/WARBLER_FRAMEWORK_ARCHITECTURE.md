@@ -1017,6 +1017,85 @@ isn't optional sugar the way `AppRequest<CreateUserInput>` used to be.
 
 ---
 
+## 17a. Custom Validation Failure Responses (`onValidationError`)
+
+By default, a request that fails a route's validator short-circuits straight
+to Warbler's default validation-error response — `Response.json({ [field]:
+message }, { status: 400 })`, one translated message per failing field — and
+the controller never runs. `defineValidator(...)` accepts an optional
+`onValidationError(req, errors)` that overrides that default:
+
+```text
+Request → Validator → Validation → Valid?
+                                     ├─ YES → continue pipeline → controller
+                                     └─ NO
+                                          ↓
+                                        onValidationError exists?
+                                          ├─ YES → run handler → its Response is used → stop
+                                          └─ NO  → default validation response → stop
+```
+
+The controller never executes once validation has failed, regardless of
+which branch runs.
+
+```ts
+import { defineValidator, v } from "@warbler/validators";
+import { view } from "@warbler/view";
+
+export const validateUserId = defineValidator({
+  paramRules: {
+    id: v.uuid("id_invalid_uuid"),
+  },
+  headerRules: {
+    "x-retries": v.coerce
+      .number("validators.invalid_retries")
+      .int("validators.invalid_retries")
+      .nonnegative("validators.invalid_retries"),
+  },
+  onValidationError(req, errors) {
+    return view("auth.login", {
+      errors,
+      old: req.body,
+    });
+  },
+});
+```
+
+- **Signature**: `(req: ValidationRequest, errors: ValidationErrors) =>
+  Response | Promise<Response>`, both sync and async are supported.
+- **`req`**: the raw, un-validated request. `native`, `headers` (a real
+  `Headers`), `cookies` (a real `Bun.CookieMap`), `context`, `locale`, and
+  `tr(...)` all behave exactly as on a successfully-validated `AppRequest` —
+  but `body`/`params`/`query` stay `unknown`, deliberately never typed as the
+  validated output, since validation failed.
+- **`errors`**: the same structured `ValidationErrors` produced internally by
+  the compiled validator (`{ "body.field": [{ source, path, field, code,
+  message }] }`) — passed through untranslated and unmodified.
+- **Independent of which sections are used**: works the same whether the
+  validator declares `bodyRules`, `queryRules`, `paramRules`, `headerRules`,
+  `cookieRules`, or any combination — `onValidationError` is a property of the
+  validator definition itself, not tied to a particular rule section.
+- **Errors from the handler itself**: a throw or rejection inside
+  `onValidationError` is not caught or converted into another validation
+  failure — it propagates through Warbler's ordinary runtime/HTTP error
+  handling, exactly like a controller throwing.
+- **`@warbler/validators` has no dependency on `@warbler/view`** — the example
+  above works because application code imports both independently; the
+  validator package only needs its return value to be `Response`-compatible.
+- **Backward compatible**: validators that don't define `onValidationError`
+  are entirely unaffected — same default status, payload shape, error codes,
+  translation, and logging as before.
+
+Compiler/runtime plumbing: `compileValidator(...)` carries `onValidationError`
+onto the compiled validator alongside its schemas; the compiler's generated
+`validators.generated.ts` re-exposes it on each `validatorBindings` entry
+(function identity preserved — never serialized); the Runtime calls it in
+place of the default response builder when present, building the request the
+same way the successful path does (`§18` below), just against the raw input
+instead of the validated one.
+
+---
+
 ## 18. Request Pipeline
 
 Bun performs native route matching first.

@@ -35,7 +35,7 @@ export type RuntimeMiddleware = (input: unknown, context: unknown, next: Runtime
 export type RuntimeValidator = (input: unknown) => unknown;
 export interface GuardBinding { readonly id: number; readonly execute: unknown }
 export interface MiddlewareBinding { readonly id: number; readonly execute: unknown }
-export interface ValidatorBinding { readonly id: number; readonly flags?: number; readonly validate: unknown }
+export interface ValidatorBinding { readonly id: number; readonly flags?: number; readonly validate: unknown; readonly onValidationError?: unknown }
 export interface GeneratedApplicationDefinition {
   readonly strings: readonly string[];
   readonly graphIds: Readonly<Record<string, number>>;
