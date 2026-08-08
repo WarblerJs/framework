@@ -1,5 +1,5 @@
 import { ValidatorError, ValidatorErrorCode } from "./errors";
-import type { RuleShape, InferRuleShape } from "./types";
+import type { RuleShape, InferRuleShape, ValidationErrorHandler } from "./types";
 
 type EmptyShape = Readonly<Record<never, never>>;
 
@@ -23,6 +23,13 @@ export type ValidatorDefinition<
   metadataRules?: TMetadata;
   mapV?: (value: InferRuleShape<TRules>) => TMapped;
   mapK?: TKeyMap;
+  /**
+   * Invoked instead of the default validation-error response when this validator's rules
+   * reject a request. Receives the raw (untrusted) request and the structured validation
+   * errors, and its returned `Response` is used verbatim — the controller never runs.
+   * Falls back to Warbler's default validation-error response when omitted.
+   */
+  onValidationError?: ValidationErrorHandler;
   /** @deprecated use `bodyRules` */
   rules?: TRules;
   /** @deprecated use `paramRules` */

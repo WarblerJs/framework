@@ -33,7 +33,12 @@ export function validateApplicationBindings(application: GeneratedApplicationBin
   const validators = dense(application.validators, "validator");
   for (const binding of application.guards) if (typeof binding.execute !== "function") fail(RuntimeDiagnosticCode.INVALID_APPLICATION_BINDINGS, "Guard binding is not executable.", { bindingId: binding.id });
   for (const binding of application.middleware) if (typeof binding.execute !== "function") fail(RuntimeDiagnosticCode.INVALID_APPLICATION_BINDINGS, "Middleware binding is not executable.", { bindingId: binding.id });
-  for (const binding of application.validators) if (typeof binding.validate !== "function") fail(RuntimeDiagnosticCode.INVALID_APPLICATION_BINDINGS, "Validator binding is not executable.", { bindingId: binding.id });
+  for (const binding of application.validators) {
+    if (typeof binding.validate !== "function") fail(RuntimeDiagnosticCode.INVALID_APPLICATION_BINDINGS, "Validator binding is not executable.", { bindingId: binding.id });
+    if (binding.onValidationError !== undefined && typeof binding.onValidationError !== "function") {
+      fail(RuntimeDiagnosticCode.INVALID_APPLICATION_BINDINGS, "Validator onValidationError binding is not executable.", { bindingId: binding.id });
+    }
+  }
   if (application.application.providerTable.length !== application.providers.length) fail(RuntimeDiagnosticCode.INVALID_APPLICATION_BINDINGS, "Provider table count does not match executable bindings.");
 
   for (const binding of application.providers) {

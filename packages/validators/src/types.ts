@@ -23,6 +23,7 @@ export interface RequestValidator<
   readonly metadataRules?: TMetadata;
   readonly mapV?: (value: InferShape<TRules>) => TMapped;
   readonly mapK?: Readonly<Record<string, string>>;
+  readonly onValidationError?: ValidationErrorHandler;
   /** @deprecated use `bodyRules` */
   readonly rules?: TRules;
   /** @deprecated use `paramRules` */
@@ -54,6 +55,31 @@ export type ValidationResult<TOutput = unknown> =
   }>
   | Readonly<{ valid: false; errors: ValidationErrors }>;
 
+export type MaybePromise<T> = T | Promise<T>;
+
+/**
+ * Structurally mirrors `@warbler/http`'s `AppRequest` without importing it — `@warbler/http`
+ * already depends on `@warbler/validators`, so importing it back here would be circular.
+ * Every field the un-validated failure path can produce a real value for is kept precisely
+ * typed (`native`, `headers`, `cookies`, `context`, `locale`, `tr`); `body`/`params`/`query`
+ * stay `unknown` deliberately — validation failed, so that input must never be typed as if it
+ * were the successfully-validated output.
+ */
+export interface ValidationRequest {
+  readonly native: Request;
+  readonly body: unknown;
+  readonly params: Readonly<Record<string, unknown>>;
+  readonly query: unknown;
+  readonly headers: Headers;
+  readonly cookies: Bun.CookieMap;
+  readonly context: Readonly<Record<string, unknown>>;
+  readonly locale: string;
+  tr(key: string, parameters?: TranslationParameters): string;
+}
+
+/** Invoked with the raw request and structured errors when a validator's rules reject a request. */
+export type ValidationErrorHandler = (req: ValidationRequest, errors: ValidationErrors) => MaybePromise<Response>;
+
 export interface CompiledValidator<TOutput = unknown> {
   readonly id: number;
   readonly flags: number;
@@ -66,6 +92,7 @@ export interface CompiledValidator<TOutput = unknown> {
   readonly metadataSchema?: z.ZodType;
   readonly mapValue?: (value: Readonly<Record<string, unknown>>) => unknown;
   readonly keyMap?: Readonly<Record<string, string>>;
+  readonly onValidationError?: ValidationErrorHandler;
   execute(input: ValidationInput): ValidationResult<TOutput>;
 }
 

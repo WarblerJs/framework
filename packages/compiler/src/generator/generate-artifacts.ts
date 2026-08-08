@@ -281,7 +281,7 @@ import { compileValidator } from "@warbler/validators";
 ${renderImports(bindings)}
 ${compiled}
 export const validatorBindings = Object.freeze([
-${bindings.map((binding) => `  Object.freeze({ id: ${binding.id}, flags: CompiledValidator${binding.id}.flags, validate: CompiledValidator${binding.id}.execute }),`).join("\n")}
+${bindings.map((binding) => `  Object.freeze({ id: ${binding.id}, flags: CompiledValidator${binding.id}.flags, validate: CompiledValidator${binding.id}.execute, onValidationError: CompiledValidator${binding.id}.onValidationError }),`).join("\n")}
 ]);
 `;
 }

@@ -274,14 +274,15 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     });
     const core = (input: unknown): unknown => {
       const validationInput = http ? input : socketValidationInput(input, socketEvent);
-      return runValidated(this.#indexes!.validators[validatorId], validationInput, (validated) => {
+      const validator = this.#indexes!.validators[validatorId];
+      return runValidated(validator, validationInput, (validated) => {
         const requestContext = new RequestContextStore();
         const pipelineValue = http ? buildAppRequest(validationInput, validated, requestContext) : socketValidatedEnvelope(input, validated);
         const guardContext = http ? requestContext : socketConnectionContext(pipelineValue);
         const guarded = executeGuardRange(this.#indexes!.guards, guardIds, pipelineValue, guardContext);
         if (isThenable(guarded)) return guarded.then((allowed) => allowed ? terminal(pipelineValue, guardContext) : http ? forbidden() : undefined);
         return guarded ? terminal(pipelineValue, guardContext) : http ? forbidden() : undefined;
-      }, (outcome) => http ? invalidValidationResponse(outcome.errors, validationInput) : socketValidationFailure(input, outcome.errors));
+      }, (outcome) => http ? invalidHttpValidation(validator, outcome.errors, validationInput) : socketValidationFailure(input, outcome.errors));
     };
     // Only wrap requests in a fresh request-scoped container when the owning Graph actually declares
     // request-scoped providers — otherwise every request would pay for an unused eager-init pass.
@@ -441,6 +442,29 @@ function isThenable<T>(value: T | Promise<T>): value is Promise<T> {
 }
 function forbidden(): Response { return new Response("Forbidden", { status: 403 }); }
 function invalidRequest(): Response { return new Response("Invalid request", { status: 400 }); }
+/**
+ * Runs a validator's `onValidationError` handler, if one was compiled onto the binding,
+ * against the raw (un-validated) request; otherwise falls back to the default JSON
+ * validation-error response. The handler's return value flows straight back through the
+ * same `normalizeHttpResult` check every controller result already passes through, and a
+ * throw/rejection is left to propagate exactly like a controller throwing — no separate
+ * error handling is introduced here.
+ */
+function invalidHttpValidation(
+  validator: import("../generated/executable-bindings").ValidatorBinding | undefined,
+  rawErrors: unknown,
+  validationInput: unknown,
+): unknown {
+  const handler = validator?.onValidationError;
+  if (typeof handler !== "function") return invalidValidationResponse(rawErrors, validationInput);
+  const req = buildAppRequest(validationInput, rawRequestValue(validationInput), new RequestContextStore());
+  return (handler as (req: unknown, errors: unknown) => unknown)(req, rawErrors);
+}
+function rawRequestValue(validationInput: unknown): unknown {
+  return typeof validationInput === "object" && validationInput !== null && "value" in validationInput
+    ? (validationInput as Readonly<Record<string, unknown>>).value
+    : undefined;
+}
 function invalidValidationResponse(rawErrors: unknown, input: unknown): Response {
   const errors = validationErrors(rawErrors);
   const translate = translatorFromInput(input);

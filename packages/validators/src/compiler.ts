@@ -4,7 +4,7 @@ import { ValidatorError, ValidatorErrorCode } from "./errors";
 import { applyKeyMap, validateKeyMap } from "./mapping";
 import { issueMessage } from "./messages";
 import type {
-  CompiledValidator, RequestValidator, RuleShape, ValidationErrors, ValidationInput,
+  CompiledValidator, RequestValidator, RuleShape, ValidationErrorHandler, ValidationErrors, ValidationInput,
   ValidationIssue, ValidationResult, ValidationSource,
 } from "./types";
 
@@ -26,7 +26,7 @@ const selectedHeaderKeys = new WeakMap<z.ZodType, readonly string[]>();
 
 export function compileValidator<T extends RequestValidator>(definition: T, id = 0): CompiledValidator {
   if (!isRecord(definition) || !Number.isSafeInteger(id) || id < 0) throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, "Validator definition or ID is invalid.");
-  const allowed = new Set(["rules", "bodyRules", "queryRules", "pathRules", "paramRules", "headerRules", "cookieRules", "messageRules", "metadataRules", "mapV", "mapK"]);
+  const allowed = new Set(["rules", "bodyRules", "queryRules", "pathRules", "paramRules", "headerRules", "cookieRules", "messageRules", "metadataRules", "mapV", "mapK", "onValidationError"]);
   if (Object.keys(definition).some((key) => !allowed.has(key))) throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, "Validator definition contains an unknown property.");
   const normalized = {
     rules: resolveAliasedSection(definition.bodyRules as RuleShape | undefined, definition.rules as RuleShape | undefined, "bodyRules", "rules"),
@@ -49,12 +49,14 @@ export function compileValidator<T extends RequestValidator>(definition: T, id =
   }
   if (flags === 0) throw new ValidatorError(ValidatorErrorCode.INVALID_RULES, "Validator must define at least one rule section.");
   if (definition.mapV !== undefined && typeof definition.mapV !== "function") throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, "mapV must be synchronous function.");
+  if (definition.onValidationError !== undefined && typeof definition.onValidationError !== "function") throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, "onValidationError must be a function.");
   const knownKeys = new Set(Object.keys(normalized.rules ?? {}));
   const keyMap = definition.mapK === undefined ? undefined : validateKeyMap(definition.mapK, definition.mapV === undefined ? knownKeys : undefined);
   const compiledBase = {
     id, flags, ...schemas,
     ...(definition.mapV === undefined ? {} : { mapValue: definition.mapV as (value: Readonly<Record<string, unknown>>) => unknown }),
     ...(keyMap === undefined ? {} : { keyMap }),
+    ...(definition.onValidationError === undefined ? {} : { onValidationError: definition.onValidationError as ValidationErrorHandler }),
   };
   const compiled: CompiledValidator = Object.freeze({
     ...compiledBase,
