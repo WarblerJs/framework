@@ -79,6 +79,16 @@ return View("home.index", { users });
 `{{ value }}` is escaped. `{!! value !!}` deliberately emits raw HTML and must not receive
 untrusted content.
 
+## Framework built-ins
+
+`View()`/`renderCompiledView()` accept an optional `builtins` map (`ViewResponseOptions.builtins`
+/ `RenderCompiledViewOptions.builtins`) — a second, function-capable scope resolved alongside
+`data` inside `{{ }}`/`{{{ }}}` expressions, using the exact same evaluator. This is how
+`@warbler/http`'s `view()` makes `tr()`, `asset()`, `route()`, `csrfField`, and `csrfToken`
+available to every template automatically; `@warbler/view` itself has no opinion on what a
+built-in is — it just resolves names, the same as `data`. See `@warbler/http`'s README for the
+concrete built-in list, reserved-name rules, and error handling.
+
 Tailwind CSS v4 uses the official CLI when enabled in the existing View configuration:
 
 ```ts

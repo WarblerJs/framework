@@ -1,3 +1,5 @@
+import type { ViewData } from "./types";
+
 /** Base error for deterministic Warbler view failures. */
 export class ViewError extends Error {
   public constructor(
@@ -43,6 +45,8 @@ export class TemplateExpressionError extends ViewError {
     public readonly detail: string,
     public readonly availableVariables: readonly string[],
     cause?: unknown,
+    /** Character offset of the failing expression in its template source, when known. */
+    public readonly offset?: number,
   ) {
     super(`Failed to evaluate template expression: ${expression}`, "VIEW1003", {
       cause,
@@ -50,6 +54,32 @@ export class TemplateExpressionError extends ViewError {
     this.name = "TemplateExpressionError";
   }
 }
+
+/** Error thrown when render data attempts to override a framework-reserved view built-in. */
+export class ViewReservedVariableError extends ViewError {
+  public constructor(
+    public readonly variableName: string,
+  ) {
+    super(`Variable "${variableName}" is reserved by Warbler.`, "VIEW1004");
+    this.name = "ViewReservedVariableError";
+  }
+}
+
+/**
+ * Throws `ViewReservedVariableError` for the first key in `data` that collides with a
+ * framework-reserved built-in name. Generic on purpose: it doesn't know the specific
+ * reserved names (`tr`, `csrfField`, ...) — callers own that policy and pass it in.
+ */
+export const assertNoReservedViewData = (
+  data: ViewData,
+  reserved: readonly string[],
+): void => {
+  for (const name of reserved) {
+    if (name in data) {
+      throw new ViewReservedVariableError(name);
+    }
+  }
+};
 
 /** Checks whether a failure belongs to the Warbler view package. */
 export const isViewError = (value: unknown): value is ViewError =>

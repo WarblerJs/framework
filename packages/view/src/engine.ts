@@ -13,6 +13,7 @@ import type {
   CompiledTemplate,
   CompiledViewArtifact,
   RenderCompiledViewOptions,
+  ViewBuiltins,
   ViewData,
   ViewDataValue,
 } from "./types";
@@ -98,18 +99,20 @@ export class CompiledViewEngine {
   public render(
     name: string,
     data: ViewData = Object.freeze({}),
+    builtins?: ViewBuiltins,
   ): string {
-    return this.renderView(name, data, true);
+    return this.renderView(name, data, true, builtins);
   }
 
   private renderView(
     name: string,
     data: ViewData,
     applyDefaultLayout: boolean,
+    builtins?: ViewBuiltins,
   ): string {
     const ast = this.loadAst(name);
     const renderer = this.getRenderer(name);
-    const html = renderer(data);
+    const html = renderer(data, builtins);
 
     if (
       !applyDefaultLayout ||
@@ -120,15 +123,15 @@ export class CompiledViewEngine {
       return html;
     }
 
-    return this.renderDefaultLayout(html, data);
+    return this.renderDefaultLayout(html, data, builtins);
   }
 
   private rendererContext = (
     name: string,
   ) => Object.freeze({
     viewName: name,
-    renderTemplate: (partial: string, partialData: ViewData) =>
-      this.renderView(partial, partialData, false),
+    renderTemplate: (partial: string, partialData: ViewData, partialBuiltins?: ViewBuiltins) =>
+      this.renderView(partial, partialData, false, partialBuiltins),
     ...(this.translate === undefined
       ? {}
       : { translate: this.translate }),
@@ -193,6 +196,7 @@ export class CompiledViewEngine {
   private renderDefaultLayout(
     content: string,
     data: ViewData,
+    builtins?: ViewBuiltins,
   ): string {
     const layoutName = this.artifact.defaultLayout;
 
@@ -209,7 +213,7 @@ export class CompiledViewEngine {
     return renderer(Object.freeze({
       ...data,
       content,
-    } as Record<string, ViewDataValue>));
+    } as Record<string, ViewDataValue>), builtins);
   }
 }
 
@@ -225,7 +229,7 @@ export const renderCompiledView = (
     ? Object.freeze({})
     : options.data;
 
-  return engine.render(options.name, data);
+  return engine.render(options.name, data, options.builtins);
 };
 
 export { ViewNotFoundException } from "./errors";

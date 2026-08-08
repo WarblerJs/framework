@@ -206,3 +206,49 @@ describe("executable bindings", () => {
     }));
   }, 15_000);
 });
+
+describe("Named routes", () => {
+  test("assigns a nameId for a route declared with `name`, and -1 for unnamed routes", async () => {
+    const root = await phase2Project();
+    const sourcePath = join(root, "src", "application.ts");
+    const source = await Bun.file(sourcePath).text();
+    await Bun.write(sourcePath, source.replace(
+      '@Get("", { validator: ValidateRequest, guards: [AuthGuard, AuthGuard], middleware: [AuditMiddleware], csrf: true })',
+      '@Get("", { name: "users.list", validator: ValidateRequest, guards: [AuthGuard, AuthGuard], middleware: [AuditMiddleware], csrf: true })',
+    ));
+    const optimized = (await compileProject(root)).generatedApplication!.optimized;
+    const get = optimized.routes.find((route) => optimized.strings[route.methodId] === "GET")!;
+    const post = optimized.routes.find((route) => optimized.strings[route.methodId] === "POST")!;
+    expect(optimized.strings[get.nameId]).toBe("users.list");
+    expect(post.nameId).toBe(-1);
+  }, 15_000);
+
+  test("named routes flow through to the generated httpRouteBindings rows unchanged", async () => {
+    const root = await phase2Project();
+    const sourcePath = join(root, "src", "application.ts");
+    const source = await Bun.file(sourcePath).text();
+    await Bun.write(sourcePath, source.replace(
+      '@Get("", { validator: ValidateRequest, guards: [AuthGuard, AuthGuard], middleware: [AuditMiddleware], csrf: true })',
+      '@Get("", { name: "users.list", validator: ValidateRequest, guards: [AuthGuard, AuthGuard], middleware: [AuditMiddleware], csrf: true })',
+    ));
+    await compileProject(root);
+    const httpGenerated = await import(join(root, ".warbler", "generated", "http.generated.ts"));
+    const tablesGenerated = await import(join(root, ".warbler", "generated", "tables.generated.ts"));
+    const named = httpGenerated.httpRouteBindings.find((route: { nameId: number }) => route.nameId !== -1);
+    expect(tablesGenerated.strings[named.nameId]).toBe("users.list");
+  }, 15_000);
+
+  test("rejects duplicate route names across the whole application", async () => {
+    const root = await phase2Project();
+    const sourcePath = join(root, "src", "application.ts");
+    const source = await Bun.file(sourcePath).text();
+    await Bun.write(sourcePath, source
+      .replace(
+        '@Get("", { validator: ValidateRequest, guards: [AuthGuard, AuthGuard], middleware: [AuditMiddleware], csrf: true })',
+        '@Get("", { name: "users.same", validator: ValidateRequest, guards: [AuthGuard, AuthGuard], middleware: [AuditMiddleware], csrf: true })',
+      )
+      .replace('@Post("", { guards: [AuthGuard] }) create() {}', '@Post("", { guards: [AuthGuard], name: "users.same" }) create() {}'));
+    const context = await compileProject(root);
+    expect(context.diagnostics).toContainEqual(expect.objectContaining({ code: "WARBLER1013" }));
+  }, 15_000);
+});

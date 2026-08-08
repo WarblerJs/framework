@@ -211,6 +211,7 @@ export function normalizeHttpConfig(value: unknown): NormalizedHttpConfig {
       methods: Object.freeze(csrfMethods),
       headerName: stringValue(csrf.headerName, "http.csrf.headerName", "x-csrf-token").toLowerCase(),
       cookieName: stringValue(csrf.cookieName, "http.csrf.cookieName", "__Host-warbler-csrf"),
+      fieldName: stringValue(csrf.fieldName, "http.csrf.fieldName", "_csrf"),
       sources: Object.freeze(csrfSources),
       strictSources: booleanValue(csrf.strictSources, "http.csrf.strictSources", true),
     },

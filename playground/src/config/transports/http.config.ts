@@ -31,7 +31,11 @@ export const httpConfig = {
     methods: ["POST", "PUT", "PATCH", "DELETE"],
     headerName: "x-csrf-token",
     cookieName: "__Host-warbler-csrf",
-    sources: ["header"],
+    fieldName: "_csrf",
+    // "form" lets a plain HTML <form> submit the {{{ csrfField }}} hidden input
+    // directly in the POST body; "header" still covers JS/fetch-driven requests
+    // that set x-csrf-token explicitly.
+    sources: ["header", "form"],
     strictSources: true,
   },
   security: {

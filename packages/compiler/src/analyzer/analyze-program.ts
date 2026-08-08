@@ -80,11 +80,13 @@ function analyzeClass(
         }
         const options = objectArgument(decorator.call, 1);
         const validator = objectReference(options, "validator");
+        const routeName = objectStringOrUndefined(options, "name");
         const stream = decorator.name === "Sse" ? "sse" : objectEnum(options, "stream", ["sse", "html"]);
         const response = objectEnum(options, "response", ["static", "view", "json", "html"]);
         routes.push(Object.freeze({
           ...location(member, source), method: routeMethod, path: stringArgument(decorator.call, 0, ""), handler: memberName,
           ...(validator === undefined ? {} : { validator }),
+          ...(routeName === undefined ? {} : { name: routeName }),
           middleware: Object.freeze(objectReferenceArray(options, "middleware")),
           guards: Object.freeze(objectReferenceArray(options, "guards")),
           csrf: objectBoolean(options, "csrf"),
@@ -318,6 +320,10 @@ function resolveProvide(call: ts.CallExpression | undefined, aliases: ReadonlyMa
 function objectString(object: ts.ObjectLiteralExpression | undefined, key: string, fallback: string): string {
   const property = object === undefined ? undefined : findProperty(object, key);
   return property !== undefined && ts.isPropertyAssignment(property) && ts.isStringLiteralLike(property.initializer) ? property.initializer.text : fallback;
+}
+function objectStringOrUndefined(object: ts.ObjectLiteralExpression | undefined, key: string): string | undefined {
+  const property = object === undefined ? undefined : findProperty(object, key);
+  return property !== undefined && ts.isPropertyAssignment(property) && ts.isStringLiteralLike(property.initializer) ? property.initializer.text : undefined;
 }
 function objectTransport(object: ts.ObjectLiteralExpression | undefined): string {
   const property = object === undefined ? undefined : findProperty(object, "transport");
