@@ -32,8 +32,8 @@ export class UserController {
     return JsonRes( await this.#findUser.execute(request.params.id + ''));
   }
 
-  // @Post("/")
-  // create(input: any) {
-  //   return this.#createUser.execute(input);
-  // }
+  @Post("/")
+  create(input: any) {
+    return this.#createUser.execute(input);
+  }
 }

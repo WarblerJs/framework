@@ -1,6 +1,52 @@
-document.documentElement.dataset.warbler="ready";var w=new WebSocket("ws://192.168.1.3:3001/chat");w.addEventListener("open",()=>{console.log("Connected"),w.send(JSON.stringify({event:"ping",data:{}})),w.send(JSON.stringify({event:"room.join",data:{roomId:"general"}}))});w.addEventListener("message",(x)=>{let q=JSON.parse(x.data);if(console.log(q),q.event==="room.joined")z(q.data.roomId),w.send(JSON.stringify({event:"chat.message",data:{roomId:q.data.roomId,content:"hello from the browser"}}));if(console.log("message",q),q.event==="chat.message.created"){console.log("Recived from socket",q.data.content);let y=`
+// resources/js/app.ts
+document.documentElement.dataset.warbler = "ready";
+var socket = new WebSocket("ws://192.168.1.3:3001/chat");
+socket.addEventListener("open", () => {
+  console.log("Connected");
+  socket.send(JSON.stringify({ event: "ping", data: {} }));
+  socket.send(JSON.stringify({ event: "room.join", data: { roomId: "general" } }));
+});
+socket.addEventListener("message", (event) => {
+  const message = JSON.parse(event.data);
+  console.log(message);
+  if (message.event === "room.joined") {
+    joinRoomAndChat(message.data.roomId);
+    socket.send(JSON.stringify({
+      event: "chat.message",
+      data: { roomId: message.data.roomId, content: "hello from the browser" }
+    }));
+  }
+  console.log("message", message);
+  if (message.event === "chat.message.created") {
+    console.log("Recived from socket", message.data.content);
+    const htmlString = `
       <div class="bg-gray-50 border-b border-gray-200 p-2">
-        <div>${q.data.id}</div>
-        <div>${q.data.content}</div>
+        <div>${message.data.id}</div>
+        <div>${message.data.content}</div>
       </div>
-    `;document.getElementById("content-msg")?.insertAdjacentHTML("beforeend",y)}});w.addEventListener("close",()=>{console.log("Disconnected")});w.addEventListener("error",(x)=>{console.error(x)});function z(x){let q=document.getElementById("sub");if(q)q.addEventListener("click",()=>{let y=document.getElementById("input-text");if(y.value.trim().length>0)w.send(JSON.stringify({event:"chat.message",data:{roomId:x,content:y.value.trim()}}))})}
+    `;
+    document.getElementById("content-msg")?.insertAdjacentHTML("beforeend", htmlString);
+  }
+});
+socket.addEventListener("close", () => {
+  console.log("Disconnected");
+});
+socket.addEventListener("error", (error) => {
+  console.error(error);
+});
+function joinRoomAndChat(roomId) {
+  const btn = document.getElementById("sub");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      const input = document.getElementById("input-text");
+      if (input.value.trim().length > 0) {
+        socket.send(JSON.stringify({
+          event: "chat.message",
+          data: { roomId, content: input.value.trim() }
+        }));
+      }
+    });
+  }
+}
+
+//# debugId=FAC701829FF19FFF64756E2164756E21
