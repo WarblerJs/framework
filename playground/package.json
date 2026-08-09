@@ -23,7 +23,8 @@
     "@warbler/validators": "workspace:*",
     "@warbler/view": "workspace:*",
     "@warbler/config": "workspace:*",
-    "@warbler/websocket": "workspace:*"
+    "@warbler/websocket": "workspace:*",
+    "@warbler/frontend": "workspace:*"
   },
   "devDependencies": {
     "@warbler/cli": "workspace:*",

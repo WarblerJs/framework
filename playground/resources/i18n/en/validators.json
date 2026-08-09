@@ -1,4 +1,5 @@
 {
+  "login": "Login",
   "username_not_valid": "Username is invalid.",
   "email_not_valid": "Email is invalid.",
   "invalid_page": "Page must be a positive number.",

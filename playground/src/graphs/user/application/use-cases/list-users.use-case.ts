@@ -7,7 +7,7 @@ export class ListUsersUseCase {
   readonly #users = inject(UserRepositoryPort);
 
   execute(limit = 100, offset = 0) {
-     throw new ConflictError(AppErrorCode.USER_NOT_FOUND, `Limit not stable values`);
+    // throw new ConflictError(AppErrorCode.USER_NOT_FOUND, `Limit not stable values`);
     return this.#users.findMany({
       limit,
       offset,
