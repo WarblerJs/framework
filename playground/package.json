@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "warbler": "bun ../../packages/cli/src/cli.ts",
+    "warbler": "warbler",
     "dev": "warbler dev",
     "build": "warbler build",
     "start": "warbler start",
@@ -16,6 +16,7 @@
     "clean": "warbler clean"
   },
   "dependencies": {
+    "@warbler/crypto": "workspace:*",
     "@warbler/core": "workspace:*",
     "@warbler/database": "workspace:*",
     "@warbler/http": "workspace:*",

@@ -1,3 +1,5 @@
 .warbler/
 dist/
 database/warbler/pg/generated/
+node_modules
+bun.lock
