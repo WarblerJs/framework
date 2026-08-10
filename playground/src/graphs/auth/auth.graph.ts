@@ -4,7 +4,7 @@ import AuthRepository from "./auth.repository";
 import AuthService from "./auth.service";
 
 @Graph({
-  prefix: "/api/auth",
+ // prefix: "/api/auth",
   controllers: [AuthController],
   providers: [AuthService, AuthRepository],
 })

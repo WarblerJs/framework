@@ -8,12 +8,17 @@
  * validated handler pipeline ever parses it. The application's schema never needs to
  * know the framework's CSRF field exists.
  *
- * Only `application/x-www-form-urlencoded` and `application/json` bodies are handled —
- * these are what `readBodyToken` (`verify-csrf-request.ts`) actually reads the token
- * from. Multipart bodies are left untouched (stripping a field from a multipart stream
- * without disturbing file parts is materially more involved); a multipart route that
- * also carries the CSRF field in-body and validates strictly should declare the field
- * in its schema, or submit the token via the `"header"`/`"cookie"` source instead.
+ * `"form"` covers both bodies `readBodyToken` (`verify-csrf-request.ts`) reads the token
+ * from via `Request.formData()`: `application/x-www-form-urlencoded` and
+ * `multipart/form-data` (what a plain HTML `<form>` — and `@warbler/frontend`'s
+ * `FormBuilder`, which always submits via `FormData` — actually send). `"json"` covers
+ * `application/json`.
+ *
+ * The multipart case only overrides `.formData()` (built from a `.clone()`, so the
+ * original stream is never disturbed) rather than re-serializing raw multipart bytes —
+ * every consumer that matters for the validated handler pipeline (`request.body`) reads
+ * through `.formData()`, so this is sufficient without the added complexity of rewriting
+ * file parts byte-for-byte.
  *
  * Rewrites the request's body-reading methods in place (`Object.defineProperties`) —
  * not a replacement `Request` object — so identity-sensitive properties Bun attaches to
@@ -25,6 +30,14 @@ export async function stripCsrfBodyField(
   kind: "form" | "json",
 ): Promise<void> {
   const contentType = request.headers.get("content-type") ?? "";
+
+  if (kind === "form" && contentType.includes("multipart/form-data")) {
+    const form = await request.clone().formData();
+    if (!form.has(fieldName)) return;
+    form.delete(fieldName);
+    Object.defineProperty(request, "formData", { value: async (): Promise<typeof form> => form, configurable: true });
+    return;
+  }
 
   // From here on the real body stream is read exactly once (`request.text()`) — after
   // that point the original stream is drained either way, so every path below must end
