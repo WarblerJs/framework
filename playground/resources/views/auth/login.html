@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="/app.css">
     <script type="module" src="/app.js"></script>
-    <title>Warbler · {{ title }}</title>
+    <title>Warbler · {{ tr('login') }}</title>
   </head>
   <body class="min-h-screen bg-gray-50 p-8">
     <form id="login-form" method="post" class="mx-auto flex max-w-md flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-md">
-      {{{ security.field }}}
+      <!-- {{{ csrfField }}} -->
       <div>
         <label for="email">Email</label>
         <input id="email" name="email" class="w-full rounded-md border p-2">
@@ -22,7 +22,7 @@
         <span data-wbr-error-for="password" class="text-sm text-red-700"></span>
       </div>
 
-      <div>
+      <!-- <div>
         <label for="confirm-password">Confirm password</label>
         <input id="confirm-password" name="confirmPassword" type="password" class="w-full rounded-md border p-2">
         <span data-wbr-error-for="confirmPassword" class="text-sm text-red-700"></span>
@@ -31,7 +31,7 @@
       <label class="flex items-center gap-2">
         <input name="remember" type="checkbox">
         Remember me
-      </label>
+      </label> -->
 
       <div data-wbr-form-errors class="text-sm text-red-700"></div>
 
@@ -39,5 +39,6 @@
         Login
       </button>
     </form>
+ 
   </body>
 </html>

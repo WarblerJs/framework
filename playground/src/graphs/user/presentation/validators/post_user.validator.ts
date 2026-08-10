@@ -6,12 +6,14 @@ export const postUserValidatore = defineValidator({
   bodyRules: {
     email: v.email('id_invalid_uuid'),
     password: v.string('id_invalid_uuid'),
+    _csrf: v.string('id_invalid_uuid'),
   },
   // headerRules: {
   //   "x-retries": v.coerce.number("validators.invalid_retries").int("validators.invalid_retries").nonnegative("validators.invalid_retries"),
   // },
   onValidationError(req, errors) {
     const [firstIssue] = Object.values(errors).flat();
+    console.log('firstIssue',firstIssue)
     return view("user.invalid-id", {
       title: "Invalid user id",
       id: String(req.params.id ?? ""),

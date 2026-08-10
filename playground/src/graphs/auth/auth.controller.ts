@@ -1,9 +1,8 @@
 import { inject } from "@warbler/core";
-import { Controller, csrf, Get, JsonRes, Post, type AppRequest } from "@warbler/http";
+import { Controller, csrf, Get, JsonRes, Post, view, type AppRequest } from "@warbler/http";
 import { authGuard } from "./auth.guard";
 import AuthService from "./auth.service";
 import { loginValidator, requestSourcesValidator, uploadAvatarValidator } from "./auth.validator";
-import { View } from "@warbler/view";
 
 let validationCalls = 0;
 
@@ -13,14 +12,12 @@ export default class AuthController {
 
   @Get("/login")
   async getUsers(request: AppRequest): Promise<Response> {
-    return View('home.form',{
-      title: request.tr('login')
-    });
+    return view('auth.login',);
     
     //return JsonRes( await this.#auth.findAllService() );
   }
 
-  @Post("/login", { validator: loginValidator, csrf: false })
+  @Post("/login", { validator: loginValidator, csrf: true })
   async login(request: AppRequest<typeof loginValidator>): Promise<Response> {
     return JsonRes({
       email: request.body.email,

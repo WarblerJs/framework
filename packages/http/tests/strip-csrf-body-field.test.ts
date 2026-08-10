@@ -45,7 +45,7 @@ describe("stripCsrfBodyField", () => {
     expect(await request.json()).toEqual({ email: "a@b.com" });
   });
 
-  test("leaves multipart bodies untouched (not stripped)", async () => {
+  test("removes the field from a multipart body while preserving other fields (FormBuilder always submits FormData, sent as multipart)", async () => {
     const form = new FormData();
     form.set("email", "a@b.com");
     form.set("_csrf", "abc.def");
@@ -55,8 +55,36 @@ describe("stripCsrfBodyField", () => {
     await stripCsrfBodyField(request, "_csrf", "form");
 
     const parsed = await request.formData();
-    expect(parsed.get("_csrf")).toBe("abc.def");
+    expect(parsed.get("_csrf")).toBeNull();
+    expect(parsed.get("email")).toBe("a@b.com");
+    // The boundary-bearing content-type is untouched: only .formData() is overridden.
     expect(request.headers.get("content-type")).toBe(originalContentType);
+  });
+
+  test("leaves multipart file parts intact alongside the stripped field", async () => {
+    const form = new FormData();
+    form.set("_csrf", "abc.def");
+    form.set("avatar", new File(["binary-bytes"], "avatar.png", { type: "image/png" }));
+    const request = new Request("http://x/", { method: "POST", body: form });
+
+    await stripCsrfBodyField(request, "_csrf", "form");
+
+    const parsed = await request.formData();
+    expect(parsed.get("_csrf")).toBeNull();
+    const avatar = parsed.get("avatar") as File;
+    expect(avatar.name).toBe("avatar.png");
+    expect(await avatar.text()).toBe("binary-bytes");
+  });
+
+  test("is a no-op on multipart bodies when the field is absent", async () => {
+    const form = new FormData();
+    form.set("email", "a@b.com");
+    const request = new Request("http://x/", { method: "POST", body: form });
+
+    await stripCsrfBodyField(request, "_csrf", "form");
+
+    const parsed = await request.formData();
+    expect(parsed.get("email")).toBe("a@b.com");
   });
 
   test("preserves request identity so Bun-attached properties like .params survive", async () => {

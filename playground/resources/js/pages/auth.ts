@@ -4,7 +4,7 @@ const loginForm = FormBuilder(
   "login-form",
   (v) => ({
     email: [
-      "test@example.com",
+      "bellib@hotmail.fr",
       v.required("Email is required"),
       v.email("Enter a valid email"),
     ],
@@ -14,16 +14,16 @@ const loginForm = FormBuilder(
       v.string(),
       v.minLength(8, "Password must contain at least 8 characters"),
     ],
-    confirmPassword: [
-      "",
-      v.required("Confirm your password"),
-    ],
-    remember: [false, v.boolean()],
+    // confirmPassword: [
+    //   "",
+    //   v.required("Confirm your password"),
+    // ],
+    // remember: [false, v.boolean()],
   }),
   {
-    validators: (v) => [
-      v.match("password", "confirmPassword", "Passwords do not match"),
-    ],
+    // validators: (v) => [
+    //   v.match("password", "confirmPassword", "Passwords do not match"),
+    // ],
   },
 );
 

@@ -4,10 +4,12 @@ export const loginValidator = defineValidator({
   bodyRules: {
     email: v.string("validators.email_not_valid").trim().email("validators.email_not_valid"),
     password: v.string("invalid_string").min(1, "invalid_string"),
+    // confirmPassword: v.string("invalid_string").min(1, "invalid_string"),
+    // remember: v.string("invalid_string").min(1, "invalid_string"),
   },
-  queryRules: {
-    type: v.coerce.number("type_not_existe"),
-  },
+  // queryRules: {
+  //   type: v.coerce.number("type_not_existe"),
+  // },
 });
 
 export type LoginInput = InferValidatorOutput<typeof loginValidator>;
