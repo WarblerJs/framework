@@ -15,7 +15,6 @@ export default class AuthController {
   async getUsers(request: AppRequest): Promise<Response> {
     return View('auth.login',{
       title: request.tr('login')
-
     });
     //return JsonRes( await this.#auth.findAllService() );
   }
