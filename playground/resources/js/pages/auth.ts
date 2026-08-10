@@ -27,22 +27,26 @@ const loginForm = FormBuilder(
   },
 );
 
-loginForm.field("email").onInput((value) => {
-  console.log("email:", value);
-});
+// loginForm.field("email").onInput((value) => {
+//   console.log("email:", value);
+// });
 
-loginForm.onChange((value) => {
-  console.log("form:", value);
-});
+// loginForm.onChange((value) => {
+//   console.log("form:", value);
+// });
+
+// loginForm.onSubmit((value) => {
+//   console.log("submit:", value);
+// });
+
+// loginForm.onSuccess((response) => {
+//   console.log("login response:", response.status);
+// });
+
+// loginForm.onError((error) => {
+//   console.error("login failed:", error);
+// });
 
 loginForm.onSubmit((value) => {
   console.log("submit:", value);
-});
-
-loginForm.onSuccess((response) => {
-  console.log("login response:", response.status);
-});
-
-loginForm.onError((error) => {
-  console.error("login failed:", error);
 });

@@ -73,6 +73,13 @@
         "typescript": "^5.9.2",
       },
     },
+    "packages/frontend": {
+      "name": "@warbler/frontend",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^5.9.0",
+      },
+    },
     "packages/http": {
       "name": "@warbler/http",
       "version": "0.1.0",
@@ -176,6 +183,7 @@
         "@warbler/config": "workspace:*",
         "@warbler/core": "workspace:*",
         "@warbler/database": "workspace:*",
+        "@warbler/frontend": "workspace:*",
         "@warbler/http": "workspace:*",
         "@warbler/runtime": "workspace:*",
         "@warbler/validators": "workspace:*",
@@ -277,6 +285,8 @@
     "@warbler/core": ["@warbler/core@workspace:packages/core"],
 
     "@warbler/database": ["@warbler/database@workspace:packages/database"],
+
+    "@warbler/frontend": ["@warbler/frontend@workspace:packages/frontend"],
 
     "@warbler/http": ["@warbler/http@workspace:packages/http"],
 

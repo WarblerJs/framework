@@ -17,8 +17,14 @@ function connect(): Readonly<{ response: Response; server: FakeServer; reader: R
   const routes = createViewDevelopmentRoutes();
   const request = new Request("http://127.0.0.1/__warbler/view/events");
   const server = createFakeServer();
-  const response = routes["/__warbler/view/events"]!.GET(request, server as unknown as Bun.Server<undefined>);
-  return { response, server, reader: response.body!.getReader() };
+  const handler = routes["/__warbler/view/events"]?.GET;
+  if (handler === undefined) throw new Error("View development event route is missing.");
+  const response = handler(request, server as unknown as Bun.Server<undefined>);
+  return {
+    response,
+    server,
+    reader: response.body!.getReader() as unknown as ReadableStreamDefaultReader<Uint8Array>,
+  };
 }
 async function readFrame(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<string> {
   const { value, done } = await reader.read();

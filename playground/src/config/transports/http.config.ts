@@ -1,7 +1,7 @@
 export const httpConfig = {
   host: "0.0.0.0",
   port: 3000,
-  allowedHosts: ["127.0.0.1","192.168.1.3", "localhost"],
+  allowedHosts: ["127.0.0.1","192.168.1.4", "localhost"],
   request: {
     body: {
       enabled: true,
@@ -40,7 +40,7 @@ export const httpConfig = {
   },
   security: {
     enabled: true,
-    contentSecurityPolicy: "default-src 'self'; connect-src 'self' ws://192.168.1.3:3001 ws://localhost:3001 ws://127.0.0.1:3001 ",
+    contentSecurityPolicy: "default-src 'self'; connect-src 'self' ws://192.168.1.4:3001 ws://localhost:3001 ws://127.0.0.1:3001 ",
     frameOptions: "DENY",
   },
   static: {

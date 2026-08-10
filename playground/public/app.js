@@ -53,30 +53,35 @@ var init_dom = __esm(() => {
 });
 
 // ../packages/frontend/src/signals/init.ts
+function track(dependency) {
+  const observer = activeObserver;
+  if (observer === undefined || observer.disposed || dependency.has(observer))
+    return;
+  dependency.add(observer);
+  observer.dependencies.add(dependency);
+}
+function publish(dependency) {
+  for (const observer of [...dependency])
+    if (!observer.disposed)
+      observer.notify();
+}
 function signal(initialValue) {
   let value = initialValue;
   const subscribers = new Set;
   const read = () => {
-    if (activeSubscriber) {
-      subscribers.add(activeSubscriber);
-    }
+    track(subscribers);
     return value;
   };
   read.set = (nextValue) => {
-    if (Object.is(value, nextValue)) {
+    if (Object.is(value, nextValue))
       return;
-    }
     value = nextValue;
-    for (const subscriber of subscribers) {
-      subscriber();
-    }
+    publish(subscribers);
   };
-  read.update = (updater) => {
-    read.set(updater(value));
-  };
+  read.update = (updater) => read.set(updater(value));
   return read;
 }
-var activeSubscriber = null;
+var activeObserver;
 
 // ../packages/frontend/src/signals/index.ts
 var init_signals = () => {};
@@ -95,6 +100,60 @@ function synchronizeBooleanState(element, name, enabled) {
     element.removeAttribute(name);
 }
 
+// ../packages/frontend/src/forms/lifecycle.ts
+class CleanupRegistry {
+  #cleanups = [];
+  #destroyed = false;
+  get destroyed() {
+    return this.#destroyed;
+  }
+  add(cleanup) {
+    if (this.#destroyed) {
+      safely(cleanup);
+      return;
+    }
+    this.#cleanups.push(once(cleanup));
+  }
+  destroy() {
+    if (this.#destroyed)
+      return;
+    this.#destroyed = true;
+    for (const cleanup of this.#cleanups.splice(0).reverse())
+      safely(cleanup);
+  }
+}
+
+class InstanceRegistry {
+  #instances = new WeakMap;
+  replace(element, create) {
+    this.#instances.get(element)?.destroy();
+    const instance = create();
+    this.#instances.set(element, instance);
+    return instance;
+  }
+  release(element, instance) {
+    if (this.#instances.get(element) === instance)
+      this.#instances.delete(element);
+  }
+  get(element) {
+    return this.#instances.get(element);
+  }
+}
+function once(cleanup) {
+  let active = true;
+  return () => {
+    if (!active)
+      return;
+    active = false;
+    cleanup();
+  };
+}
+function safely(cleanup) {
+  try {
+    cleanup();
+  } catch {}
+}
+
 // ../packages/frontend/src/forms/form-control.ts
 class FormControl {
   name;
@@ -108,8 +167,8 @@ class FormControl {
   #initial;
   #validators;
   #errorElement;
-  #errorId;
-  #listeners = [];
+  #lifecycle = new CleanupRegistry;
+  #originalAttributes = new Map;
   #inputCallbacks = new Set;
   #changeCallbacks = new Set;
   #focusCallbacks = new Set;
@@ -118,6 +177,8 @@ class FormControl {
   #formErrors = Object.freeze([]);
   #showErrors = false;
   #onMutation = () => {};
+  #originalErrorText;
+  #errorHadId;
   constructor(name, form, elements, initial, validators) {
     this.name = name;
     this.element = elements[0];
@@ -125,7 +186,9 @@ class FormControl {
     this.#initial = initial;
     this.#validators = validators;
     this.#errorElement = findErrorElement(form, name);
-    this.#errorId = this.#prepareAccessibility(form.id);
+    this.#originalErrorText = this.#errorElement?.textContent ?? undefined;
+    this.#errorHadId = (this.#errorElement?.id.length ?? 0) > 0;
+    this.#prepareAccessibility(form.id);
     this.#applyConstraints();
     this.#write(initial);
     this.value = signal(initial);
@@ -135,9 +198,11 @@ class FormControl {
   valid = () => this.status() === "valid";
   invalid = () => this.status() === "invalid";
   setMutationCallback(callback) {
+    this.#assertActive();
     this.#onMutation = callback;
   }
   setValue(value) {
+    this.#assertActive();
     this.#externalError = undefined;
     this.#write(value);
     this.value.set(value);
@@ -145,20 +210,25 @@ class FormControl {
     this.#onMutation();
   }
   setError(message) {
+    this.#assertActive();
     this.#externalError = message;
     this.validate(true);
     this.#onMutation();
   }
   clearError() {
+    this.#assertActive();
     this.#externalError = undefined;
     this.validate(this.#showErrors);
     this.#onMutation();
   }
   setFormErrors(errors) {
+    if (this.#lifecycle.destroyed)
+      return;
     this.#formErrors = errors;
     this.validate(this.#showErrors);
   }
   markAsTouched() {
+    this.#assertActive();
     this.touched.set(true);
     for (const element of this.elements)
       synchronizeBooleanState(element, "data-wbr-touched", true);
@@ -166,6 +236,7 @@ class FormControl {
     this.#renderErrors();
   }
   markAsUntouched() {
+    this.#assertActive();
     this.touched.set(false);
     for (const element of this.elements)
       synchronizeBooleanState(element, "data-wbr-touched", false);
@@ -173,16 +244,19 @@ class FormControl {
     this.#renderErrors();
   }
   markAsDirty() {
+    this.#assertActive();
     this.dirty.set(true);
     for (const element of this.elements)
       synchronizeBooleanState(element, "data-wbr-dirty", true);
   }
   markAsPristine() {
+    this.#assertActive();
     this.dirty.set(false);
     for (const element of this.elements)
       synchronizeBooleanState(element, "data-wbr-dirty", false);
   }
   validate(showErrors = this.#showErrors) {
+    this.#assertActive();
     this.#showErrors = showErrors;
     for (const element of this.elements)
       element.setCustomValidity("");
@@ -216,25 +290,45 @@ class FormControl {
     return status === "valid";
   }
   onInput(callback) {
+    this.#assertActive();
     return subscribe(this.#inputCallbacks, callback);
   }
   onChange(callback) {
+    this.#assertActive();
     return subscribe(this.#changeCallbacks, callback);
   }
   onFocus(callback) {
+    this.#assertActive();
     return subscribe(this.#focusCallbacks, callback);
   }
   onBlur(callback) {
+    this.#assertActive();
     return subscribe(this.#blurCallbacks, callback);
   }
   destroy() {
-    for (const listener of this.#listeners)
-      listener.element.removeEventListener(listener.type, listener.callback);
-    this.#listeners.length = 0;
+    if (this.#lifecycle.destroyed)
+      return;
+    this.#lifecycle.destroy();
     this.#inputCallbacks.clear();
     this.#changeCallbacks.clear();
     this.#focusCallbacks.clear();
     this.#blurCallbacks.clear();
+    this.#externalError = undefined;
+    this.#formErrors = Object.freeze([]);
+    this.#onMutation = () => {};
+    this.#validators = Object.freeze([]);
+    for (const element of this.elements) {
+      for (const name of ["data-wbr-valid", "data-wbr-invalid", "data-wbr-pending", "data-wbr-touched", "data-wbr-dirty"])
+        element.removeAttribute(name);
+      this.#restoreAttributes(element);
+    }
+    if (this.#errorElement !== undefined) {
+      this.#errorElement.textContent = this.#originalErrorText ?? "";
+      if (!this.#errorHadId)
+        this.#errorElement.removeAttribute("id");
+    }
+    this.#errorElement = undefined;
+    this.#originalAttributes.clear();
   }
   #listen() {
     for (const element of this.elements) {
@@ -254,9 +348,11 @@ class FormControl {
   }
   #add(element, type, callback) {
     element.addEventListener(type, callback);
-    this.#listeners.push(Object.freeze({ element, type, callback }));
+    this.#lifecycle.add(() => element.removeEventListener(type, callback));
   }
   #handleValue(callbacks) {
+    if (this.#lifecycle.destroyed)
+      return;
     this.#externalError = undefined;
     const value = this.#read();
     this.value.set(value);
@@ -277,20 +373,34 @@ class FormControl {
       if (constraint === undefined)
         continue;
       for (const element of this.elements) {
-        if (constraint.required)
+        if (constraint.required) {
+          this.#capture(element, "required");
           element.required = true;
-        if (constraint.type !== undefined && element.tagName === "INPUT")
+        }
+        if (constraint.type !== undefined && element.tagName === "INPUT") {
+          this.#capture(element, "type");
           element.type = constraint.type;
-        if (constraint.minLength !== undefined && element.tagName !== "SELECT")
+        }
+        if (constraint.minLength !== undefined && element.tagName !== "SELECT") {
+          this.#capture(element, "minlength");
           element.minLength = constraint.minLength;
-        if (constraint.maxLength !== undefined && element.tagName !== "SELECT")
+        }
+        if (constraint.maxLength !== undefined && element.tagName !== "SELECT") {
+          this.#capture(element, "maxlength");
           element.maxLength = constraint.maxLength;
-        if (constraint.min !== undefined && element.tagName === "INPUT")
+        }
+        if (constraint.min !== undefined && element.tagName === "INPUT") {
+          this.#capture(element, "min");
           element.min = String(constraint.min);
-        if (constraint.max !== undefined && element.tagName === "INPUT")
+        }
+        if (constraint.max !== undefined && element.tagName === "INPUT") {
+          this.#capture(element, "max");
           element.max = String(constraint.max);
-        if (constraint.pattern !== undefined && element.tagName === "INPUT")
+        }
+        if (constraint.pattern !== undefined && element.tagName === "INPUT") {
+          this.#capture(element, "pattern");
           element.pattern = constraint.pattern;
+        }
       }
     }
   }
@@ -328,6 +438,8 @@ class FormControl {
     const id = error.id || `wbr-${safeDomId(formId)}-${safeDomId(this.name)}-error`;
     error.id = id;
     for (const element of this.elements) {
+      this.#capture(element, "aria-describedby");
+      this.#capture(element, "aria-invalid");
       const describedBy = new Set((element.getAttribute("aria-describedby") ?? "").split(/\s+/u).filter(Boolean));
       describedBy.add(id);
       element.setAttribute("aria-describedby", [...describedBy].join(" "));
@@ -338,10 +450,33 @@ class FormControl {
     if (this.#errorElement !== undefined)
       this.#errorElement.textContent = this.#showErrors ? this.errors()[0] ?? "" : "";
   }
+  #capture(element, name) {
+    let attributes = this.#originalAttributes.get(element);
+    if (attributes === undefined) {
+      attributes = new Map;
+      this.#originalAttributes.set(element, attributes);
+    }
+    if (!attributes.has(name))
+      attributes.set(name, element.getAttribute(name));
+  }
+  #restoreAttributes(element) {
+    for (const [name, value] of this.#originalAttributes.get(element) ?? []) {
+      if (value === null)
+        element.removeAttribute(name);
+      else
+        element.setAttribute(name, value);
+    }
+  }
+  #assertActive() {
+    if (this.#lifecycle.destroyed)
+      throw new FormBuilderError(`field "${this.name}" has been destroyed.`);
+  }
 }
 function subscribe(callbacks, callback) {
   callbacks.add(callback);
-  return () => callbacks.delete(callback);
+  return once(() => {
+    callbacks.delete(callback);
+  });
 }
 function equalValue(left, right) {
   return Array.isArray(left) && Array.isArray(right) ? left.length === right.length && left.every((value, index) => Object.is(value, right[index])) : Object.is(left, right);
@@ -349,7 +484,41 @@ function equalValue(left, right) {
 var init_form_control = __esm(() => {
   init_signals();
   init_dom();
+  init_errors();
 });
+
+// ../packages/frontend/src/forms/request-owner.ts
+class SubmissionRequestOwner {
+  #current;
+  #destroyed = false;
+  begin() {
+    if (this.#destroyed)
+      throw new Error("Form request owner has been destroyed.");
+    this.#current?.abort();
+    const controller = new AbortController;
+    this.#current = controller;
+    return controller;
+  }
+  owns(controller) {
+    return !this.#destroyed && this.#current === controller;
+  }
+  finish(controller) {
+    if (!this.owns(controller))
+      return false;
+    this.#current = undefined;
+    return true;
+  }
+  destroy() {
+    if (this.#destroyed)
+      return;
+    this.#destroyed = true;
+    this.#current?.abort();
+    this.#current = undefined;
+  }
+}
+function isIntentionalAbort(error) {
+  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
+}
 
 // ../packages/frontend/src/forms/submit.ts
 function submissionMode(hasActionAttribute) {
@@ -401,6 +570,7 @@ class FormGroup {
   #validators;
   #fetch;
   #formErrorElement;
+  #originalFormErrorText;
   #changeCallbacks = new Set;
   #submitCallbacks = new Set;
   #successCallbacks = new Set;
@@ -411,12 +581,15 @@ class FormGroup {
   #destroyed = false;
   #submitListener;
   #invalidListener;
-  constructor(element, controls, validators, fetchImplementation) {
+  #lifecycle = new CleanupRegistry;
+  #requests = new SubmissionRequestOwner;
+  constructor(element, controls, validators, fetchImplementation, onDestroy) {
     this.element = element;
     this.#controls = controls;
     this.#validators = validators;
     this.#fetch = fetchImplementation;
     this.#formErrorElement = findFormErrorElement(element);
+    this.#originalFormErrorText = this.#formErrorElement?.textContent ?? undefined;
     this.value = signal(this.#readValue());
     this.#lastChange = stableValue(this.value());
     for (const control of Object.values(this.#controls)) {
@@ -433,17 +606,25 @@ class FormGroup {
     };
     element.addEventListener("submit", this.#submitListener);
     element.addEventListener("invalid", this.#invalidListener, true);
+    this.#lifecycle.add(() => element.removeEventListener("submit", this.#submitListener));
+    this.#lifecycle.add(() => element.removeEventListener("invalid", this.#invalidListener, true));
+    this.#lifecycle.add(() => this.#requests.destroy());
+    this.#lifecycle.add(onDestroy);
+    for (const control of this.#values())
+      this.#lifecycle.add(() => control.destroy());
     this.validate(false);
   }
   valid = () => this.status() === "valid";
   invalid = () => this.status() === "invalid";
   field(name) {
+    this.#assertActive();
     const control = this.#controls[name];
     if (control === undefined)
       throw new FormBuilderError(`field "${name}" is not registered.`);
     return control;
   }
   setValue(value) {
+    this.#assertActive();
     const expected = Object.keys(this.#controls);
     const received = Object.keys(value);
     if (expected.length !== received.length || expected.some((name) => !Object.hasOwn(value, name))) {
@@ -452,6 +633,7 @@ class FormGroup {
     this.patchValue(value);
   }
   patchValue(value) {
+    this.#assertActive();
     for (const key of Object.keys(value)) {
       const control = this.#controls[key];
       if (control === undefined)
@@ -463,36 +645,43 @@ class FormGroup {
     this.#mutated();
   }
   setError(message) {
+    this.#assertActive();
     this.#formError = message;
     this.#renderFormError();
     this.#synchronizeStatus("invalid");
   }
   clearError() {
+    this.#assertActive();
     this.#formError = undefined;
     this.#renderFormError();
     this.validate();
   }
   markAsTouched() {
+    this.#assertActive();
     for (const control of this.#values())
       control.markAsTouched();
     this.#syncInteraction();
   }
   markAsUntouched() {
+    this.#assertActive();
     for (const control of this.#values())
       control.markAsUntouched();
     this.#syncInteraction();
   }
   markAsDirty() {
+    this.#assertActive();
     for (const control of this.#values())
       control.markAsDirty();
     this.#syncInteraction();
   }
   markAsPristine() {
+    this.#assertActive();
     for (const control of this.#values())
       control.markAsPristine();
     this.#syncInteraction();
   }
   validate(showErrors = this.submitted() || this.touched()) {
+    this.#assertActive();
     this.#validationFormError = undefined;
     for (const control of this.#values())
       control.setFormErrors(Object.freeze([]));
@@ -521,31 +710,45 @@ class FormGroup {
     return valid;
   }
   onChange(callback) {
+    this.#assertActive();
     return subscribe2(this.#changeCallbacks, callback);
   }
   onSubmit(callback) {
+    this.#assertActive();
     return subscribe2(this.#submitCallbacks, callback);
   }
   onSuccess(callback) {
+    this.#assertActive();
     return subscribe2(this.#successCallbacks, callback);
   }
   onError(callback) {
+    this.#assertActive();
     return subscribe2(this.#errorCallbacks, callback);
   }
   destroy() {
     if (this.#destroyed)
       return;
     this.#destroyed = true;
-    this.element.removeEventListener("submit", this.#submitListener);
-    this.element.removeEventListener("invalid", this.#invalidListener, true);
-    for (const control of this.#values())
-      control.destroy();
+    this.#lifecycle.destroy();
     this.#changeCallbacks.clear();
     this.#submitCallbacks.clear();
     this.#successCallbacks.clear();
     this.#errorCallbacks.clear();
+    this.#validators = Object.freeze([]);
+    this.#fetch = undefined;
+    for (const key of Object.keys(this.#controls))
+      delete this.#controls[key];
+    this.#formError = undefined;
+    this.#validationFormError = undefined;
+    for (const name of ["data-wbr-valid", "data-wbr-invalid", "data-wbr-pending", "data-wbr-touched", "data-wbr-dirty", "data-wbr-submitted", "data-wbr-submitting"])
+      this.element.removeAttribute(name);
+    if (this.#formErrorElement !== undefined)
+      this.#formErrorElement.textContent = this.#originalFormErrorText ?? "";
+    this.#formErrorElement = undefined;
   }
   #mutated() {
+    if (this.#destroyed)
+      return;
     this.clearErrorWithoutValidation();
     const next = this.#readValue();
     this.value.set(next);
@@ -559,6 +762,10 @@ class FormGroup {
     }
   }
   async#submit(event) {
+    if (this.#destroyed) {
+      event.preventDefault();
+      return;
+    }
     this.submitted.set(true);
     synchronizeBooleanState(this.element, "data-wbr-submitted", true);
     if (this.submitting()) {
@@ -579,11 +786,19 @@ class FormGroup {
     event.preventDefault();
     this.submitting.set(true);
     synchronizeBooleanState(this.element, "data-wbr-submitting", true);
+    const controller = this.#requests.begin();
     try {
       const request = createFetchSubmission(this.element, globalThis.location.href);
-      const response = await this.#fetch(request.url, request.init);
+      const fetchImplementation = this.#fetch;
+      if (fetchImplementation === undefined)
+        return;
+      const response = await fetchImplementation(request.url, { ...request.init, signal: controller.signal });
+      if (!this.#requests.owns(controller))
+        return;
       if (!response.ok) {
         await this.#mapResponseErrors(response);
+        if (!this.#requests.owns(controller))
+          return;
         const failure = new Error(`Form submission failed with HTTP ${response.status}.`);
         for (const callback of this.#errorCallbacks)
           callback(failure);
@@ -592,14 +807,20 @@ class FormGroup {
       for (const callback of this.#successCallbacks)
         callback(response);
     } catch (error) {
-      for (const callback of this.#errorCallbacks)
-        callback(error);
+      if (this.#requests.owns(controller) && !isIntentionalAbort(error)) {
+        for (const callback of this.#errorCallbacks)
+          callback(error);
+      }
     } finally {
-      this.submitting.set(false);
-      synchronizeBooleanState(this.element, "data-wbr-submitting", false);
+      if (this.#requests.finish(controller) && !this.#destroyed) {
+        this.submitting.set(false);
+        synchronizeBooleanState(this.element, "data-wbr-submitting", false);
+      }
     }
   }
   async#mapResponseErrors(response) {
+    if (this.#destroyed)
+      return;
     if (!response.headers.get("content-type")?.toLowerCase().includes("application/json"))
       return;
     let body;
@@ -608,6 +829,8 @@ class FormGroup {
     } catch {
       return;
     }
+    if (this.#destroyed)
+      return;
     const normalized = normalizeServerErrors(body);
     for (const [name, message] of Object.entries(normalized.fields)) {
       const control = this.#controls[name];
@@ -649,10 +872,16 @@ class FormGroup {
     this.#formError = undefined;
     this.#renderFormError();
   }
+  #assertActive() {
+    if (this.#destroyed)
+      throw new FormBuilderError(`form "#${this.element.id}" has been destroyed.`);
+  }
 }
 function subscribe2(callbacks, callback) {
   callbacks.add(callback);
-  return () => callbacks.delete(callback);
+  return once(() => {
+    callbacks.delete(callback);
+  });
 }
 function stableValue(value) {
   return JSON.stringify(value, (_key, item) => item instanceof File ? Object.freeze({ name: item.name, size: item.size, type: item.type }) : item);
@@ -722,17 +951,30 @@ function FormBuilder(formId, definition, options = {}) {
   if (typeof document === "undefined")
     throw new Error("Warbler FormBuilder requires a browser document.");
   const form = findForm(formId, document);
-  owners.get(form)?.destroy();
-  const declared = definition(validators);
-  const controls = Object.create(null);
-  for (const [name, item] of Object.entries(declared)) {
-    const [initial, ...rules] = item;
-    controls[name] = new FormControl(name, form, findNamedControls(form, name), initial, rules);
-  }
-  const configured = typeof options.validators === "function" ? options.validators(validators) : options.validators ?? Object.freeze([]);
-  const group = new FormGroup(form, controls, configured, options.fetch ?? globalThis.fetch.bind(globalThis));
-  owners.set(form, group);
-  return group;
+  return owners.replace(form, () => {
+    const declared = definition(validators);
+    const controls = Object.create(null);
+    try {
+      for (const [name, item] of Object.entries(declared)) {
+        const [initial, ...rules] = item;
+        controls[name] = new FormControl(name, form, findNamedControls(form, name), initial, rules);
+      }
+    } catch (error) {
+      for (const control of Object.values(controls))
+        control.destroy();
+      throw error;
+    }
+    const configured = typeof options.validators === "function" ? options.validators(validators) : options.validators ?? Object.freeze([]);
+    let group;
+    try {
+      group = new FormGroup(form, controls, configured, options.fetch ?? globalThis.fetch.bind(globalThis), () => owners.release(form, group));
+    } catch (error) {
+      for (const control of Object.values(controls))
+        control.destroy();
+      throw error;
+    }
+    return group;
+  });
 }
 var owners;
 var init_form = __esm(() => {
@@ -740,7 +982,7 @@ var init_form = __esm(() => {
   init_form_control();
   init_form_group();
   init_validators();
-  owners = new WeakMap;
+  owners = new InstanceRegistry;
 });
 
 // ../packages/frontend/src/forms/index.ts
@@ -776,20 +1018,8 @@ var init_auth = __esm(() => {
       v.match("password", "confirmPassword", "Passwords do not match")
     ]
   });
-  loginForm.field("email").onInput((value) => {
-    console.log("email:", value);
-  });
-  loginForm.onChange((value) => {
-    console.log("form:", value);
-  });
   loginForm.onSubmit((value) => {
     console.log("submit:", value);
-  });
-  loginForm.onSuccess((response) => {
-    console.log("login response:", response.status);
-  });
-  loginForm.onError((error) => {
-    console.error("login failed:", error);
   });
 });
 
@@ -797,4 +1027,4 @@ var init_auth = __esm(() => {
 Promise.resolve().then(() => init_auth());
 document.documentElement.dataset.warbler = "ready";
 
-//# debugId=B7FA5580FE09308964756E2164756E21
+//# debugId=9F469283D2DF9C2E64756E2164756E21
