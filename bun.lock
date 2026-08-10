@@ -65,6 +65,17 @@
         "typescript": "^5.9.2",
       },
     },
+    "packages/crypto": {
+      "name": "@warbler/crypto",
+      "version": "0.1.0",
+      "dependencies": {
+        "@warbler/config": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.9.2",
+      },
+    },
     "packages/database": {
       "name": "@warbler/database",
       "version": "0.1.0",
@@ -182,6 +193,7 @@
       "dependencies": {
         "@warbler/config": "workspace:*",
         "@warbler/core": "workspace:*",
+        "@warbler/crypto": "workspace:*",
         "@warbler/database": "workspace:*",
         "@warbler/frontend": "workspace:*",
         "@warbler/http": "workspace:*",
@@ -283,6 +295,8 @@
     "@warbler/console": ["@warbler/console@workspace:packages/console"],
 
     "@warbler/core": ["@warbler/core@workspace:packages/core"],
+
+    "@warbler/crypto": ["@warbler/crypto@workspace:packages/crypto"],
 
     "@warbler/database": ["@warbler/database@workspace:packages/database"],
 
