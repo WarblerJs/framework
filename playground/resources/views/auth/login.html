@@ -8,8 +8,8 @@
     <title>Warbler · {{ tr('login') }}</title>
   </head>
   <body class="min-h-screen bg-gray-50 p-8">
-    <form id="login-form" method="post" class="mx-auto flex max-w-md flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-md">
-      <!-- {{{ csrfField }}} -->
+    <form id="login-form" method="post" action="/login" class="mx-auto flex max-w-md flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-md">
+      {{{ csrfField }}}
       <div>
         <label for="email">Email</label>
         <input id="email" name="email" class="w-full rounded-md border p-2">

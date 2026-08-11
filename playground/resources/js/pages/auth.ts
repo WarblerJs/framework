@@ -49,4 +49,9 @@ const loginForm = FormBuilder(
 
 loginForm.onSubmit((value) => {
   console.log("submit:", value);
+    // 1. Select the form element from the DOM
+    const form = document.getElementById("login-form");
+
+
+  
 });
