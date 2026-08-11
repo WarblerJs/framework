@@ -36,13 +36,15 @@ export function safeCloseReason(reason: string): string {
 export function createSocketContext<TUser>(socket: NativeSocketLike, connection: SocketConnection, options: { readonly user?: TUser; readonly format?: SocketMessageFormat; readonly subscriptionLimit?: number; readonly logger?: SocketLogger; readonly locale?: string; readonly translate?: (key: string, parameters?: TranslationParameters) => string } = {}): SocketContext<TUser> {
   const topics = new Set<string>();
   const format = options.format ?? "json";
+  const logger = options.logger ?? silentLogger;
+  const logSocket = logger !== silentLogger;
   return {
-    connection: Object.freeze({ ...connection }), user: options.user, get subscriptions(): readonly string[] { return Object.freeze([...topics]); }, log: options.logger ?? silentLogger,
+    connection: Object.freeze({ ...connection }), user: options.user, get subscriptions(): readonly string[] { return Object.freeze([...topics]); }, log: logger,
     locale: options.locale ?? "en",
     tr(key, parameters) { return options.translate?.(key, parameters) ?? key; },
     send(message, sendOptions) {
       const encoded = encodeSocketMessage(message as SocketOutgoingMessage<unknown>, format);
-      Console.socket({ action: "outgoing", event: message.event, connectionId: connection.id, size: encodedSize(encoded) });
+      if (logSocket) Console.socket({ action: "outgoing", event: message.event, connectionId: connection.id, size: encodedSize(encoded) });
       return interpretSendResult(socket.send(encoded, sendOptions?.compress));
     },
     publish(topic, message, publishOptions) {
@@ -52,6 +54,7 @@ export function createSocketContext<TUser>(socket: NativeSocketLike, connection:
         includeSelf: publishOptions?.includeSelf,
         self: socket,
         connectionId: connection.id,
+        logging: logSocket,
       });
     },
     join(topic) { const valid = validateTopic(topic); if (topics.size >= (options.subscriptionLimit ?? 100) && !topics.has(valid)) return false; const result = socket.subscribe(valid); if (result !== false) topics.add(valid); return result !== false; },

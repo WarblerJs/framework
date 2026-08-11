@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import type { RuntimeExecutionContext, RuntimeTransportStartInput } from "@warbler/transport";
 import { NotFoundError, WarblerError } from "@warbler/core";
+import { Console } from "@warbler/console";
 import { createWebSocketRuntimeLauncher } from "../src/runtime-launcher";
 import type { WebSocketConfig } from "../src/config";
 import {
@@ -122,6 +123,46 @@ describe("createWebSocketRuntimeLauncher", () => {
         second.close();
       }
     } finally {
+      await boundedStop(launcher, handle);
+    }
+  });
+
+  test("production websocket logging can be disabled without disabling publishing", async () => {
+    let socketLogs = 0;
+    const originalSocket = Console.socket.bind(Console);
+    Console.socket = ((input) => {
+      socketLogs += 1;
+      return originalSocket(input);
+    }) as typeof Console.socket;
+    const launcher = createWebSocketRuntimeLauncher();
+    const port = 39_000 + Math.floor(Math.random() * 1_000);
+    const handle = await launcher.start(Object.freeze({
+      bindings: {
+        compiled: { events: { join: {} } },
+        dispatch(event: string, message: unknown, context: unknown): void {
+          if (event !== "join") return;
+          const socketMessage = message as SocketMessage<{ readonly topic: string }>;
+          const socketContext = context as SocketContext;
+          socketContext.join(socketMessage.data.topic);
+          socketContext.send({ event: "joined", data: { topic: socketMessage.data.topic } });
+        },
+      },
+      config: { mode: "dedicated", port, host: "127.0.0.1", logging: { websocket: false, errors: true } } as unknown as WebSocketConfig,
+      runtime,
+      signal: new AbortController().signal,
+    }));
+    try {
+      const socket = await subscribedSocket(port, "quiet");
+      try {
+        const message = nextMessage(socket);
+        expect(new SocketPublisher().publish("quiet", { event: "notice", data: 1 }).status).toBe("sent");
+        expect(await message).toEqual({ event: "notice", data: 1 });
+        expect(socketLogs).toBe(0);
+      } finally {
+        socket.close();
+      }
+    } finally {
+      Console.socket = originalSocket as typeof Console.socket;
       await boundedStop(launcher, handle);
     }
   });

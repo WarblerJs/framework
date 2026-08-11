@@ -1,5 +1,5 @@
 import { csrfFailureResponse, stripCsrfBodyField, type CsrfPolicy, CsrfVerifier } from "../csrf";
-import { Console, type RequestHandle } from "@warbler/console";
+import { Console, createCorrelationId, type RequestHandle } from "@warbler/console";
 import { HttpError, renderRequestError } from "../errors";
 import { RouteFlag } from "../compiled";
 import {
@@ -30,6 +30,7 @@ export interface BunRouteHandlerOptions {
   readonly csrf?: Readonly<{ verifier: CsrfVerifier; policy: CsrfPolicy }>;
   readonly builtins: ViewBuiltinResolvers;
   readonly development: boolean;
+  readonly logging?: Readonly<{ readonly requests?: boolean; readonly errors?: boolean }>;
 }
 
 function finalize(
@@ -39,6 +40,14 @@ function finalize(
 ): Response | Promise<Response> {
   if (result instanceof Promise) return result.then((response) => logResponse(requestLog, applySecurityHeaders(response, securityHeaders)));
   return logResponse(requestLog, applySecurityHeaders(result, securityHeaders));
+}
+
+function finalizeQuiet(
+  result: Response | Promise<Response>,
+  securityHeaders: Readonly<Record<string, string>>,
+): Response | Promise<Response> {
+  if (result instanceof Promise) return result.then((response) => applySecurityHeaders(response, securityHeaders));
+  return applySecurityHeaders(result, securityHeaders);
 }
 
 /** Builds this request's ambient view scope: a lazily minted, memoized CSRF token plus the process-wide resolvers. */
@@ -81,14 +90,19 @@ function errorCode(error: unknown): string | undefined {
  * promise or a native Bun error page.
  */
 export function createBunRouteHandler(options: BunRouteHandlerOptions): BunRouteHandler {
+  return options.logging?.requests === false ? createQuietBunRouteHandler(options) : createLoggedBunRouteHandler(options);
+}
+
+function createLoggedBunRouteHandler(options: BunRouteHandlerOptions): BunRouteHandler {
   const csrfEnabled = (options.flags & RouteFlag.CSRF_ENABLED) !== 0;
   const sse = (options.flags & RouteFlag.SSE) !== 0;
+  const logErrors = options.logging?.errors !== false;
   return (request, server) => {
     const url = new URL(request.url);
     const requestLog = Console.request({ method: request.method, path: url.pathname });
     const scope = createViewRequestScope(request, options);
     const onError = (error: unknown): Response =>
-      logResponse(requestLog, renderRequestError(error, request, requestLog, options.development), errorCode(error));
+      logResponse(requestLog, renderRequestError(error, request, requestLog, options.development, logErrors), errorCode(error));
     const dispatch = (): Response | Promise<Response> => runInViewRequestScope(scope, () => {
       if (csrfEnabled) {
         const csrf = options.csrf;
@@ -105,6 +119,41 @@ export function createBunRouteHandler(options: BunRouteHandlerOptions): BunRoute
         });
       }
       return finalize(options.handler(request, server), options.securityHeaders, requestLog);
+    });
+    try {
+      guardRequestSmuggling(request);
+      validateRequestHeaders(request, options.headers);
+      validateRequestHost(request, options.allowedHosts);
+      if (sse) server.timeout(request, 0);
+      const result = dispatch();
+      return result instanceof Promise ? result.catch(onError) : result;
+    } catch (error) {
+      return onError(error);
+    }
+  };
+}
+
+function createQuietBunRouteHandler(options: BunRouteHandlerOptions): BunRouteHandler {
+  const csrfEnabled = (options.flags & RouteFlag.CSRF_ENABLED) !== 0;
+  const sse = (options.flags & RouteFlag.SSE) !== 0;
+  const logErrors = options.logging?.errors !== false;
+  return (request, server) => {
+    const scope = createViewRequestScope(request, options);
+    const onError = (error: unknown): Response =>
+      applySecurityHeaders(renderRequestError(error, request, { requestId: createCorrelationId("req") }, options.development, logErrors), options.securityHeaders);
+    const dispatch = (): Response | Promise<Response> => runInViewRequestScope(scope, () => {
+      if (csrfEnabled) {
+        const csrf = options.csrf;
+        if (csrf === undefined) return applySecurityHeaders(csrfFailureResponse(), options.securityHeaders);
+        return csrf.verifier.verify(request, csrf.policy, true).then(async (result) => {
+          if (!result.valid) return applySecurityHeaders(csrfFailureResponse(), options.securityHeaders);
+          if (result.source === "form" || result.source === "json") {
+            await stripCsrfBodyField(request, csrf.policy.fieldName, result.source);
+          }
+          return finalizeQuiet(options.handler(request, server), options.securityHeaders);
+        });
+      }
+      return finalizeQuiet(options.handler(request, server), options.securityHeaders);
     });
     try {
       guardRequestSmuggling(request);

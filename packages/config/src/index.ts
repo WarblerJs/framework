@@ -1,5 +1,6 @@
 export { ConfigError } from "./errors";
 export { loadRuntimeConfig, loadTransportConfig } from "./loader";
+export { loadLoggingConfig, normalizeLoggingConfig, type LoggingConfig, type LoggingConfigInput, type LoggingEnvironment } from "./logging";
 export { normalizeRuntimeConfig } from "./normalize";
 export {
   parseBoolean,

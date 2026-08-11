@@ -20,6 +20,7 @@ export interface InternalSocketPublishOptions {
   readonly includeSelf?: boolean;
   readonly self?: SocketNativeSelfSender;
   readonly connectionId?: string;
+  readonly logging?: boolean;
 }
 
 /** Publishes through Bun's native topic path after Warbler validation and encoding. */
@@ -31,12 +32,14 @@ export function internalPublish<TData>(
 ): SocketSendResult {
   const valid = validateTopic(topic);
   const encoded = encodeSocketMessage(message as SocketOutgoingMessage<unknown>, options.format);
-  Console.socket({
-    action: "outgoing",
-    event: message.event,
-    connectionId: options.connectionId ?? "publisher",
-    size: encodedSize(encoded),
-  });
+  if (options.logging !== false) {
+    Console.socket({
+      action: "outgoing",
+      event: message.event,
+      connectionId: options.connectionId ?? "publisher",
+      size: encodedSize(encoded),
+    });
+  }
   if (options.includeSelf === true && options.self !== undefined) options.self.send(encoded, options.compress);
   return interpretSendResult(target.publish(valid, encoded, options.compress));
 }
