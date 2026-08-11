@@ -112,6 +112,8 @@ const runtimeConfig = selectConfig(RuntimeConfigModule, ["runtimeConfig"]);
 const transportConfigs: Readonly<Record<string, unknown>> = Object.freeze({
 ${configs}
 });
+process.env.NODE_ENV ??= "production";
+process.env.APP_ENV ??= process.env.NODE_ENV;
 const shutdown = new AbortController();
 activateCompiledViews(viewArtifact);
 const stop = () => shutdown.abort();

@@ -1,5 +1,6 @@
 export { ConfigError } from "./errors";
 export { loadRuntimeConfig, loadTransportConfig } from "./loader";
+export { loadLoggingConfig, normalizeLoggingConfig, type LoggingConfig, type LoggingConfigInput, type LoggingEnvironment } from "./logging";
 export { normalizeRuntimeConfig } from "./normalize";
 export {
   parseBoolean,
@@ -10,4 +11,4 @@ export {
 } from "./parser";
 export type { RuntimeConfig, TransportName } from "./types";
 export { validateRuntimeConfig } from "./validator";
-export { envString, envNumber,envBoolean } from './parser/parse-env'
+export { env, envString, envNumber, envBoolean, type EnvReader } from "./parser/parse-env";

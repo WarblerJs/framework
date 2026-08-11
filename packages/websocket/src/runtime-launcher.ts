@@ -14,6 +14,10 @@ interface WebSocketRuntimeBindings {
   readonly dispatch: (event: string, message: unknown, context: unknown) => unknown;
 }
 interface WebSocketRuntimeHandle { readonly server: Bun.Server<RuntimeSocketData>; readonly publisher: SocketPublisherRuntimeTarget }
+interface TransportLoggingConfig {
+  readonly websocket?: boolean;
+  readonly errors?: boolean;
+}
 
 /** Creates the package-owned dedicated WebSocket Runtime launcher. */
 export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSocketRuntimeBindings, WebSocketConfig, WebSocketRuntimeHandle> {
@@ -21,6 +25,9 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
     kind: "websocket",
     start(input: RuntimeTransportStartInput<WebSocketRuntimeBindings, WebSocketConfig>) {
       const config = normalizeWebSocketConfig(input.config);
+      const logging = transportLogging(input.config);
+      const websocketLogging = logging.websocket !== false;
+      const errorLogging = logging.errors !== false;
       const value = input.config as Readonly<Record<string, unknown>>;
       const port = value.port;
       const hostname = typeof value.host === "string" ? value.host : undefined;
@@ -35,11 +42,11 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
         publishToSelf: config.bun.publishToSelf,
         perMessageDeflate: config.compression.enabled,
         open(socket) {
-          Console.socket({ action: "connect", path: "/chat", connectionId: socket.data.connectionId });
-          dispatchLifecycle(input.bindings, "open", undefined, socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection), socket);
+          if (websocketLogging) Console.socket({ action: "connect", path: "/chat", connectionId: socket.data.connectionId });
+          dispatchLifecycle(input.bindings, "open", undefined, socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection, websocketLogging), socket, errorLogging);
         },
         message(socket, raw) {
-          const context = socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection);
+          const context = socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection, websocketLogging);
           let message: ReturnType<typeof decodeSocketMessage>;
           try {
             message = decodeSocketMessage(raw, {
@@ -54,24 +61,26 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
             return;
           }
           const known = input.bindings.compiled?.events?.[message.event] !== undefined;
-          Console.socket({ action: "incoming", event: message.event, connectionId: socket.data.connectionId, size: rawSize(raw) });
+          if (websocketLogging) Console.socket({ action: "incoming", event: message.event, connectionId: socket.data.connectionId, size: rawSize(raw) });
           try {
             const result = input.bindings.dispatch(known ? message.event : "message", message, context);
-            settle(result, socket, context, input.bindings);
+            settle(result, socket, context, input.bindings, errorLogging);
           } catch (error) {
-            handleSocketError(error, socket, context, input.bindings.dispatch);
+            handleSocketError(error, socket, context, input.bindings.dispatch, errorLogging);
           }
         },
         drain(socket) {
-          dispatchLifecycle(input.bindings, "drain", undefined, socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection), socket);
+          dispatchLifecycle(input.bindings, "drain", undefined, socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection, websocketLogging), socket, errorLogging);
         },
         close(socket, code, reason) {
-          Console.socket({
-            action: "disconnect",
-            connectionId: socket.data.connectionId,
-            duration: performance.now() - socket.data.connectedAt,
-          });
-          dispatchLifecycle(input.bindings, "close", Object.freeze({ code, reason }), socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection), socket);
+          if (websocketLogging) {
+            Console.socket({
+              action: "disconnect",
+              connectionId: socket.data.connectionId,
+              duration: performance.now() - socket.data.connectedAt,
+            });
+          }
+          dispatchLifecycle(input.bindings, "close", Object.freeze({ code, reason }), socketContext(socket, config.messages.format, config.limits.subscriptionsPerConnection, websocketLogging), socket, errorLogging);
         },
       };
       const server = Bun.serve<RuntimeSocketData>({
@@ -96,6 +105,7 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
       });
       const publisher = Object.freeze({
         format: config.messages.format,
+        logging: websocketLogging,
         publish(topic: string, data: string | ArrayBuffer | Uint8Array, compress?: boolean): number {
           return server.publish(topic, data, compress);
         },
@@ -115,14 +125,18 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
 function rawSize(value: string | ArrayBuffer | Uint8Array): number {
   return typeof value === "string" ? new TextEncoder().encode(value).byteLength : value.byteLength;
 }
-function socketContext(socket: ServerWebSocket<RuntimeSocketData>, format: "json" | "text" | "binary", subscriptionLimit: number): SocketContext {
-  return createSocketContext(socket, { id: socket.data.connectionId, connectedAt: socket.data.connectedAt }, { format, subscriptionLimit });
+function socketContext(socket: ServerWebSocket<RuntimeSocketData>, format: "json" | "text" | "binary", subscriptionLimit: number, logging: boolean): SocketContext {
+  return createSocketContext(socket, { id: socket.data.connectionId, connectedAt: socket.data.connectedAt }, {
+    format,
+    subscriptionLimit,
+    ...(logging ? { logger: Console } : {}),
+  });
 }
 function isThenable(value: unknown): value is Promise<unknown> {
   return typeof value === "object" && value !== null && "then" in value && typeof value.then === "function";
 }
-function settle(value: unknown, socket: ServerWebSocket<RuntimeSocketData>, context: SocketContext, bindings: WebSocketRuntimeBindings): void {
-  if (isThenable(value)) value.catch((error: unknown) => handleSocketError(error, socket, context, bindings.dispatch));
+function settle(value: unknown, socket: ServerWebSocket<RuntimeSocketData>, context: SocketContext, bindings: WebSocketRuntimeBindings, logErrors: boolean): void {
+  if (isThenable(value)) value.catch((error: unknown) => handleSocketError(error, socket, context, bindings.dispatch, logErrors));
 }
 function dispatchLifecycle(
   bindings: WebSocketRuntimeBindings,
@@ -130,10 +144,22 @@ function dispatchLifecycle(
   message: unknown,
   context: SocketContext,
   socket: ServerWebSocket<RuntimeSocketData>,
+  logErrors: boolean,
 ): void {
   try {
-    settle(bindings.dispatch(lifecycle, message, context), socket, context, bindings);
+    settle(bindings.dispatch(lifecycle, message, context), socket, context, bindings, logErrors);
   } catch (error) {
-    handleSocketError(error, socket, context, bindings.dispatch);
+    handleSocketError(error, socket, context, bindings.dispatch, logErrors);
   }
+}
+
+function transportLogging(config: unknown): TransportLoggingConfig {
+  if (typeof config !== "object" || config === null || !("logging" in config)) return Object.freeze({});
+  const logging = config.logging;
+  if (typeof logging !== "object" || logging === null) return Object.freeze({});
+  const record = logging as Readonly<Record<string, unknown>>;
+  return Object.freeze({
+    ...(typeof record.websocket === "boolean" ? { websocket: record.websocket } : {}),
+    ...(typeof record.errors === "boolean" ? { errors: record.errors } : {}),
+  });
 }

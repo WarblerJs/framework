@@ -11,6 +11,7 @@ export interface SocketPublisherOptions {
 /** Live runtime target used by the package-owned publisher facade. */
 export interface SocketPublisherRuntimeTarget extends SocketNativePublisher {
   readonly format: SocketMessageFormat;
+  readonly logging?: boolean;
 }
 
 let activeTarget: SocketPublisherRuntimeTarget | undefined;
@@ -30,7 +31,7 @@ export class SocketPublisher {
     options?: SocketPublisherOptions,
   ): SocketSendResult {
     const target = currentTarget();
-    return internalPublish(target, topic, message, { format: target.format, compress: options?.compress });
+    return internalPublish(target, topic, message, { format: target.format, compress: options?.compress, logging: target.logging });
   }
 }
 

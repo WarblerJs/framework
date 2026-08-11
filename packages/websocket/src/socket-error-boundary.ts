@@ -19,13 +19,16 @@ export function handleSocketError<TData>(
   socket: ServerWebSocket<TData>,
   context: SocketContext,
   dispatch: (event: string, message: unknown, context: unknown) => unknown,
+  logErrors = true,
 ): void {
   const normalized = normalizeError(error);
-  Console.error("WebSocket handler failed.", {
-    connectionId: context.connection.id,
-    code: normalized.code,
-    status: normalized.status,
-  });
+  if (logErrors) {
+    Console.error("WebSocket handler failed.", {
+      connectionId: context.connection.id,
+      code: normalized.code,
+      status: normalized.status,
+    });
+  }
 
   try {
     dispatch("error", { code: normalized.code, message: normalized.message }, context);

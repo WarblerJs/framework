@@ -1,7 +1,10 @@
 import {
   loadRuntimeConfig,
+  loadLoggingConfig,
   loadTransportConfig,
   normalizeRuntimeConfig,
+  normalizeLoggingConfig,
+  type LoggingConfig,
   type RuntimeConfig,
   type TransportName,
 } from "@warbler/config";
@@ -78,6 +81,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
   #abortListener: (() => void) | undefined;
   #stopPromise: Promise<void> | undefined;
   #translator: CatalogTranslator | undefined;
+  #logging: LoggingConfig = normalizeLoggingConfig();
 
   public constructor(options: StartRuntimeOptions) { this.#options = Object.freeze({ ...options }); }
   public get state(): RuntimeStateValue { return this.#state; }
@@ -91,13 +95,14 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
 
   /** Validates, eagerly constructs, starts enabled transports, and reaches RUNNING. */
   public async start(): Promise<this> {
-    const timer = Console.timer("Runtime");
-    Console.runtime("starting");
+    this.#logging = await this.#loadLogging();
+    const timer = this.#logging.startup ? Console.timer("Runtime") : undefined;
+    if (this.#logging.startup) Console.runtime("starting");
     this.#transition(RuntimeState.CREATED, RuntimeState.VALIDATING);
     try {
       this.#indexes = validateApplicationBindings(this.application);
       this.#state = RuntimeState.BOOTSTRAPPING;
-      Console.debug("Loading providers.");
+      if (this.#logging.debug) Console.debug("Loading providers.");
       this.#root = new RootProviderContainer(this.#indexes.providers);
       const graphIds = Object.values(this.application.application.graphIds).sort((left, right) => left - right);
       this.#graphs = Object.freeze(graphIds.map((graphId) => {
@@ -107,10 +112,10 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       }));
       await this.#root.initialize();
       for (const graph of this.#graphs) await graph.initialize();
-      Console.debug("Providers loaded.", { root: this.application.providers.filter((provider) => provider.scope === "root").length });
+      if (this.#logging.debug) Console.debug("Providers loaded.", { root: this.application.providers.filter((provider) => provider.scope === "root").length });
       this.#controllers = new ControllerInstanceTable(this.#indexes.controllers, this.#graphMap);
       await this.#controllers.initialize();
-      Console.debug("Controllers and handlers loaded.", { controllers: this.application.controllers.length, handlers: this.application.handlers.length });
+      if (this.#logging.debug) Console.debug("Controllers and handlers loaded.", { controllers: this.application.controllers.length, handlers: this.application.handlers.length });
       this.#translator = await loadProjectTranslator(this.#options.workspaceRoot ?? process.cwd());
       this.#routes = this.#createHttpRoutes();
       this.#socketPipelines = this.#createSocketPipelines();
@@ -126,11 +131,11 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
         }
       }
       this.#state = RuntimeState.RUNNING;
-      Console.runtime("ready", { duration: timer.end(), transports: this.#ownedTransports.map((item) => item.running.kind) });
+      if (this.#logging.startup && timer !== undefined) Console.runtime("ready", { duration: timer.end(), transports: this.#ownedTransports.map((item) => item.running.kind) });
       return this;
     } catch (cause) {
-      const duration = timer.end();
-      Console.error("Runtime startup failed.", { duration, error: safeError(cause) });
+      const duration = timer?.end();
+      if (this.#logging.errors) Console.error("Runtime startup failed.", { ...(duration === undefined ? {} : { duration }), error: safeError(cause) });
       this.#state = RuntimeState.FAILED;
       await this.#rollback();
       if (cause instanceof RuntimeError) throw cause;
@@ -161,7 +166,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     return this.#stopPromise;
   }
   async #performStop(options: RuntimeStopOptions): Promise<void> {
-    Console.runtime("stopping", { reason: sanitizeReason(options.reason) });
+    if (this.#logging.runtime) Console.runtime("stopping", { reason: sanitizeReason(options.reason) });
     this.#abortController.abort(sanitizeReason(options.reason));
     let failure: unknown;
     try { await withTimeout(this.#stopTransports(options), options.timeoutMs); } catch (cause) { failure ??= cause; }
@@ -172,7 +177,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     try { await this.#root?.dispose(); } catch (cause) { failure ??= cause; }
     this.#removeAbortListener();
     this.#state = RuntimeState.STOPPED;
-    Console.runtime("stopped");
+    if (this.#logging.runtime) Console.runtime("stopped");
     if (failure !== undefined) throw new RuntimeShutdownError(`${RuntimeDiagnosticCode.SHUTDOWN_FAILED}: Runtime shutdown completed with failures.`, { cause: failure });
   }
   async #loadConfiguration(): Promise<RuntimeConfig> {
@@ -182,6 +187,13 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
         : normalizeRuntimeConfig(this.#options.runtimeConfig);
     } catch (cause) {
       throw new RuntimeConfigurationError("Unable to load Runtime configuration.", { cause });
+    }
+  }
+  async #loadLogging(): Promise<LoggingConfig> {
+    try {
+      return await loadLoggingConfig(this.#options.workspaceRoot ?? process.cwd());
+    } catch {
+      return normalizeLoggingConfig({ environment: this.#options.development === false ? "production" : "development" });
     }
   }
   async #startTransports(config: RuntimeConfig): Promise<void> {
@@ -195,15 +207,15 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       if (transportConfig === undefined) throw new RuntimeConfigurationError(`Enabled transport configuration missing: ${kind}`);
       const input = Object.freeze({
         bindings: this.#transportBindings(kind),
-        config: launcherConfiguration(kind, transportConfig, config, this.#options.development ?? false),
+        config: launcherConfiguration(kind, transportConfig, config, this.#options.development ?? false, this.#logging),
         runtime: this,
         signal: this.#abortController.signal,
       }) satisfies RuntimeTransportStartInput;
       try {
-        Console.debug(`Starting ${kind} transport.`);
+        if (this.#logging.transports && this.#logging.debug) Console.debug(`Starting ${kind} transport.`);
         const handle = await launcher.start(input);
         this.#ownedTransports.push(Object.freeze({ launcher, running: Object.freeze({ kind, handle }) }));
-        Console.debug(`${kind} transport started.`);
+        if (this.#logging.transports && this.#logging.debug) Console.debug(`${kind} transport started.`);
       } catch (cause) {
         throw new RuntimeTransportError(`${RuntimeDiagnosticCode.TRANSPORT_START_FAILED}: Transport "${kind}" failed to start.`, { cause });
       }
@@ -308,9 +320,9 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       const reason = sanitizeReason(options.reason);
       const stopOptions = Object.freeze({ ...options, ...(reason === undefined ? {} : { reason }) });
       try {
-        Console.debug(`Stopping ${owned.running.kind} transport.`);
+        if (this.#logging.transports && this.#logging.debug) Console.debug(`Stopping ${owned.running.kind} transport.`);
         await owned.launcher.stop?.(owned.running.handle, stopOptions);
-        Console.debug(`${owned.running.kind} transport stopped.`);
+        if (this.#logging.transports && this.#logging.debug) Console.debug(`${owned.running.kind} transport stopped.`);
       }
       catch (cause) { failure ??= cause; }
     }
@@ -528,6 +540,7 @@ function launcherConfiguration(
   transport: Readonly<unknown>,
   runtime: RuntimeConfig,
   development: boolean,
+  logging: LoggingConfig,
 ): Readonly<Record<string, unknown>> {
   const value = typeof transport === "object" && transport !== null ? transport : Object.freeze({});
   const activation = runtime.transports[kind];
@@ -538,6 +551,16 @@ function launcherConfiguration(
     ...(activation.port === undefined ? {} : { port: activation.port }),
     ...(mode === undefined ? {} : { mode }),
     development,
+    logging: Object.freeze({
+      requests: logging.requests,
+      runtime: logging.runtime,
+      transports: logging.transports,
+      websocket: logging.websocket,
+      errors: logging.errors,
+      fatal: logging.fatal,
+      startup: logging.startup,
+      debug: logging.debug,
+    }),
   });
 }
 async function withTimeout(operation: Promise<void>, timeoutMs: number | undefined): Promise<void> {

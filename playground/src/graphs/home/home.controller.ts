@@ -12,6 +12,10 @@ export default class HomeController {
   index(): Response {
     return JsonRes(this.#home.status());
   }
+  @Get("/bench")
+  bench() {
+    return new Response("OK");
+  }
 
   @Get("/health")
   async health(): Promise<Response> {

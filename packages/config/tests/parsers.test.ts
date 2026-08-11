@@ -5,6 +5,7 @@ import {
   parseDuration,
   parseHost,
   parsePort,
+  env,
 } from "../src";
 import { parseEnv, parseIp, parseNumber, parseString } from "../src/parser";
 
@@ -72,5 +73,28 @@ describe("configuration parsers", () => {
     expect(() => parseString("é", 1)).toThrow();
     expect(() => parseEnv("token", { token: "secret" })).toThrow();
     expect(() => parseEnv("TOKEN", {})).toThrow();
+  });
+
+  test("env helper supports optional, int, and bool config reads", () => {
+    const previous = {
+      PORT: process.env.PORT,
+      ENABLED: process.env.ENABLED,
+      EMPTY: process.env.EMPTY,
+    };
+    try {
+      process.env.PORT = "587";
+      process.env.ENABLED = "true";
+      process.env.EMPTY = "";
+      expect(env("MISSING_ENV_HELPER", "fallback")).toBe("fallback");
+      expect(env.optional("EMPTY")).toBeUndefined();
+      expect(env.int("PORT", 25)).toBe(587);
+      expect(env.bool("ENABLED", false)).toBe(true);
+      expect(() => env.int("ENABLED", 25)).toThrow();
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 });

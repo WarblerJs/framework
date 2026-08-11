@@ -16,14 +16,30 @@ async function tokenProject(source: string): Promise<string> {
   const packagesRoot = resolve(import.meta.dir, "..", "..");
   const scope = join(root, "node_modules", "@warbler");
   mkdirSync(scope, { recursive: true });
-  for (const name of ["config", "console", "core", "http", "i18n", "runtime", "transport", "validators", "websocket"]) {
+  for (const name of ["config", "console", "core", "crypto", "email", "http", "i18n", "runtime", "transport", "validators", "view", "websocket"]) {
     symlinkSync(join(packagesRoot, name), join(scope, name));
   }
   const typesScope = join(root, "node_modules", "@types");
   mkdirSync(typesScope, { recursive: true });
   symlinkSync(join(packagesRoot, "runtime", "node_modules", "@types", "bun"), join(typesScope, "bun"));
   await Bun.write(join(root, "tsconfig.json"), JSON.stringify({
-    compilerOptions: { lib: ["ESNext"], types: ["bun"], target: "ESNext", module: "Preserve", moduleResolution: "Bundler", strict: true, skipLibCheck: true, experimentalDecorators: true, noEmit: true },
+    compilerOptions: {
+      baseUrl: ".",
+      paths: {
+        "@warbler/config": ["node_modules/@warbler/config/src/index.ts"],
+        "@warbler/crypto": ["node_modules/@warbler/crypto/src/index.ts"],
+        "@warbler/view": ["node_modules/@warbler/view/src/index.ts"],
+      },
+      lib: ["ESNext"],
+      types: ["bun"],
+      target: "ESNext",
+      module: "Preserve",
+      moduleResolution: "Bundler",
+      strict: true,
+      skipLibCheck: true,
+      experimentalDecorators: true,
+      noEmit: true,
+    },
     include: ["src/**/*.ts"],
   }));
   await Bun.write(join(root, "src", "application.ts"), source);
@@ -148,6 +164,34 @@ describe("token-based provider resolution", () => {
     const serviceBinding = context.generatedApplication!.bindings!.providers.find((item) => item.implementation?.imported === "NotificationsService")!;
     const service = runtime.resolveProvider(serviceBinding.graphId, serviceBinding.id) as { readonly sockets: { readonly constructor: { readonly name: string } } };
     expect(service.sockets.constructor.name).toBe("SocketPublisher");
+  }, 15_000);
+
+  test("registers Email as a framework root provider when imported", async () => {
+    const root = await tokenProject(`
+      import { Graph, Service, inject } from "@warbler/core";
+      import { Email } from "@warbler/email";
+
+      @Service()
+      export class WelcomeService {
+        readonly email = inject(Email);
+      }
+
+      @Graph({ providers: [WelcomeService] })
+      export class AppGraph {}
+    `);
+    const context = await compileProject(root);
+    expect(context.diagnostics).toEqual([]);
+    expect(context.applicationWIR!.rootProviders.map((provider) => provider.name)).toContain("Email");
+
+    const providers = await Bun.file(join(root, ".warbler", "generated", "providers.generated.ts")).text();
+    expect(providers).toContain('from "@warbler/email"');
+    expect(providers).toContain("Email");
+
+    const generated = await import(join(root, ".warbler", "generated", "application.generated.ts"));
+    const runtime = createExecutableBindingsRuntime(generated.default);
+    const serviceBinding = context.generatedApplication!.bindings!.providers.find((item) => item.implementation?.imported === "WelcomeService")!;
+    const service = runtime.resolveProvider(serviceBinding.graphId, serviceBinding.id) as { readonly email: { readonly constructor: { readonly name: string } } };
+    expect(service.email.constructor.name).toBe("Email");
   }, 15_000);
 
   test("resolves string and symbol tokens", async () => {

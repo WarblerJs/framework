@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { NotFoundError } from "@warbler/core";
+import { Console } from "@warbler/console";
 import { createBunRouteHandler, createNotFoundFallback, type BunRouteHandlerOptions } from "../src/native";
 import { RouteFlag } from "../src/compiled";
 
@@ -31,6 +32,34 @@ describe("native request pipeline", () => {
     );
     expect(response.status).toBe(404);
     expect(await response.text()).toBe("Not Found");
+  });
+
+  test("quiet request logging selects a no-log success fast path", async () => {
+    let requestLogs = 0;
+    let responseLogs = 0;
+    const originalRequest = Console.request.bind(Console);
+    const originalResponse = Console.response.bind(Console);
+    Console.request = ((input) => {
+      requestLogs += 1;
+      return originalRequest(input);
+    }) as typeof Console.request;
+    Console.response = ((request, input) => {
+      responseLogs += 1;
+      return originalResponse(request, input);
+    }) as typeof Console.response;
+    try {
+      const handler = createBunRouteHandler({
+        ...baseOptions(() => new Response("ok")),
+        logging: { requests: false, errors: true },
+      });
+      const response = await handler(REQUEST(), Object.create(null));
+      expect(response.status).toBe(200);
+      expect(requestLogs).toBe(0);
+      expect(responseLogs).toBe(0);
+    } finally {
+      Console.request = originalRequest as typeof Console.request;
+      Console.response = originalResponse as typeof Console.response;
+    }
   });
 
   describe("unified exception boundary", () => {

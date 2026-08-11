@@ -1,4 +1,4 @@
-import { Console, type RequestHandle } from "@warbler/console";
+import { Console } from "@warbler/console";
 import { JsonRes } from "../response";
 import { toNormalizedHttpError } from "./normalize-http-error";
 
@@ -34,20 +34,23 @@ function textResponse(body: string, status: number): Response {
 export function renderRequestError(
   error: unknown,
   request: Request,
-  requestLog: RequestHandle,
+  requestLog: Readonly<{ readonly requestId: string }>,
   development: boolean,
+  logErrors = true,
 ): Response {
   const normalized = toNormalizedHttpError(error);
   const url = new URL(request.url);
   const requestLine = `${request.method} ${url.pathname}`;
 
-  Console.error("Request failed.", {
-    requestId: requestLog.requestId,
-    method: request.method,
-    path: url.pathname,
-    code: normalized.code,
-    status: normalized.status,
-  });
+  if (logErrors) {
+    Console.error("Request failed.", {
+      requestId: requestLog.requestId,
+      method: request.method,
+      path: url.pathname,
+      code: normalized.code,
+      status: normalized.status,
+    });
+  }
 
   if (prefersHtml(request)) {
     if (!development) {

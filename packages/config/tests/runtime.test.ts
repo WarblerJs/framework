@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { normalizeRuntimeConfig, validateRuntimeConfig } from "../src";
+import { normalizeLoggingConfig, normalizeRuntimeConfig, validateRuntimeConfig } from "../src";
 
 function runtimeConfig(): unknown {
   return {
@@ -51,5 +51,28 @@ describe("runtime configuration", () => {
     }
     Object.assign(transports.http, { port: Infinity });
     expect(() => validateRuntimeConfig(invalidPort)).toThrow("port");
+  });
+});
+
+describe("logging configuration", () => {
+  test("defaults informational logging by environment and keeps errors/fatal enabled", () => {
+    expect(normalizeLoggingConfig({ environment: "development" })).toMatchObject({
+      requests: true, runtime: true, transports: true, websocket: true, errors: true, fatal: true,
+    });
+    expect(normalizeLoggingConfig({ environment: "staging" })).toMatchObject({
+      requests: true, runtime: true, transports: true, websocket: true, errors: true, fatal: true,
+    });
+    expect(normalizeLoggingConfig({ environment: "production" })).toMatchObject({
+      requests: false, runtime: false, transports: false, websocket: false, errors: true, fatal: true,
+    });
+  });
+
+  test("explicit logging overrides win over environment defaults", () => {
+    expect(normalizeLoggingConfig({ environment: "production", requests: true, websocket: true, errors: false })).toMatchObject({
+      requests: true,
+      websocket: true,
+      errors: false,
+      fatal: true,
+    });
   });
 });

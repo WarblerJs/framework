@@ -85,6 +85,19 @@
         "typescript": "^5.9.2",
       },
     },
+    "packages/email": {
+      "name": "@warbler/email",
+      "version": "0.1.0",
+      "dependencies": {
+        "@warbler/config": "workspace:*",
+        "@warbler/crypto": "workspace:*",
+        "@warbler/view": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.9.2",
+      },
+    },
     "packages/events": {
       "name": "@warbler/events",
       "version": "0.1.0",
@@ -208,6 +221,7 @@
         "@warbler/core": "workspace:*",
         "@warbler/crypto": "workspace:*",
         "@warbler/database": "workspace:*",
+        "@warbler/email": "workspace:*",
         "@warbler/events": "workspace:*",
         "@warbler/frontend": "workspace:*",
         "@warbler/http": "workspace:*",
@@ -313,6 +327,8 @@
     "@warbler/crypto": ["@warbler/crypto@workspace:packages/crypto"],
 
     "@warbler/database": ["@warbler/database@workspace:packages/database"],
+
+    "@warbler/email": ["@warbler/email@workspace:packages/email"],
 
     "@warbler/events": ["@warbler/events@workspace:packages/events"],
 

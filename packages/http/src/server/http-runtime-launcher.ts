@@ -15,6 +15,11 @@ import {
   decodeNamedRouteRows,
 } from "../view/builtin-resolvers";
 
+interface TransportLoggingConfig {
+  readonly requests?: boolean;
+  readonly errors?: boolean;
+}
+
 /** Generated HTTP bindings supplied by Runtime after one-time pipeline compilation. */
 export interface HttpRuntimeBindings {
   readonly routes: BunRouteTable;
@@ -27,6 +32,7 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
     kind: "http",
     async start(input: RuntimeTransportStartInput<HttpRuntimeBindings, unknown>) {
       const config = normalizeHttpConfig(input.config);
+      const logging = transportLogging(input.config);
       const routes: Record<string, unknown> = {
         ...await createStaticRouteTable(process.cwd(), config.static, config.development),
         ...(config.development ? createViewDevelopmentRoutes() : {}),
@@ -67,6 +73,7 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
             csrf,
             builtins,
             development: config.development,
+            logging,
           });
         }
         routes[path] = Object.freeze(wrapped);
@@ -84,6 +91,17 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
       return owner;
     },
     stop(handle: HttpServer, options: RuntimeTransportStopOptions) { return handle.stop(options.closeActiveConnections ?? false); },
+  });
+}
+
+function transportLogging(config: unknown): TransportLoggingConfig {
+  if (typeof config !== "object" || config === null || !("logging" in config)) return Object.freeze({});
+  const logging = config.logging;
+  if (typeof logging !== "object" || logging === null) return Object.freeze({});
+  const record = logging as Readonly<Record<string, unknown>>;
+  return Object.freeze({
+    ...(typeof record.requests === "boolean" ? { requests: record.requests } : {}),
+    ...(typeof record.errors === "boolean" ? { errors: record.errors } : {}),
   });
 }
 function routeFlags(bindings: HttpRuntimeBindings, path: string, method: string): number {

@@ -1,3 +1,4 @@
+import { loadLoggingConfig, normalizeLoggingConfig } from "@warbler/config";
 import { Console } from "@warbler/console";
 import type { RuntimeHandle } from "./runtime-owner";
 
@@ -19,8 +20,12 @@ export function installFatalErrorHandlers(runtime: RuntimeHandle): () => void {
   const handleFatal = (error: unknown): void => {
     if (handled) return;
     handled = true;
-    Console.error("Fatal process error.", {
-      message: error instanceof Error ? error.message : String(error),
+    void loadLoggingConfig(process.cwd()).catch(() => normalizeLoggingConfig({ environment: process.env.NODE_ENV === "production" ? "production" : "development" })).then((logging) => {
+      if (logging.fatal) {
+        Console.error("Fatal process error.", {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
     });
     void Promise.resolve(runtime.stop({ reason: "fatal-error" })).finally(() => {
       process.exit(1);
