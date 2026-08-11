@@ -94,6 +94,73 @@ test("destroy aborts an active fetch and a stale completion cannot invoke callba
   expect(formElement.hasAttribute("data-wbr-submitting")).toBe(false);
 });
 
+test("action forms validate and then continue with native submission without fetch", () => {
+  const formElement = new FakeForm();
+  formElement.id = "native-form";
+  formElement.setAttribute("action", "/login");
+  formElement.setAttribute("method", "post");
+  const input = new FakeElement("INPUT");
+  input.setAttribute("name", "email");
+  formElement.add(input);
+  Object.defineProperty(globalThis, "document", { configurable: true, value: new FakeDocument(formElement) });
+
+  let fetches = 0;
+  let submissions = 0;
+  const form = FormBuilder(
+    "native-form",
+    (v) => ({ email: ["valid@example.com", v.required("Email is required")] }),
+    {
+      fetch: (() => {
+        fetches += 1;
+        return Promise.resolve(new Response("ok"));
+      }) as typeof fetch,
+    },
+  );
+  form.onSubmit(() => submissions += 1);
+
+  const event = new Event("submit", { cancelable: true });
+  formElement.dispatchEvent(event);
+
+  expect(event.defaultPrevented).toBe(false);
+  expect(fetches).toBe(0);
+  expect(submissions).toBe(1);
+  expect(form.submitted()).toBe(true);
+  expect(form.submitting()).toBe(false);
+});
+
+test("action forms still prevent native submission when client validation fails", () => {
+  const formElement = new FakeForm();
+  formElement.id = "invalid-native-form";
+  formElement.setAttribute("action", "/login");
+  const input = new FakeElement("INPUT");
+  input.setAttribute("name", "email");
+  formElement.add(input);
+  Object.defineProperty(globalThis, "document", { configurable: true, value: new FakeDocument(formElement) });
+
+  let fetches = 0;
+  let submissions = 0;
+  const form = FormBuilder(
+    "invalid-native-form",
+    (v) => ({ email: ["", v.required("Email is required")] }),
+    {
+      fetch: (() => {
+        fetches += 1;
+        return Promise.resolve(new Response("ok"));
+      }) as typeof fetch,
+    },
+  );
+  form.onSubmit(() => submissions += 1);
+
+  const event = new Event("submit", { cancelable: true });
+  formElement.dispatchEvent(event);
+
+  expect(event.defaultPrevented).toBe(true);
+  expect(fetches).toBe(0);
+  expect(submissions).toBe(0);
+  expect(form.submitted()).toBe(true);
+  expect(form.submitting()).toBe(false);
+});
+
 test("reinitialization removes old listeners and old destroy cannot affect the new instance", () => {
   const formElement = new FakeForm();
   formElement.id = "login-form";

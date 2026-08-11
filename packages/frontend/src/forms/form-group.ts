@@ -4,7 +4,7 @@ import { FormBuilderError } from "./errors";
 import { isIntentionalAbort, SubmissionRequestOwner } from "./request-owner";
 import { FormControl } from "./form-control";
 import { synchronizeBooleanState, synchronizeStatus } from "./state";
-import { createFetchSubmission, normalizeServerErrors, submissionMode } from "./submit";
+import { createFetchSubmission, normalizeServerErrors } from "./submit";
 import { CleanupRegistry, once } from "./lifecycle";
 import type { FormApi, FormStatus, FormValidator, FormValue } from "./types";
 
@@ -154,6 +154,7 @@ export class FormGroup<T extends Readonly<Record<string, FormValue>>> implements
   }
   async #submit(event: SubmitEvent): Promise<void> {
     if (this.#destroyed) { event.preventDefault(); return; }
+    const submitsNatively = this.element.hasAttribute("action");
     this.submitted.set(true);
     synchronizeBooleanState(this.element, "data-wbr-submitted", true);
     if (this.submitting()) { event.preventDefault(); return; }
@@ -161,7 +162,7 @@ export class FormGroup<T extends Readonly<Record<string, FormValue>>> implements
     if (!this.validate(true)) { event.preventDefault(); this.element.reportValidity(); return; }
     const current = this.#readValue();
     for (const callback of this.#submitCallbacks) callback(current);
-    if (submissionMode(this.element.hasAttribute("action")) === "native") return;
+    if (submitsNatively) return;
     event.preventDefault();
     this.submitting.set(true); synchronizeBooleanState(this.element, "data-wbr-submitting", true);
     const controller = this.#requests.begin();

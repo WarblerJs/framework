@@ -1,6 +1,5 @@
-import { form } from "@warbler/frontend";
-
-form.serialize;
+ 
+ 
 
 
 // Initialize WebSocket connection
