@@ -44,8 +44,8 @@ export interface AnalysisResult {
 }
 /** Framework-owned provider imported by application code and registered by generated bindings. */
 export interface FrameworkProviderReference extends SourceLocationWIR {
-  readonly module: "@warbler/events" | "@warbler/websocket";
-  readonly imported: "EventDispatcher" | "SocketPublisher";
+  readonly module: "@warbler/email" | "@warbler/events" | "@warbler/websocket";
+  readonly imported: "Email" | "EventDispatcher" | "SocketPublisher";
   readonly local: string;
 }
 
@@ -326,7 +326,7 @@ function collectFrameworkProviders(source: ts.SourceFile): readonly FrameworkPro
   for (const statement of source.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteralLike(statement.moduleSpecifier)) continue;
     const module = statement.moduleSpecifier.text;
-    if (module !== "@warbler/events" && module !== "@warbler/websocket") continue;
+    if (module !== "@warbler/email" && module !== "@warbler/events" && module !== "@warbler/websocket") continue;
     const bindings = statement.importClause?.namedBindings;
     if (bindings === undefined || !ts.isNamedImports(bindings)) continue;
     for (const element of bindings.elements) {
@@ -335,6 +335,9 @@ function collectFrameworkProviders(source: ts.SourceFile): readonly FrameworkPro
         result.push(Object.freeze({ ...location(element, source), module, imported, local: element.name.text }));
       }
       if (module === "@warbler/events" && imported === "EventDispatcher") {
+        result.push(Object.freeze({ ...location(element, source), module, imported, local: element.name.text }));
+      }
+      if (module === "@warbler/email" && imported === "Email") {
         result.push(Object.freeze({ ...location(element, source), module, imported, local: element.name.text }));
       }
     }

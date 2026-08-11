@@ -19,7 +19,11 @@
       "@errors/*": ["src/shared/errors/*"],
       "@functions/*": ["src/shared/functions/*"],
       "@warbler/console": ["../packages/console/src/index.ts"],
+      "@warbler/config": ["../packages/config/src/index.ts"],
+      "@warbler/crypto": ["../packages/crypto/src/index.ts"],
+      "@warbler/email": ["../packages/email/src/index.ts"],
       "@warbler/events": ["../packages/events/src/index.ts"],
+      "@warbler/view": ["../packages/view/src/index.ts"],
     }
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "database/**/*.ts"]

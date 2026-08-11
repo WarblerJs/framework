@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@warbler/config": ["../config/src/index.ts"],
+      "@warbler/crypto": ["../crypto/src/index.ts"],
+      "@warbler/view": ["../view/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts", "bench/**/*.ts"]
+}

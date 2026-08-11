@@ -278,12 +278,14 @@ function isLiteralReference(name: string): boolean { return name.startsWith("\""
 function resolveFrameworkValue(name: string, preferredFile: string | undefined, imports: Map<string, BindingImport>): BindingImport | undefined {
   if (preferredFile === "@warbler/websocket" && name === "SocketPublisher") return frameworkImport(name, "SocketPublisher", "@warbler/websocket", imports);
   if (preferredFile === "@warbler/events" && name === "EventDispatcher") return frameworkImport(name, "EventDispatcher", "@warbler/events", imports);
+  if (preferredFile === "@warbler/email" && name === "Email") return frameworkImport(name, "Email", "@warbler/email", imports);
   return undefined;
 }
 function resolveFrameworkDeclaration(name: string, declaration: ts.Declaration, imported: string, imports: Map<string, BindingImport>): BindingImport | undefined {
   const source = declaration.getSourceFile().fileName.replaceAll("\\", "/");
   if (imported === "SocketPublisher" && source.endsWith("/packages/websocket/src/publisher.ts")) return frameworkImport(name, "SocketPublisher", "@warbler/websocket", imports);
   if (imported === "EventDispatcher" && source.endsWith("/packages/events/src/index.ts")) return frameworkImport(name, "EventDispatcher", "@warbler/events", imports);
+  if (imported === "Email" && source.endsWith("/packages/email/src/email.ts")) return frameworkImport(name, "Email", "@warbler/email", imports);
   return undefined;
 }
 function frameworkImport(name: string, imported: string, module: string, imports: Map<string, BindingImport>): BindingImport {

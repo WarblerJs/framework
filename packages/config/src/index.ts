@@ -10,4 +10,4 @@ export {
 } from "./parser";
 export type { RuntimeConfig, TransportName } from "./types";
 export { validateRuntimeConfig } from "./validator";
-export { envString, envNumber,envBoolean } from './parser/parse-env'
+export { env, envString, envNumber, envBoolean, type EnvReader } from "./parser/parse-env";

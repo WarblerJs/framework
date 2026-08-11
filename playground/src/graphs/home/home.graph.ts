@@ -6,6 +6,6 @@ import HomeService from "./home.service";
 @Graph({
   prefix: "/",
   controllers: [HomeController],
-  providers: [ApplicationLogger, HomeService],
+  //providers: [ApplicationLogger, HomeService],
 })
 export default class HomeGraph {}
