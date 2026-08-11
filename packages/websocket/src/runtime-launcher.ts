@@ -4,6 +4,7 @@ import type { ServerWebSocket, WebSocketHandler } from "bun";
 import { normalizeWebSocketConfig, type WebSocketConfig } from "./config";
 import { createSocketContext, type SocketContext } from "./context";
 import { decodeSocketMessage } from "./message";
+import { activateSocketPublisherRuntime, deactivateSocketPublisherRuntime, type SocketPublisherRuntimeTarget } from "./publisher";
 import { handleSocketError } from "./socket-error-boundary";
 import { validateOrigin, validateSubprotocol } from "./upgrade";
 
@@ -12,7 +13,7 @@ interface WebSocketRuntimeBindings {
   readonly compiled?: Readonly<{ readonly events?: Readonly<Record<string, unknown>> }>;
   readonly dispatch: (event: string, message: unknown, context: unknown) => unknown;
 }
-interface WebSocketRuntimeHandle { readonly server: Bun.Server<RuntimeSocketData> }
+interface WebSocketRuntimeHandle { readonly server: Bun.Server<RuntimeSocketData>; readonly publisher: SocketPublisherRuntimeTarget }
 
 /** Creates the package-owned dedicated WebSocket Runtime launcher. */
 export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSocketRuntimeBindings, WebSocketConfig, WebSocketRuntimeHandle> {
@@ -93,9 +94,22 @@ export function createWebSocketRuntimeLauncher(): RuntimeTransportLauncher<WebSo
         },
         websocket: handler,
       });
-      return Object.freeze({ server });
+      const publisher = Object.freeze({
+        format: config.messages.format,
+        publish(topic: string, data: string | ArrayBuffer | Uint8Array, compress?: boolean): number {
+          return server.publish(topic, data, compress);
+        },
+      });
+      activateSocketPublisherRuntime(publisher);
+      return Object.freeze({ server, publisher });
     },
-    stop(handle: WebSocketRuntimeHandle, options: RuntimeTransportStopOptions) { return handle.server.stop(options.closeActiveConnections ?? false); },
+    stop(handle: WebSocketRuntimeHandle, options: RuntimeTransportStopOptions) {
+      try {
+        return handle.server.stop(options.closeActiveConnections ?? false);
+      } finally {
+        deactivateSocketPublisherRuntime(handle.publisher);
+      }
+    },
   });
 }
 function rawSize(value: string | ArrayBuffer | Uint8Array): number {

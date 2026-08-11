@@ -5,6 +5,7 @@
     "paths": {
       "@warbler/console": ["../console/src/index.ts"],
       "@warbler/core": ["../core/src/index.ts"],
+      "@warbler/events": ["../events/src/index.ts"],
       "@warbler/runtime": ["../runtime/src/index.ts"]
     },
     "exactOptionalPropertyTypes": true

@@ -9,6 +9,7 @@ export * from "./events";
 export * from "./guards";
 export * from "./message";
 export * from "./native";
+export * from "./publisher";
 export * from "./pubsub";
 export * from "./server";
 export * from "./upgrade";

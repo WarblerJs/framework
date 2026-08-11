@@ -47,6 +47,9 @@ export interface ExecutableBindingPlan {
   readonly guards: readonly (BindingImport & { readonly id: number })[];
   readonly middlewares: readonly (BindingImport & { readonly id: number })[];
   readonly validators: readonly (BindingImport & { readonly id: number })[];
+  readonly events: readonly (BindingImport & { readonly id: number; readonly file: string; readonly line: number; readonly column: number })[];
+  readonly eventListeners: readonly (BindingImport & { readonly id: number; readonly eventId: number; readonly file: string; readonly line: number; readonly column: number })[];
+  readonly eventInterceptors: readonly (BindingImport & { readonly id: number; readonly file: string; readonly line: number; readonly column: number })[];
 }
 
 /** Resolves WIR names to exported runtime values using the compilation TypeChecker. */
@@ -64,6 +67,8 @@ export function analyzeExecutableBindings(
 
   const imports = new Map<string, BindingImport>();
   const resolveValue = (name: string, preferredFile?: string, silent = false): BindingImport | undefined => {
+    const framework = resolveFrameworkValue(name, preferredFile, imports);
+    if (framework !== undefined) return framework;
     const candidates = (declarations.get(name) ?? []).filter((node) => preferredFile === undefined || node.getSourceFile().fileName === preferredFile);
     if (candidates.length !== 1) {
       if (!silent) context.diagnostics.push(bindingDiagnostic(
@@ -85,6 +90,8 @@ export function analyzeExecutableBindings(
     }
     const declaredName = declarationName(declaration);
     const imported = declaredName !== undefined && ts.isIdentifier(declaredName) ? declaredName.text : name;
+    const frameworkDeclaration = resolveFrameworkDeclaration(name, declaration, imported, imports);
+    if (frameworkDeclaration !== undefined) return frameworkDeclaration;
     const key = `${declaration.getSourceFile().fileName}:${imported}`;
     const existing = imports.get(key);
     if (existing !== undefined) return existing;
@@ -167,11 +174,35 @@ export function analyzeExecutableBindings(
     if (symbol === undefined) { failed = true; return undefined; }
     return Object.freeze({ ...symbol, id: row.id });
   }).filter(isDefined);
+  const eventBindings = optimized.events.map((row) => {
+    const name = optimized.strings[row.nameId]!;
+    const file = optimized.strings[row.fileId]!;
+    const symbol = resolveValue(name, file);
+    if (symbol === undefined) { failed = true; return undefined; }
+    return Object.freeze({ ...symbol, id: row.id, file, line: row.line, column: row.column });
+  }).filter(isDefined);
+  const listenerBindings = optimized.eventListeners.map((row) => {
+    const name = optimized.strings[row.nameId]!;
+    const file = optimized.strings[row.fileId]!;
+    const symbol = resolveValue(name, file);
+    if (symbol === undefined) { failed = true; return undefined; }
+    return Object.freeze({ ...symbol, id: row.id, eventId: row.eventId, file, line: row.line, column: row.column });
+  }).filter(isDefined);
+  const interceptorBindings = optimized.eventInterceptors.map((row) => {
+    const name = optimized.strings[row.nameId]!;
+    const file = optimized.strings[row.fileId]!;
+    const symbol = resolveValue(name, file);
+    if (symbol === undefined) { failed = true; return undefined; }
+    return Object.freeze({ ...symbol, id: row.id, file, line: row.line, column: row.column });
+  }).filter(isDefined);
   const result = Object.freeze({
     providers: Object.freeze(providers), controllers: Object.freeze(controllers), handlers: Object.freeze(handlers),
     guards: Object.freeze(namedBindings(optimized.guards)),
     middlewares: Object.freeze(namedBindings(optimized.middlewares)),
     validators: Object.freeze(namedBindings(optimized.validators)),
+    events: Object.freeze(eventBindings),
+    eventListeners: Object.freeze(listenerBindings),
+    eventInterceptors: Object.freeze(interceptorBindings),
   });
   return failed ? undefined : result;
 }
@@ -244,3 +275,27 @@ function isImport(value: BindingImport | undefined): value is BindingImport { re
 function isDefined<T>(value: T | undefined): value is T { return value !== undefined; }
 /** A WIR reference name produced from a string-literal token (see `referenceName` in the analyzer) starts with `"`, which no identifier can. */
 function isLiteralReference(name: string): boolean { return name.startsWith("\""); }
+function resolveFrameworkValue(name: string, preferredFile: string | undefined, imports: Map<string, BindingImport>): BindingImport | undefined {
+  if (preferredFile === "@warbler/websocket" && name === "SocketPublisher") return frameworkImport(name, "SocketPublisher", "@warbler/websocket", imports);
+  if (preferredFile === "@warbler/events" && name === "EventDispatcher") return frameworkImport(name, "EventDispatcher", "@warbler/events", imports);
+  return undefined;
+}
+function resolveFrameworkDeclaration(name: string, declaration: ts.Declaration, imported: string, imports: Map<string, BindingImport>): BindingImport | undefined {
+  const source = declaration.getSourceFile().fileName.replaceAll("\\", "/");
+  if (imported === "SocketPublisher" && source.endsWith("/packages/websocket/src/publisher.ts")) return frameworkImport(name, "SocketPublisher", "@warbler/websocket", imports);
+  if (imported === "EventDispatcher" && source.endsWith("/packages/events/src/index.ts")) return frameworkImport(name, "EventDispatcher", "@warbler/events", imports);
+  return undefined;
+}
+function frameworkImport(name: string, imported: string, module: string, imports: Map<string, BindingImport>): BindingImport {
+  const key = `${module}:${imported}`;
+  const existing = imports.get(key);
+  if (existing !== undefined) return existing;
+  const value = Object.freeze({
+    local: safeLocal(name, imports.size),
+    imported,
+    kind: "named" as const,
+    module,
+  });
+  imports.set(key, value);
+  return value;
+}

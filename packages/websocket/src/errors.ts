@@ -19,3 +19,7 @@ export class WebSocketPayloadError extends WebSocketMessageError {}
 export class WebSocketValidationError extends WebSocketMessageError {}
 /** Raised for invalid server lifecycle transitions. */
 export class WebSocketStateError extends WebSocketError {}
+/** Raised when publishing before a WebSocket runtime has started. */
+export class SocketRuntimeNotReadyError extends WebSocketError {}
+/** Raised when publishing after the WebSocket runtime has stopped. */
+export class SocketRuntimeStoppedError extends WebSocketError {}

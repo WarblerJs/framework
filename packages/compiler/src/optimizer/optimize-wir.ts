@@ -18,6 +18,10 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
   const socketRows = wir.graphs.flatMap((graph) => graph.controllers.flatMap((controller) => controller.socketEvents.map((event) => ({
     key: `${graph.name}:${controller.name}:${event.kind}:${event.event}:${event.handler}`, graph: graph.name, controller: controller.name, event,
   })))).sort((left, right) => compare(left.key, right.key));
+  const eventRows = wir.events.map((event) => ({ key: `${event.file}:${event.name}`, event })).sort((left, right) => compare(left.key, right.key));
+  const eventIds = idMap(eventRows.map((row) => row.event.name));
+  const listenerRows = wir.eventListeners.map((listener) => ({ key: `${listener.file}:${listener.name}`, listener })).sort((left, right) => compare(left.key, right.key));
+  const interceptorRows = wir.eventInterceptors.map((interceptor) => ({ key: `${interceptor.file}:${interceptor.name}`, interceptor })).sort((left, right) => compare(left.key, right.key));
 
   const providerIds = idMap(providerRows.map((row) => row.key));
   const tokenNames = new Map<string, string>();
@@ -40,6 +44,9 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
     ...graphKeys,
     ...providerRows.flatMap((row) => [row.provider.name, ...row.provider.dependencies]),
     ...controllerRows.map((row) => row.controller.name),
+    ...eventRows.flatMap((row) => [row.event.name, row.event.file]),
+    ...listenerRows.flatMap((row) => [row.listener.name, row.listener.file]),
+    ...interceptorRows.flatMap((row) => [row.interceptor.name, row.interceptor.file]),
     ...routeRows.flatMap((row) => [row.route.method, row.path, row.route.handler, ...(row.route.name === undefined ? [] : [row.route.name])]),
     ...socketRows.flatMap((row) => [row.event.event, row.event.handler]),
     ...handlerNames, ...validatorNames, ...middlewareNames, ...guardNames,
@@ -96,12 +103,38 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
   });
   const named = (names: readonly string[], ids: ReadonlyMap<string, number>): readonly NamedTableEntry[] =>
     Object.freeze(names.map((name) => Object.freeze({ id: ids.get(name)!, nameId: stringIds.get(name)! })));
+  const eventListeners = listenerRows.map((row, id) => Object.freeze({
+    id,
+    nameId: stringIds.get(row.listener.name)!,
+    eventId: eventIds.get(row.listener.event) ?? -1,
+    fileId: stringIds.get(row.listener.file)!,
+    line: row.listener.line,
+    column: row.listener.column,
+  }));
+  const eventListenerIds: number[] = [];
+  for (const event of eventRows) for (const listener of eventListeners.filter((item) => item.eventId === eventIds.get(event.event.name)!)) eventListenerIds.push(listener.id);
   return Object.freeze({
     strings: Object.freeze(strings), graphIds: Object.freeze(graphIds),
     providers: Object.freeze(providers), providerDependencies: Object.freeze(providerDependencies),
     controllers: Object.freeze(controllers), routes: Object.freeze(routes), socketEvents: Object.freeze(socketEvents),
     handlers: named(handlerNames, handlerIds), validators: named(validatorNames, validatorIds),
     middlewares: named(middlewareNames, middlewareIds), guards: named(guardNames, guardIds),
+    events: Object.freeze(eventRows.map((row) => Object.freeze({
+      id: eventIds.get(row.event.name)!,
+      nameId: stringIds.get(row.event.name)!,
+      fileId: stringIds.get(row.event.file)!,
+      line: row.event.line,
+      column: row.event.column,
+    }))),
+    eventListeners: Object.freeze(eventListeners),
+    eventInterceptors: Object.freeze(interceptorRows.map((row, id) => Object.freeze({
+      id,
+      nameId: stringIds.get(row.interceptor.name)!,
+      fileId: stringIds.get(row.interceptor.file)!,
+      line: row.interceptor.line,
+      column: row.interceptor.column,
+    }))),
+    eventListenerIds: Object.freeze(eventListenerIds),
     routeMiddleware: Object.freeze(routeMiddleware), routeGuards: Object.freeze(routeGuards),
     socketMiddleware: Object.freeze(socketMiddleware), socketGuards: Object.freeze(socketGuards),
   });

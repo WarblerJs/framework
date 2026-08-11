@@ -1,13 +1,22 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import type { RuntimeExecutionContext, RuntimeTransportStartInput } from "@warbler/transport";
 import { NotFoundError, WarblerError } from "@warbler/core";
 import { createWebSocketRuntimeLauncher } from "../src/runtime-launcher";
 import type { WebSocketConfig } from "../src/config";
+import {
+  SocketPublisher,
+  SocketRuntimeStoppedError,
+  resetSocketPublisherRuntimeForTests,
+  type SocketContext,
+  type SocketMessage,
+} from "../src";
 
 const runtime: RuntimeExecutionContext = {
   resolveProvider: () => undefined,
   invokeHandler: () => undefined,
 };
+
+afterEach(() => resetSocketPublisherRuntimeForTests());
 
 function startInput(config: WebSocketConfig & { readonly port?: number; readonly host?: string }): RuntimeTransportStartInput<{ dispatch: () => void }, WebSocketConfig> {
   return Object.freeze({
@@ -16,6 +25,51 @@ function startInput(config: WebSocketConfig & { readonly port?: number; readonly
     runtime,
     signal: new AbortController().signal,
   });
+}
+
+type WebSocketLauncher = ReturnType<typeof createWebSocketRuntimeLauncher>;
+type WebSocketHandle = Awaited<ReturnType<WebSocketLauncher["start"]>>;
+
+async function startJoinServer(launcher: WebSocketLauncher): Promise<Readonly<{ port: number; handle: WebSocketHandle }>> {
+  const port = 39_000 + Math.floor(Math.random() * 1_000);
+  const handle = await launcher.start(Object.freeze({
+    bindings: {
+      compiled: { events: { join: {} } },
+      dispatch(event: string, message: unknown, context: unknown): void {
+        if (event !== "join") return;
+        const socketMessage = message as SocketMessage<{ readonly topic: string }>;
+        const socketContext = context as SocketContext;
+        socketContext.join(socketMessage.data.topic);
+        socketContext.send({ event: "joined", data: { topic: socketMessage.data.topic } });
+      },
+    },
+    config: { mode: "dedicated", port, host: "127.0.0.1" } as unknown as WebSocketConfig,
+    runtime,
+    signal: new AbortController().signal,
+  }));
+  return Object.freeze({ port, handle });
+}
+
+async function subscribedSocket(port: number, topic: string): Promise<WebSocket> {
+  const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+  await new Promise<void>((resolve, reject) => {
+    socket.addEventListener("open", () => resolve(), { once: true });
+    socket.addEventListener("error", () => reject(new Error("connect failed")), { once: true });
+  });
+  const joined = nextMessage(socket);
+  socket.send(JSON.stringify({ event: "join", data: { topic } }));
+  expect(await joined).toEqual({ event: "joined", data: { topic } });
+  return socket;
+}
+
+function nextMessage(socket: WebSocket): Promise<unknown> {
+  return new Promise((resolve) => {
+    socket.addEventListener("message", (event) => resolve(JSON.parse(event.data as string)), { once: true });
+  });
+}
+
+async function boundedStop(launcher: WebSocketLauncher, handle: WebSocketHandle): Promise<void> {
+  await Promise.race([launcher.stop?.(handle, { closeActiveConnections: true }), Bun.sleep(200)]);
 }
 
 describe("createWebSocketRuntimeLauncher", () => {
@@ -33,6 +87,70 @@ describe("createWebSocketRuntimeLauncher", () => {
   test("throws for a non-dedicated mode", () => {
     const launcher = createWebSocketRuntimeLauncher();
     expect(() => launcher.start(startInput({ mode: "shared-http", port: 0, host: "127.0.0.1" }))).toThrow(TypeError);
+  });
+
+  test("SocketPublisher publishes through the active runtime to every native subscriber", async () => {
+    const launcher = createWebSocketRuntimeLauncher();
+    const port = 39_000 + Math.floor(Math.random() * 1_000);
+    const handle = await launcher.start(Object.freeze({
+      bindings: {
+        compiled: { events: { join: {} } },
+        dispatch(event: string, message: unknown, context: unknown): void {
+          if (event !== "join") return;
+          const socketMessage = message as SocketMessage<{ readonly topic: string }>;
+          const socketContext = context as SocketContext;
+          socketContext.join(socketMessage.data.topic);
+          socketContext.send({ event: "joined", data: { topic: socketMessage.data.topic } });
+        },
+      },
+      config: { mode: "dedicated", port, host: "127.0.0.1" } as unknown as WebSocketConfig,
+      runtime,
+      signal: new AbortController().signal,
+    }));
+    try {
+      const first = await subscribedSocket(port, "notifications");
+      const second = await subscribedSocket(port, "notifications");
+      try {
+        const firstMessage = nextMessage(first);
+        const secondMessage = nextMessage(second);
+        const result = new SocketPublisher().publish("notifications", { event: "notify", data: { userId: 123 } });
+        expect(result.status).toBe("sent");
+        expect(await firstMessage).toEqual({ event: "notify", data: { userId: 123 } });
+        expect(await secondMessage).toEqual({ event: "notify", data: { userId: 123 } });
+      } finally {
+        first.close();
+        second.close();
+      }
+    } finally {
+      await boundedStop(launcher, handle);
+    }
+  });
+
+  test("the same SocketPublisher instance follows shutdown and restart", async () => {
+    const launcher = createWebSocketRuntimeLauncher();
+    const publisher = new SocketPublisher();
+    const first = await startJoinServer(launcher);
+    try {
+      const socket = await subscribedSocket(first.port, "restart");
+      const message = nextMessage(socket);
+      expect(publisher.publish("restart", { event: "notice", data: 1 }).status).toBe("sent");
+      expect(await message).toEqual({ event: "notice", data: 1 });
+      socket.close();
+    } finally {
+      await boundedStop(launcher, first.handle);
+    }
+    expect(() => publisher.publish("restart", { event: "notice", data: 2 })).toThrow(SocketRuntimeStoppedError);
+
+    const second = await startJoinServer(launcher);
+    try {
+      const socket = await subscribedSocket(second.port, "restart");
+      const message = nextMessage(socket);
+      expect(publisher.publish("restart", { event: "notice", data: 3 }).status).toBe("sent");
+      expect(await message).toEqual({ event: "notice", data: 3 });
+      socket.close();
+    } finally {
+      await boundedStop(launcher, second.handle);
+    }
   });
 
   describe("unified exception boundary", () => {

@@ -29,16 +29,10 @@ export default class AuthRepository {
     });
 
   }
-  async find(email: string, password: string): Promise<PlaygroundUser | undefined> {
+  async find(email: string): Promise<UserRow | null> {
 
-    const user = await WlbPg.user.findUnique({ email });
+    return await WlbPg.user.findUnique({ email });
 
-    await this.savManyUser();
-
-    if (user === null || !user.isActive) return undefined;
-
-    const valid = await Bun.password.verify(password, user.passwordHash);
-    return valid ? Object.freeze({ id: user.id, email: user.email }) : undefined;
   }
 
   generateRandomUsers(count:number) {
