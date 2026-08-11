@@ -111,6 +111,45 @@ describe("token-based provider resolution", () => {
     expect(greeter.logger.constructor.name).toBe("ConsoleLogger");
   }, 15_000);
 
+  test("registers SocketPublisher as a framework root provider when imported", async () => {
+    const root = await tokenProject(`
+      import { Graph, Service, inject } from "@warbler/core";
+      import { Controller, Get } from "@warbler/http";
+      import { SocketPublisher as Sockets } from "@warbler/websocket";
+
+      @Service()
+      export class NotificationsService {
+        readonly sockets = inject(Sockets);
+      }
+
+      @Controller()
+      export class NotificationsController {
+        readonly sockets = inject(Sockets);
+        @Get("/notify")
+        notify(): Response {
+          this.sockets.publish("notifications", { event: "notify", data: { ok: true } });
+          return new Response("ok");
+        }
+      }
+
+      @Graph({ controllers: [NotificationsController], providers: [NotificationsService] })
+      export class AppGraph {}
+    `);
+    const context = await compileProject(root);
+    expect(context.diagnostics).toEqual([]);
+    expect(context.applicationWIR!.rootProviders.map((provider) => provider.name)).toContain("Sockets");
+
+    const providers = await Bun.file(join(root, ".warbler", "generated", "providers.generated.ts")).text();
+    expect(providers).toContain('from "@warbler/websocket"');
+    expect(providers).toContain("SocketPublisher");
+
+    const generated = await import(join(root, ".warbler", "generated", "application.generated.ts"));
+    const runtime = createExecutableBindingsRuntime(generated.default);
+    const serviceBinding = context.generatedApplication!.bindings!.providers.find((item) => item.implementation?.imported === "NotificationsService")!;
+    const service = runtime.resolveProvider(serviceBinding.graphId, serviceBinding.id) as { readonly sockets: { readonly constructor: { readonly name: string } } };
+    expect(service.sockets.constructor.name).toBe("SocketPublisher");
+  }, 15_000);
+
   test("resolves string and symbol tokens", async () => {
     const root = await tokenProject(`
       import { Graph, Service, Provider, inject } from "@warbler/core";

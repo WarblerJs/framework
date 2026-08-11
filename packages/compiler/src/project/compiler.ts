@@ -79,7 +79,15 @@ export class Compiler {
       const config = Object.freeze({ projectRoot: root, tsconfigPath: `${root}/tsconfig.json` });
       const program = ts.createProgram({ rootNames: [], options: { strict: true, noEmit: true } });
       const context = new CompilerContext(program, [], config, [projectDiagnostic(cause)]);
-      context.applicationWIR = Object.freeze({ version: 1, projectRoot: config.projectRoot, graphs: Object.freeze([]), rootProviders: Object.freeze([]) });
+      context.applicationWIR = Object.freeze({
+        version: 1,
+        projectRoot: config.projectRoot,
+        graphs: Object.freeze([]),
+        rootProviders: Object.freeze([]),
+        events: Object.freeze([]),
+        eventListeners: Object.freeze([]),
+        eventInterceptors: Object.freeze([]),
+      });
       return context;
     }
   }
@@ -93,7 +101,15 @@ export async function compileProject(projectRoot: string = process.cwd()): Promi
 /** Compiles a TypeScript application and returns only its immutable WIR. */
 export async function compileApplication(projectRoot: string = process.cwd()): Promise<ApplicationWIR> {
   const context = await compileProject(projectRoot);
-  return context.applicationWIR ?? Object.freeze({ version: 1, projectRoot: context.config.projectRoot, graphs: Object.freeze([]), rootProviders: Object.freeze([]) });
+  return context.applicationWIR ?? Object.freeze({
+    version: 1,
+    projectRoot: context.config.projectRoot,
+    graphs: Object.freeze([]),
+    rootProviders: Object.freeze([]),
+    events: Object.freeze([]),
+    eventListeners: Object.freeze([]),
+    eventInterceptors: Object.freeze([]),
+  });
 }
 
 function isApplicationSource(fileName: string, root: string): boolean {

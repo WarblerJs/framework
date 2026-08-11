@@ -69,10 +69,32 @@ export interface GraphWIR extends SourceLocationWIR {
   readonly controllers: readonly ControllerWIR[];
   readonly providers: readonly ProviderWIR[];
 }
+/** Functional event factory metadata. */
+export interface EventWIR extends SourceLocationWIR {
+  readonly name: string;
+}
+/** Functional event listener metadata. */
+export interface EventListenerWIR extends SourceLocationWIR {
+  readonly name: string;
+  readonly event: string;
+  readonly dispatches: readonly EventDispatchEdgeWIR[];
+}
+/** Static dispatch edge discovered inside a listener. */
+export interface EventDispatchEdgeWIR extends SourceLocationWIR {
+  readonly event: string;
+  readonly unconditional: boolean;
+}
+/** Functional event interceptor metadata. */
+export interface EventInterceptorWIR extends SourceLocationWIR {
+  readonly name: string;
+}
 /** Phase 1 Warbler Intermediate Representation. */
 export interface ApplicationWIR {
   readonly version: 1;
   readonly projectRoot: string;
   readonly graphs: readonly GraphWIR[];
   readonly rootProviders: readonly ProviderWIR[];
+  readonly events: readonly EventWIR[];
+  readonly eventListeners: readonly EventListenerWIR[];
+  readonly eventInterceptors: readonly EventInterceptorWIR[];
 }

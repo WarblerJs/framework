@@ -19,10 +19,8 @@ export default class AuthController {
 
   @Post("/login", { validator: loginValidator, csrf: true })
   async login(request: AppRequest<typeof loginValidator>): Promise<Response> {
-    return JsonRes({
-      email: request.body.email,
-      d: await this.#auth.login(request.body.email, request.body.password)
-    });
+    const res = await this.#auth.login(request.body.email, request.body.password);
+    return JsonRes({  email: request.body.email,});
   }
 
   @Post("/avatar", { validator: uploadAvatarValidator, csrf: false })

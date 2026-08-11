@@ -1,6 +1,6 @@
 import type { AnalysisResult, AnalyzedGraph } from "../analyzer/analyze-program";
 import { DiagnosticCode, type CompilerDiagnostic } from "../diagnostics/diagnostic";
-import type { ApplicationWIR, ControllerWIR, GraphWIR, ProviderWIR, SourceLocationWIR } from "../wir/wir";
+import type { ApplicationWIR, ControllerWIR, EventListenerWIR, GraphWIR, ProviderWIR, SourceLocationWIR } from "../wir/wir";
 
 /** Validates analyzed declarations and produces immutable metadata-only WIR. */
 export function validateApplication(projectRoot: string, analysis: AnalysisResult, diagnostics: CompilerDiagnostic[]): ApplicationWIR {
@@ -13,6 +13,17 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
   /** Resolves a `provide:` token alias back to the provider's canonical WIR name. */
   const tokenNames = new Map<string, string>();
   for (const provider of analysis.providers.values()) if (provider.token !== undefined) tokenNames.set(provider.token, provider.name);
+  for (const provider of analysis.frameworkProviders) rootProviders.set(provider.local, Object.freeze({
+    file: provider.module,
+    line: provider.line,
+    column: provider.column,
+    name: provider.local,
+    kind: "injectable",
+    provide: "root",
+    registration: "class",
+    implementation: provider.imported,
+    dependencies: Object.freeze([]),
+  }));
 
   for (const graph of analysis.graphs) {
     const priorName = graphNames.get(graph.name);
@@ -80,8 +91,17 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
   }
 
   validateDependencies(result, rootProviders, providerOwners, tokenNames, diagnostics);
+  validateEvents(analysis, diagnostics);
   validateRouteNames(result, diagnostics);
-  return Object.freeze({ version: 1, projectRoot, graphs: Object.freeze(result), rootProviders: Object.freeze([...rootProviders.values()]) });
+  return Object.freeze({
+    version: 1,
+    projectRoot,
+    graphs: Object.freeze(result),
+    rootProviders: Object.freeze([...rootProviders.values()]),
+    events: Object.freeze([...analysis.events.values()]),
+    eventListeners: Object.freeze([...analysis.eventListeners.values()]),
+    eventInterceptors: Object.freeze([...analysis.eventInterceptors.values()]),
+  });
 }
 
 /** Route `name`s are a single application-wide namespace (`route("users.show")`), not per-graph. */
@@ -156,6 +176,43 @@ function detectCycles(providers: readonly ProviderWIR[], tokenNames: ReadonlyMap
     }
   }
 }
+function validateEvents(analysis: AnalysisResult, diagnostics: CompilerDiagnostic[]): void {
+  const events = analysis.events;
+  for (const listener of analysis.eventListeners.values()) {
+    if (!events.has(listener.event)) add(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Event listener "${listener.name}" references unknown event "${listener.event}".`, listener, [listener.name, listener.event]);
+    for (const edge of listener.dispatches) {
+      if (!events.has(edge.event)) add(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Event listener "${listener.name}" dispatches unknown event "${edge.event}".`, edge, [listener.name, edge.event]);
+    }
+  }
+  const byEvent = new Map<string, EventListenerWIR[]>();
+  for (const listener of analysis.eventListeners.values()) {
+    const current = byEvent.get(listener.event) ?? [];
+    current.push(listener);
+    byEvent.set(listener.event, current);
+  }
+  for (const event of events.values()) detectEventCycles(event.name, byEvent, diagnostics);
+}
+function detectEventCycles(start: string, listeners: ReadonlyMap<string, readonly EventListenerWIR[]>, diagnostics: CompilerDiagnostic[]): void {
+  const stack: Array<Readonly<{ readonly event: string; readonly via?: EventListenerWIR; readonly conditional: boolean }>> = [Object.freeze({ event: start, conditional: false })];
+  const walk = (eventName: string, path: typeof stack, depth: number): void => {
+    if (depth > 16) return;
+    for (const listener of listeners.get(eventName) ?? []) {
+      for (const edge of listener.dispatches) {
+        const conditional = path.some((item) => item.conditional) || !edge.unconditional;
+        const nextPath = [...path, Object.freeze({ event: edge.event, via: listener, conditional })];
+        if (edge.event === start) {
+          const names = nextPath.flatMap((item, index) => index === 0 ? [item.event] : [item.via?.name ?? "listener", item.event]);
+          const message = `Event dispatch cycle: ${names.join(" -> ")}`;
+          if (conditional) warn(diagnostics, DiagnosticCode.DEPENDENCY_CYCLE, message, edge, names);
+          else add(diagnostics, DiagnosticCode.DEPENDENCY_CYCLE, message, edge, names);
+          continue;
+        }
+        if (!path.some((item) => item.event === edge.event)) walk(edge.event, nextPath, depth + 1);
+      }
+    }
+  };
+  walk(start, stack, 0);
+}
 function normalizePath(path: string): string {
   if (path === "" || path === "/") return "";
   const value = path.startsWith("/") ? path : `/${path}`;
@@ -168,4 +225,7 @@ function joinPath(...parts: readonly string[]): string {
 function copyLocation(location: SourceLocationWIR): SourceLocationWIR { return { file: location.file, line: location.line, column: location.column }; }
 function add(output: CompilerDiagnostic[], code: string, message: string, location: SourceLocationWIR, relatedSymbols: readonly string[]): void {
   output.push(Object.freeze({ code, category: "error", message, sourceFile: location.file, line: location.line, column: location.column, relatedSymbols: Object.freeze([...relatedSymbols]) }));
+}
+function warn(output: CompilerDiagnostic[], code: string, message: string, location: SourceLocationWIR, relatedSymbols: readonly string[]): void {
+  output.push(Object.freeze({ code, category: "warning", message, sourceFile: location.file, line: location.line, column: location.column, relatedSymbols: Object.freeze([...relatedSymbols]) }));
 }

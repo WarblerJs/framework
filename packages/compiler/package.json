@@ -8,6 +8,7 @@
   "dependencies": {
     "@warbler/console": "workspace:*",
     "@warbler/core": "workspace:*",
+    "@warbler/events": "workspace:*",
     "@warbler/validators": "workspace:*"
   },
   "devDependencies": { "@types/bun": "latest", "typescript": "^5.9.2" }

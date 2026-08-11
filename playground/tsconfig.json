@@ -18,8 +18,9 @@
       "@pg/*": ["database/warbler/pg/generated/*"],
       "@errors/*": ["src/shared/errors/*"],
       "@functions/*": ["src/shared/functions/*"],
+      "@warbler/console": ["../packages/console/src/index.ts"],
+      "@warbler/events": ["../packages/events/src/index.ts"],
     }
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "database/**/*.ts"]
 }
-

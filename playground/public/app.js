@@ -1013,8 +1013,63 @@ var init_auth = __esm(() => {
   });
 });
 
+// resources/js/pages/user.ts
+var exports_user = {};
+function joinRoomAndChat(roomId) {
+  const btn = document.getElementById("sub");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      const input = document.getElementById("input-text");
+      if (input.value.trim().length > 0) {
+        socket.send(JSON.stringify({
+          event: "chat.message",
+          data: { roomId, content: input.value.trim() }
+        }));
+      }
+    });
+  }
+}
+var socket;
+var init_user = __esm(() => {
+  socket = new WebSocket("ws://192.168.1.100:3001/chat");
+  socket.addEventListener("open", () => {
+    console.log("Connected");
+    socket.send(JSON.stringify({ event: "ping", data: {} }));
+    socket.send(JSON.stringify({ event: "room.join", data: { roomId: "general" } }));
+  });
+  socket.addEventListener("message", (event) => {
+    const message = JSON.parse(event.data);
+    console.log(message);
+    if (message.event === "room.joined") {
+      joinRoomAndChat(message.data.roomId);
+      socket.send(JSON.stringify({
+        event: "chat.message",
+        data: { roomId: message.data.roomId, content: "hello from the browser" }
+      }));
+    }
+    console.log("message", message);
+    if (message.event === "chat.message.created") {
+      console.log("Recived from socket", message.data.content);
+      const htmlString = `
+      <div class="bg-gray-50 border-b border-gray-200 p-2">
+        <div>${message.data.id}</div>
+        <div>${message.data.content}</div>
+      </div>
+    `;
+      document.getElementById("content-msg")?.insertAdjacentHTML("beforeend", htmlString);
+    }
+  });
+  socket.addEventListener("close", () => {
+    console.log("Disconnected");
+  });
+  socket.addEventListener("error", (error) => {
+    console.error(error);
+  });
+});
+
 // resources/js/app.ts
 Promise.resolve().then(() => init_auth());
+Promise.resolve().then(() => init_user());
 document.documentElement.dataset.warbler = "ready";
 
-//# debugId=645CD04683E3E0B664756E2164756E21
+//# debugId=4FBDCB18D586D5BB64756E2164756E21

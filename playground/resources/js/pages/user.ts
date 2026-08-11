@@ -3,7 +3,7 @@
 
 
 // Initialize WebSocket connection
-const socket = new WebSocket("ws://192.168.1.4:3001/chat");
+const socket = new WebSocket("ws://192.168.1.100:3001/chat");
 
 socket.addEventListener("open", () => {
   console.log("Connected");

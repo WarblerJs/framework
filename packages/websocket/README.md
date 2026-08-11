@@ -29,6 +29,48 @@ Messages default to strict JSON envelopes with `event`, optional `id`, and `data
 
 Shared HTTP mode exposes `fetch` and `websocket` handlers for an existing server. Dedicated mode creates one `Bun.serve` listener owned by an idempotently stoppable `WebSocketServerOwner`. Native subscriptions are used without a JavaScript room registry.
 
+## SocketPublisher
+
+Use `SocketPublisher` when HTTP controllers, services, jobs, or providers need to publish to the same Bun Pub/Sub topics as WebSocket handlers:
+
+```ts
+import { inject } from "@warbler/core";
+import { Controller, Post } from "@warbler/http";
+import { SocketPublisher } from "@warbler/websocket";
+
+@Controller()
+export class NotificationController {
+  readonly #sockets = inject(SocketPublisher);
+
+  @Post("/notifications")
+  notify(): Response {
+    this.#sockets.publish("notifications", {
+      event: "notification.created",
+      data: { userId: 123 },
+    });
+    return Response.json({ ok: true });
+  }
+}
+```
+
+The compiler registers `SocketPublisher` as a root provider when it is imported from
+`@warbler/websocket`, so no app-level provider registration is required. The class is a thin facade:
+it owns no socket registry, no topic map, and no subscriber list. Each `publish()` call resolves the
+current live runtime target and delegates to the same internal validation, encoding, logging, native
+Bun publish, and backpressure result path used by `SocketContext.publish()`.
+
+Publishing before the WebSocket runtime starts throws `SocketRuntimeNotReadyError`. Publishing after
+shutdown throws `SocketRuntimeStoppedError`. A publisher instance injected before a shutdown will use
+the restarted runtime on its next call.
+
+## Benchmark methodology
+
+Benchmark `SocketPublisher.publish()` against `SocketContext.publish()` with the same topic,
+message envelope, message format, compression option, subscriber count, and Bun version. Warm the
+runtime before sampling, run without watchers or live reload, record sent/backpressure/dropped counts,
+and compare p50/p95 latency plus allocations. The expected result is parity apart from one live-target
+lookup in `SocketPublisher`; any extra per-topic JavaScript fan-out or registry allocation is a bug.
+
 ## Exception boundary
 
 A subscribed event handler, or an `@OnOpen`/`@OnDrain`/`@OnClose` lifecycle callback, throwing

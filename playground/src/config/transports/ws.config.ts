@@ -5,7 +5,7 @@ export const wsConfig = {
   security: {
     origins: {
       required: true,
-      allowed: ["http://192.168.1.3:3000", "http://localhost:3000"],
+      allowed: ["http://192.168.1.100:3000", "http://localhost:3000"],
     },
     authentication: { required: false },
     protocols: { allowed: ["warbler.json.v1"], required: false },

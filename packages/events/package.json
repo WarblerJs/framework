@@ -1,0 +1,21 @@
+{
+  "name": "@warbler/events",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bunx --package typescript@5.9.2 tsc --noEmit"
+  },
+  "dependencies": {
+    "@warbler/console": "workspace:*",
+    "@warbler/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.2"
+  }
+}

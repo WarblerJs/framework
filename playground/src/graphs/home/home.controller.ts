@@ -1,10 +1,12 @@
 import { inject } from "@warbler/core";
-import { ArchiveRes, Controller, Get, ImageRes, JsonRes, PdfRes, Sse, SseRes, TextRes, csrf, view } from "@warbler/http";
+import { ArchiveRes, Controller, Get, ImageRes, JsonRes, PdfRes, Post, Sse, SseRes, TextRes, csrf, view } from "@warbler/http";
+import { SocketPublisher } from "@warbler/websocket";
 import HomeService from "./home.service";
 
 @Controller()
 export default class HomeController {
   readonly #home = inject(HomeService);
+  readonly #sockets = inject(SocketPublisher);
 
   @Get("/")
   index(): Response {
@@ -14,6 +16,15 @@ export default class HomeController {
   @Get("/health")
   async health(): Promise<Response> {
     return TextRes("OK");
+  }
+
+  @Post("/notifications")
+  notify(): Response {
+    const result = this.#sockets.publish("notifications", {
+      event: "notification.created",
+      data: { userId: 123 },
+    });
+    return JsonRes({ ok: true, result });
   }
 
   @Get("/page")

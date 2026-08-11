@@ -5,8 +5,8 @@ test("generated DI preserves root and Graph provider ownership", async () => {
   const application = await generatedApplication();
   const root = application.providers.filter((provider) => provider.scope === "root");
   const graph = application.providers.filter((provider) => provider.scope === "graph");
-  expect(root).toHaveLength(1);
+  expect(root).toHaveLength(3);
   expect(graph).toHaveLength(9);
   expect(new Set(graph.map((provider) => provider.graphId))).toEqual(new Set([0, 1, 2, 3]));
-  expect(root[0]!.graphId).toBeUndefined();
-});
+  for (const provider of root) expect(provider.graphId).toBeUndefined();
+}, 15_000);

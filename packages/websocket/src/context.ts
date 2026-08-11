@@ -1,6 +1,7 @@
 import { interpretSendResult, type SocketSendResult } from "./backpressure";
 import { Console } from "@warbler/console";
 import type { TranslationParameters } from "@warbler/i18n";
+import { internalPublish } from "./internal-publish";
 import { encodeSocketMessage, type SocketMessageFormat, type SocketOutgoingMessage } from "./message";
 import { validateTopic } from "./pubsub";
 /** Safe connection details exposed to controllers. */
@@ -45,11 +46,13 @@ export function createSocketContext<TUser>(socket: NativeSocketLike, connection:
       return interpretSendResult(socket.send(encoded, sendOptions?.compress));
     },
     publish(topic, message, publishOptions) {
-      const valid = validateTopic(topic);
-      const encoded = encodeSocketMessage(message as SocketOutgoingMessage<unknown>, format);
-      Console.socket({ action: "outgoing", event: message.event, connectionId: connection.id, size: encodedSize(encoded) });
-      if (publishOptions?.includeSelf) socket.send(encoded, publishOptions.compress);
-      return interpretSendResult(socket.publish(valid, encoded, publishOptions?.compress));
+      return internalPublish(socket, topic, message, {
+        format,
+        compress: publishOptions?.compress,
+        includeSelf: publishOptions?.includeSelf,
+        self: socket,
+        connectionId: connection.id,
+      });
     },
     join(topic) { const valid = validateTopic(topic); if (topics.size >= (options.subscriptionLimit ?? 100) && !topics.has(valid)) return false; const result = socket.subscribe(valid); if (result !== false) topics.add(valid); return result !== false; },
     leave(topic) { const valid = validateTopic(topic); const result = socket.unsubscribe(valid); if (result !== false) topics.delete(valid); return result !== false; },

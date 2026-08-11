@@ -1,6 +1,17 @@
 import ts from "typescript";
 import type { CompilerContext } from "../project/compiler-context";
-import type { CapturedExpressionWIR, ControllerWIR, ProviderWIR, RouteWIR, SocketEventWIR, SourceLocationWIR } from "../wir/wir";
+import type {
+  CapturedExpressionWIR,
+  ControllerWIR,
+  EventDispatchEdgeWIR,
+  EventInterceptorWIR,
+  EventListenerWIR,
+  EventWIR,
+  ProviderWIR,
+  RouteWIR,
+  SocketEventWIR,
+  SourceLocationWIR,
+} from "../wir/wir";
 import { DiagnosticCode, type CompilerDiagnostic } from "../diagnostics/diagnostic";
 
 const CLASS_DECORATORS = new Set(["Graph", "Controller", "SocketController", "Service", "Repository", "Factory", "Resolver", "Gateway", "Injectable"]);
@@ -26,6 +37,16 @@ export interface AnalysisResult {
   readonly graphs: readonly AnalyzedGraph[];
   readonly controllers: ReadonlyMap<string, ControllerWIR>;
   readonly providers: ReadonlyMap<string, ProviderWIR>;
+  readonly frameworkProviders: readonly FrameworkProviderReference[];
+  readonly events: ReadonlyMap<string, EventWIR>;
+  readonly eventListeners: ReadonlyMap<string, EventListenerWIR>;
+  readonly eventInterceptors: ReadonlyMap<string, EventInterceptorWIR>;
+}
+/** Framework-owned provider imported by application code and registered by generated bindings. */
+export interface FrameworkProviderReference extends SourceLocationWIR {
+  readonly module: "@warbler/events" | "@warbler/websocket";
+  readonly imported: "EventDispatcher" | "SocketPublisher";
+  readonly local: string;
 }
 
 /** Traverses every application SourceFile once and records all Phase 1 declarations. */
@@ -33,9 +54,15 @@ export function analyzeProgram(context: CompilerContext): AnalysisResult {
   const graphs: AnalyzedGraph[] = [];
   const controllers = new Map<string, ControllerWIR>();
   const providers = new Map<string, ProviderWIR>();
+  const frameworkProviders = new Map<string, FrameworkProviderReference>();
+  const events = new Map<string, EventWIR>();
+  const eventListeners = new Map<string, EventListenerWIR>();
+  const eventInterceptors = new Map<string, EventInterceptorWIR>();
 
   for (const sourceFile of context.sourceFiles) {
     const aliases = collectAliases(sourceFile);
+    for (const reference of collectFrameworkProviders(sourceFile)) frameworkProviders.set(reference.local, reference);
+    collectEventDeclarations(sourceFile, aliases, events, eventListeners, eventInterceptors, context.diagnostics);
     const visit = (node: ts.Node): void => {
       if (ts.isClassDeclaration(node) && node.name !== undefined) {
         analyzeClass(node, sourceFile, aliases, graphs, controllers, providers, context.diagnostics);
@@ -45,7 +72,15 @@ export function analyzeProgram(context: CompilerContext): AnalysisResult {
     };
     visit(sourceFile);
   }
-  return Object.freeze({ graphs: Object.freeze(graphs), controllers, providers });
+  return Object.freeze({
+    graphs: Object.freeze(graphs),
+    controllers,
+    providers,
+    frameworkProviders: Object.freeze([...frameworkProviders.values()]),
+    events,
+    eventListeners,
+    eventInterceptors,
+  });
 }
 
 function analyzeClass(
@@ -285,6 +320,88 @@ function collectAliases(source: ts.SourceFile): ReadonlyMap<string, string> {
     if (ts.isNamedImports(bindings)) for (const element of bindings.elements) result.set(element.name.text, element.propertyName?.text ?? element.name.text);
   }
   return result;
+}
+function collectFrameworkProviders(source: ts.SourceFile): readonly FrameworkProviderReference[] {
+  const result: FrameworkProviderReference[] = [];
+  for (const statement of source.statements) {
+    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteralLike(statement.moduleSpecifier)) continue;
+    const module = statement.moduleSpecifier.text;
+    if (module !== "@warbler/events" && module !== "@warbler/websocket") continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings === undefined || !ts.isNamedImports(bindings)) continue;
+    for (const element of bindings.elements) {
+      const imported = element.propertyName?.text ?? element.name.text;
+      if (module === "@warbler/websocket" && imported === "SocketPublisher") {
+        result.push(Object.freeze({ ...location(element, source), module, imported, local: element.name.text }));
+      }
+      if (module === "@warbler/events" && imported === "EventDispatcher") {
+        result.push(Object.freeze({ ...location(element, source), module, imported, local: element.name.text }));
+      }
+    }
+  }
+  return Object.freeze(result);
+}
+function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
+  return ts.canHaveModifiers(node) && (ts.getModifiers(node)?.some((modifier) => modifier.kind === kind) ?? false);
+}
+function collectEventDeclarations(
+  source: ts.SourceFile,
+  aliases: ReadonlyMap<string, string>,
+  events: Map<string, EventWIR>,
+  listeners: Map<string, EventListenerWIR>,
+  interceptors: Map<string, EventInterceptorWIR>,
+  diagnostics: CompilerDiagnostic[],
+): void {
+  for (const statement of source.statements) {
+    if (!ts.isVariableStatement(statement) || !hasModifier(statement, ts.SyntaxKind.ExportKeyword)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined || !ts.isCallExpression(declaration.initializer)) continue;
+      const name = declaration.name.text;
+      const call = declaration.initializer;
+      const callee = ts.isIdentifier(call.expression) ? aliases.get(call.expression.text) ?? call.expression.text : "";
+      if (callee === "event") {
+        events.set(name, Object.freeze({ ...location(declaration, source), name }));
+        continue;
+      }
+      if (callee === "listen") {
+        const eventArgument = call.arguments[0];
+        if (eventArgument === undefined || !ts.isIdentifier(eventArgument)) {
+          diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Event listener "${name}" must reference a static event symbol.`, declaration, source, [name]);
+          continue;
+        }
+        const callback = call.arguments[1];
+        listeners.set(name, Object.freeze({
+          ...location(declaration, source),
+          name,
+          event: eventArgument.text,
+          dispatches: Object.freeze(callback === undefined ? [] : collectEventDispatchEdges(callback, aliases, source)),
+        }));
+        continue;
+      }
+      if (callee === "interceptEvent") {
+        interceptors.set(name, Object.freeze({ ...location(declaration, source), name }));
+      }
+    }
+  }
+}
+function collectEventDispatchEdges(node: ts.Node, aliases: ReadonlyMap<string, string>, source: ts.SourceFile): readonly EventDispatchEdgeWIR[] {
+  const edges: EventDispatchEdgeWIR[] = [];
+  const visit = (child: ts.Node, conditional: boolean): void => {
+    if (ts.isCallExpression(child) && isDispatchCall(child.expression)) {
+      const first = child.arguments[0];
+      if (first !== undefined && ts.isCallExpression(first) && ts.isIdentifier(first.expression)) {
+        edges.push(Object.freeze({ ...location(child, source), event: first.expression.text, unconditional: !conditional }));
+      }
+    }
+    const nextConditional = conditional || ts.isIfStatement(child) || ts.isConditionalExpression(child) || ts.isSwitchStatement(child);
+    ts.forEachChild(child, (item) => visit(item, nextConditional));
+  };
+  visit(node, false);
+  return Object.freeze(edges);
+}
+function isDispatchCall(expression: ts.Expression): boolean {
+  return ts.isPropertyAccessExpression(expression) &&
+    (expression.name.text === "dispatch" || expression.name.text === "dispatchAndWait");
 }
 function collectInjectDependencies(node: ts.Node, aliases: ReadonlyMap<string, string>, output: Set<string>): void {
   const visit = (child: ts.Node): void => {

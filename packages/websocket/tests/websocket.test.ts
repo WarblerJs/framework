@@ -2,8 +2,11 @@ import { describe, expect, test } from "bun:test";
 import {
   OnDrain,
   OnOpen,
+  SocketPublisher,
+  SocketRuntimeNotReadyError,
   SocketController,
   Subscribe,
+  activateSocketPublisherRuntime,
   createSocketContext,
   decodeSocketMessage,
   executeSocketGuards,
@@ -11,6 +14,7 @@ import {
   getSocketEventMetadata,
   interpretSendResult,
   normalizeWebSocketConfig,
+  resetSocketPublisherRuntimeForTests,
   safeCloseReason,
   validateOrigin,
   validateSubprotocol,
@@ -103,6 +107,53 @@ describe("guards and native behavior", () => {
     expect(context.publish("room", { event: "x", data: 1 }).status).toBe("backpressure");
     context.cork(() => context.leave("room"));
     expect(calls).toEqual(["send", "subscribe", "publish", "cork", "unsubscribe"]);
+  });
+
+  test("SocketPublisher uses the same validated encoded publish path as SocketContext", () => {
+    const calls: Array<Readonly<{ topic: string; data: string | ArrayBuffer | Uint8Array; compress?: boolean }>> = [];
+    const socket: NativeSocketLike = {
+      send() { return 1; },
+      publish(topic, data, compress) { calls.push(Object.freeze({ topic, data, compress })); return 7; },
+      subscribe() {},
+      unsubscribe() {},
+      isSubscribed() { return false; },
+      close() {},
+      cork<T>(callback: () => T): T { return callback(); },
+    };
+    const context = createSocketContext(socket, { id: "one", connectedAt: 1 });
+    const contextResult = context.publish("room", { event: "x", data: { ok: true } }, { compress: true });
+
+    resetSocketPublisherRuntimeForTests();
+    activateSocketPublisherRuntime(Object.freeze({
+      format: "json",
+      publish(topic: string, data: string | ArrayBuffer | Uint8Array, compress?: boolean) {
+        calls.push(Object.freeze({ topic, data, compress }));
+        return 7;
+      },
+    }));
+    const publisher = new SocketPublisher();
+    const publisherResult = publisher.publish("room", { event: "x", data: { ok: true } }, { compress: true });
+
+    expect(contextResult).toEqual(publisherResult);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toEqual(calls[1]);
+    expect(Object.getOwnPropertyNames(publisher)).toEqual([]);
+    resetSocketPublisherRuntimeForTests();
+  });
+
+  test("SocketPublisher reports no active runtime synchronously", () => {
+    resetSocketPublisherRuntimeForTests();
+    expect(() => new SocketPublisher().publish("room", { event: "x", data: null })).toThrow(SocketRuntimeNotReadyError);
+  });
+
+  test("SocketPublisher leaves no-subscriber delivery as Bun's no-op result", () => {
+    resetSocketPublisherRuntimeForTests();
+    activateSocketPublisherRuntime(Object.freeze({
+      format: "json",
+      publish(): number { return 0; },
+    }));
+    expect(new SocketPublisher().publish("empty", { event: "x", data: null })).toEqual({ status: "dropped" });
+    resetSocketPublisherRuntimeForTests();
   });
 });
 

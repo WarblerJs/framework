@@ -19,6 +19,7 @@
     "@warbler/crypto": "workspace:*",
     "@warbler/core": "workspace:*",
     "@warbler/database": "workspace:*",
+    "@warbler/events": "workspace:*",
     "@warbler/http": "workspace:*",
     "@warbler/runtime": "workspace:*",
     "@warbler/validators": "workspace:*",
