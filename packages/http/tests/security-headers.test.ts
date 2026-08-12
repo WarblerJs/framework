@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   applySecurityHeaders,
+  createSecurityHeaderApplicator,
   createSecurityHeaderTemplate,
   guardRequestSmuggling,
   validateRequestHost,
@@ -47,6 +48,18 @@ describe("HTTP security", () => {
     expect(response).toBe(original);
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.has("x-powered-by")).toBe(false);
+  });
+
+  test("binds a reusable security-header applicator without sharing response headers", async () => {
+    const applyHeaders = createSecurityHeaderApplicator(createSecurityHeaderTemplate(POLICY));
+    const [first, second] = await Promise.all([
+      Promise.resolve(applyHeaders(new Response("a", { headers: { "set-cookie": "a=1" } }))),
+      Promise.resolve(applyHeaders(new Response("b", { headers: { "set-cookie": "b=1" } }))),
+    ]);
+    expectSecurityHeaders(first);
+    expectSecurityHeaders(second);
+    expect(first.headers.get("set-cookie")).toBe("a=1");
+    expect(second.headers.get("set-cookie")).toBe("b=1");
   });
 
   test("applies every configured security header to native response shapes", () => {

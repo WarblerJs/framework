@@ -342,3 +342,107 @@ Security/correctness validation run during the rejected experiments:
 Final outcome for this phase: no request-preparation source optimization was kept, because no candidate satisfied all success criteria: material profiler reduction, normal throughput improvement, no average latency regression, and no p99 regression.
 
 Profiler-supported next recommendation: leave request preparation unchanged until a more specific security-equivalent design can be proven. Based on the accepted security-header phase profiler, the next promising isolated target remains outside request preparation: reduce remaining `securityHeaders` cost or generated handler execution overhead in a separate task.
+
+## Next Bottleneck Selection - Startup-Bound Security Header Applicator
+
+Measured fact: a fresh normal-production baseline was taken before selecting the next target.
+
+Fresh baseline, profiling OFF, production logs OFF:
+
+| Run | Req/sec | Avg latency | p50 | p97.5 | p99 | Max | Bytes/sec | Total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 36,951.74 | 0.94 ms | 1 ms | 2 ms | 2 ms | 18 ms | 23.4 MB | 1,109k in 30.02s |
+| 2 | 37,751.74 | 0.83 ms | 1 ms | 2 ms | 2 ms | 18 ms | 23.9 MB | 1,133k in 30.02s |
+| 3 | 36,716.54 | 0.95 ms | 1 ms | 2 ms | 2 ms | 18 ms | 23.2 MB | 1,102k in 30.02s |
+
+Measured fact: baseline median throughput was `36,951.74 req/sec`.
+
+Fresh profiler run, profiling ON, production logs OFF:
+
+| Stage | Count | Avg per invocation | Contribution |
+| --- | ---: | ---: | ---: |
+| total | 1,092,291 | 13.14 us | 100.00% |
+| requestPreparation | 1,092,291 | 4.33 us | 32.93% |
+| contextPreparation | 1,092,291 | 0.04 us | 0.34% |
+| generatedDispatch | 1,092,291 | 3.32 us | 25.26% |
+| routeDispatch | 1,092,291 | 0.05 us | 0.40% |
+| validator | 0 | 0.00 us | 0.00% |
+| guardMiddleware | 0 | 0.00 us | 0.00% |
+| requestContext | 0 | 0.00 us | 0.00% |
+| diController | 1,092,291 | 0.15 us | 1.10% |
+| handlerExecution | 1,092,291 | 2.15 us | 16.39% |
+| responseNormalization | 1,092,291 | 0.03 us | 0.23% |
+| securityHeaders | 1,092,291 | 4.94 us | 37.59% |
+| other | 1,092,291 | 1.45 us | 11.01% |
+
+Selected target: `securityHeaders`.
+
+Reason: `securityHeaders` was the largest measured exclusive actionable bucket. `generatedDispatch` remained inclusive, `requestPreparation` had just failed the real-production benchmark gate in a separate isolated pass, and the other exclusive buckets were materially smaller.
+
+Source boundary classification:
+
+| Boundary | Work included | Classification |
+| --- | --- | --- |
+| [security-headers.ts](/home/bellib/dev/framework/packages/http/src/security/security-headers.ts:40) | template lookup, header plan traversal, response header mutation, immutable-header fallback | response-specific security work |
+| [bun-route-handler.ts](/home/bellib/dev/framework/packages/http/src/native/bun-route-handler.ts:48) | synchronous and async finalization call into security-header application | request/response hot path |
+| [bun-route-handler.ts](/home/bellib/dev/framework/packages/http/src/native/bun-route-handler.ts:67) | profiled timing boundary around security-header application | profiler boundary |
+
+Kept optimization: bind a `SecurityHeaderApplicator` once when the Bun route handler is created, and represent compiled security headers as one flat immutable string plan. Request time no longer performs the compiled-template symbol lookup or tuple destructuring before applying headers. The existing `applySecurityHeaders(response, template)` API remains for direct callers.
+
+Preserved behavior:
+
+- configured security headers do not overwrite explicit response headers
+- `x-powered-by` is still removed
+- mutable native responses keep the no-wrapper fast path
+- immutable headers still use the safe `new Headers(...)` / `new Response(...)` fallback
+- status, statusText, redirects, cookies, streams, and file responses remain intact
+- concurrent responses do not share mutable header state
+
+Final kept benchmark, profiling OFF, production logs OFF:
+
+| Run | Req/sec | Avg latency | p50 | p97.5 | p99 | Max | Bytes/sec | Total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 37,472.27 | 0.98 ms | 1 ms | 2 ms | 2 ms | 17 ms | 23.7 MB | 1,124k in 30.02s |
+| 2 | 37,813.60 | 0.97 ms | 1 ms | 2 ms | 2 ms | 17 ms | 23.9 MB | 1,134k in 30.02s |
+| 3 | 37,660.54 | 0.97 ms | 1 ms | 2 ms | 2 ms | 17 ms | 23.8 MB | 1,130k in 30.02s |
+
+Measured fact: final median throughput was `37,660.54 req/sec`, `+708.80 req/sec` (`+1.92%`) over the fresh baseline median. p50, p97.5, and p99 were unchanged. Average latency moved from `0.94 ms` on the median baseline run to `0.97 ms` on the median final run; observation: this is within the observed run-to-run noise for this benchmark, while tail latency did not regress.
+
+Final profiler comparison, profiling ON, production logs OFF:
+
+| Metric | Before | After |
+| --- | ---: | ---: |
+| Req/sec | 36,406.67 | 37,457.87 |
+| Avg latency | 0.87 ms | 0.86 ms |
+| p99 | 3 ms | 2 ms |
+| Total requests | 1,092k in 30.02s | 1,124k in 30.03s |
+| `securityHeaders` avg | 4.94 us | 3.69 us |
+| `securityHeaders` contribution | 37.59% | 31.22% |
+
+Measured fact: `securityHeaders` decreased by `1.25 us` (`25.30%`) in the selected profiler bucket.
+
+Rejected experiment: unrolled standard nine-header applicator.
+
+| Run | Req/sec | Avg latency | p99 | Decision |
+| --- | ---: | ---: | ---: | --- |
+| 1 | 36,462.14 | 1.03 ms | 2 ms | rejected |
+| 2 | 37,138.40 | 1.01 ms | 2 ms | rejected |
+
+Rejected reason: the specialization added complexity, did not beat the simpler kept candidate, and made average latency visibly worse in both samples.
+
+Allocation and request-time changes:
+
+- moved compiled-template plan lookup from request time to route-handler startup
+- replaced nested frozen `[name, value]` tuples with one flat frozen string plan
+- removed per-response tuple destructuring in the common compiled-template path
+- did not introduce mutable shared response state or a runtime cache
+
+Correctness validation:
+
+- `bun run typecheck` passed
+- focused HTTP security/native/CSRF/error tests passed: `37 pass`, `0 fail`, `225 expect() calls`
+- `playground` production build passed
+
+Raw Bun context: final Warbler median throughput is `81.31%` of the historical Raw Bun baseline (`37,660.54 / 46,322`).
+
+Next recommendation: do not re-open request preparation or security headers immediately. The next isolated candidate should inspect `handlerExecution` and the non-exclusive parts of `generatedDispatch` together, but only after confirming whether the inclusive profiler boundary can be interpreted without adding heavy instrumentation.
