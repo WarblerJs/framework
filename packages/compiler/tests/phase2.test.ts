@@ -178,7 +178,11 @@ describe("executable bindings", () => {
     ]) expect(await Bun.file(join(directory, name)).exists()).toBe(true);
     const handlers = await Bun.file(join(directory, "handlers.generated.ts")).text();
     expect(handlers).toContain("controller.list(");
+    expect(handlers).toContain("parameterCount: 0");
     expect(handlers).not.toContain("controller[");
+    const httpGenerated = await Bun.file(join(directory, "http.generated.ts")).text();
+    expect(httpGenerated).not.toContain("prepareHttpValidationInput(request, 0)");
+    expect(httpGenerated).toContain("executeHttpRoute(1, request)");
     const providers = await Bun.file(join(directory, "providers.generated.ts")).text();
     expect(providers).toContain("scope: \"root\"");
     expect(providers).toContain("scope: \"graph\"");

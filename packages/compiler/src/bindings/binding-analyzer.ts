@@ -38,7 +38,7 @@ export interface ControllerBindingPlan {
   readonly id: number; readonly graphId: number; readonly transport: "http" | "websocket"; readonly symbol: BindingImport;
 }
 export interface HandlerBindingPlan {
-  readonly id: number; readonly controllerId: number; readonly method: string; readonly controller: BindingImport;
+  readonly id: number; readonly controllerId: number; readonly method: string; readonly controller: BindingImport; readonly parameterCount: number;
 }
 export interface ExecutableBindingPlan {
   readonly providers: readonly ProviderBindingPlan[];
@@ -161,12 +161,13 @@ export function analyzeExecutableBindings(
     const controllerRow = optimized.controllers.find((item) => optimized.strings[item.nameId] === controllerName);
     const controller = controllerRow === undefined ? undefined : controllers.find((item) => item.id === controllerRow.id);
     const declaration = (declarations.get(controllerName) ?? []).find(ts.isClassDeclaration);
-    const member = declaration?.members.find((item) => ts.isMethodDeclaration(item) && item.name !== undefined && item.name.getText() === method);
+    const classElement = declaration?.members.find((item) => ts.isMethodDeclaration(item) && item.name !== undefined && item.name.getText() === method);
+    const member = classElement !== undefined && ts.isMethodDeclaration(classElement) ? classElement : undefined;
     if (controller === undefined || declaration === undefined || member === undefined || hasModifier(member, ts.SyntaxKind.StaticKeyword) || hasModifier(member, ts.SyntaxKind.PrivateKeyword)) {
       context.diagnostics.push(bindingDiagnostic(BindingDiagnosticCode.HANDLER_NOT_FOUND, `Executable handler "${qualified}" is missing or invalid.`, declaration?.getSourceFile().fileName ?? "", qualified));
       failed = true; continue;
     }
-    handlers.push(Object.freeze({ id: row.id, controllerId: controller.id, method, controller: controller.symbol }));
+    handlers.push(Object.freeze({ id: row.id, controllerId: controller.id, method, controller: controller.symbol, parameterCount: member.parameters.length }));
   }
   const namedBindings = (rows: readonly { readonly id: number; readonly nameId: number }[]) => rows.map((row) => {
     const name = optimized.strings[row.nameId]!;

@@ -15,6 +15,7 @@ export interface RouteWIR extends SourceLocationWIR {
   readonly middleware: readonly string[];
   readonly guards: readonly string[];
   readonly csrf: boolean;
+  readonly viewContext: boolean;
   readonly stream?: "sse" | "html";
   readonly response?: "static" | "view" | "json" | "html";
 }

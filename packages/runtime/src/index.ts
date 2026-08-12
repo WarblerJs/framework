@@ -50,6 +50,7 @@ export {
   type StartRuntimeOptions,
 } from "./lifecycle/runtime-owner";
 export { installFatalErrorHandlers } from "./lifecycle/fatal-shutdown";
+export { createHttpHotPathProfiler, type HttpHotPathProfiler, type HttpProfileSnapshot, type HttpProfileStage } from "./profiling/http-hot-path-profiler";
 export { GeneratedProviderContainer, RootProviderContainer, GraphProviderContainer, RequestProviderContainer } from "./container/generated-provider-containers";
 export { ControllerInstanceTable } from "./controllers";
 export { RuntimeDiagnosticCode } from "./diagnostics/runtime-diagnostic-codes";

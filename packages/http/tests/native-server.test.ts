@@ -3,6 +3,7 @@ import { NotFoundError } from "@warbler/core";
 import { Console } from "@warbler/console";
 import { createBunRouteHandler, createNotFoundFallback, type BunRouteHandlerOptions } from "../src/native";
 import { RouteFlag } from "../src/compiled";
+import { getViewRequestScope } from "../src/view";
 
 function baseOptions(handler: BunRouteHandlerOptions["handler"]): BunRouteHandlerOptions {
   return {
@@ -60,6 +61,48 @@ describe("native request pipeline", () => {
       Console.request = originalRequest as typeof Console.request;
       Console.response = originalResponse as typeof Console.response;
     }
+  });
+
+  test("HTTP profiling records aggregate stages without request logging", async () => {
+    const stages: Record<string, number> = Object.create(null);
+    let requests = 0;
+    let requestLogs = 0;
+    const originalRequest = Console.request.bind(Console);
+    Console.request = ((input) => {
+      requestLogs += 1;
+      return originalRequest(input);
+    }) as typeof Console.request;
+    try {
+      const handler = createBunRouteHandler({
+        ...baseOptions(() => new Response("ok")),
+        logging: { requests: false, errors: true },
+        profiler: Object.freeze({
+          enabled: true,
+          record(stage: string): void { stages[stage] = (stages[stage] ?? 0) + 1; },
+          recordRequest(): void { requests += 1; },
+        }),
+      });
+      const response = await handler(REQUEST(), Object.create(null));
+      expect(response.status).toBe(200);
+      expect(requestLogs).toBe(0);
+      expect(requests).toBe(1);
+      expect(stages.contextPreparation).toBe(1);
+      expect(stages.requestPreparation).toBe(1);
+      expect(stages.generatedDispatch).toBe(1);
+      expect(stages.securityHeaders).toBe(1);
+    } finally {
+      Console.request = originalRequest as typeof Console.request;
+    }
+  });
+
+  test("minimal route handlers can skip ViewRequestScope setup", async () => {
+    const handler = createBunRouteHandler({
+      ...baseOptions(() => Response.json({ scoped: getViewRequestScope() !== undefined })),
+      logging: { requests: false, errors: true },
+      viewScope: false,
+    });
+    const response = await handler(REQUEST(), Object.create(null));
+    expect(await response.json()).toEqual({ scoped: false });
   });
 
   describe("unified exception boundary", () => {

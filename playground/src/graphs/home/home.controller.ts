@@ -14,7 +14,13 @@ export default class HomeController {
   }
   @Get("/bench")
   bench() {
-    return new Response("OK");
+    return new Response("Ok", {
+      status: 200,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "X-Custom-Header": "MyValue"
+      },
+    });
   }
 
   @Get("/health")

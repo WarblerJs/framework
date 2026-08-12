@@ -125,6 +125,7 @@ function analyzeClass(
           middleware: Object.freeze(objectReferenceArray(options, "middleware")),
           guards: Object.freeze(objectReferenceArray(options, "guards")),
           csrf: objectBoolean(options, "csrf"),
+          viewContext: usesHttpViewContext(member, aliases),
           ...(stream === undefined ? {} : { stream }),
           ...(response === undefined ? {} : { response }),
         }));
@@ -415,6 +416,24 @@ function collectInjectDependencies(node: ts.Node, aliases: ReadonlyMap<string, s
     ts.forEachChild(child, visit);
   };
   visit(node);
+}
+function usesHttpViewContext(node: ts.Node, aliases: ReadonlyMap<string, string>): boolean {
+  let found = false;
+  const visit = (child: ts.Node): void => {
+    if (found) return;
+    if (ts.isCallExpression(child)) {
+      const expression = child.expression;
+      if (ts.isIdentifier(expression)) {
+        const name = aliases.get(expression.text) ?? expression.text;
+        if (name === "view" || name === "csrf") found = true;
+      } else if (ts.isPropertyAccessExpression(expression) && (expression.name.text === "view" || expression.name.text === "csrf")) {
+        found = true;
+      }
+    }
+    ts.forEachChild(child, visit);
+  };
+  visit(node);
+  return found;
 }
 /** Resolves a decorator's `provide:` option into a visibility scope and, when it references anything else, a token alias. */
 function resolveProvide(call: ts.CallExpression | undefined, aliases: ReadonlyMap<string, string>): { readonly provide: "graph" | "root" | "request"; readonly token?: string } | undefined {

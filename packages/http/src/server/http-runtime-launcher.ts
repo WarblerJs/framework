@@ -1,5 +1,5 @@
 import type { RuntimeTransportLauncher, RuntimeTransportStartInput, RuntimeTransportStopOptions } from "@warbler/transport";
-import { createBunRouteHandler, type BunRouteTable } from "../native";
+import { createBunRouteHandler, type BunRouteTable, type HttpHotPathRecorder } from "../native";
 import { normalizeHttpConfig } from "../config";
 import { RouteFlag } from "../compiled";
 import { CsrfVerifier } from "../csrf";
@@ -19,6 +19,12 @@ interface TransportLoggingConfig {
   readonly requests?: boolean;
   readonly errors?: boolean;
 }
+interface TransportProfilingConfig {
+  readonly http?: HttpHotPathRecorder;
+}
+const COMPILER_ROUTE_CSRF = 1 << 10;
+const COMPILER_ROUTE_STREAMING = 1 << 11;
+const COMPILER_ROUTE_VIEW_CONTEXT = 1 << 16;
 
 /** Generated HTTP bindings supplied by Runtime after one-time pipeline compilation. */
 export interface HttpRuntimeBindings {
@@ -33,6 +39,7 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
     async start(input: RuntimeTransportStartInput<HttpRuntimeBindings, unknown>) {
       const config = normalizeHttpConfig(input.config);
       const logging = transportLogging(input.config);
+      const profiling = transportProfiling(input.config);
       const routes: Record<string, unknown> = {
         ...await createStaticRouteTable(process.cwd(), config.static, config.development),
         ...(config.development ? createViewDevelopmentRoutes() : {}),
@@ -74,6 +81,8 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
             builtins,
             development: config.development,
             logging,
+            profiler: profiling.http,
+            viewScope: routeNeedsViewScope(input.bindings, path, method),
           });
         }
         routes[path] = Object.freeze(wrapped);
@@ -92,6 +101,17 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
     },
     stop(handle: HttpServer, options: RuntimeTransportStopOptions) { return handle.stop(options.closeActiveConnections ?? false); },
   });
+}
+
+function transportProfiling(config: unknown): TransportProfilingConfig {
+  if (typeof config !== "object" || config === null || !("profiling" in config)) return Object.freeze({});
+  const profiling = config.profiling;
+  if (typeof profiling !== "object" || profiling === null || !("http" in profiling)) return Object.freeze({});
+  const http = profiling.http;
+  if (typeof http !== "object" || http === null || !("enabled" in http) || http.enabled !== true) return Object.freeze({});
+  if (!("record" in http) || typeof http.record !== "function") return Object.freeze({});
+  if (!("recordRequest" in http) || typeof http.recordRequest !== "function") return Object.freeze({});
+  return Object.freeze({ http: http as HttpHotPathRecorder });
 }
 
 function transportLogging(config: unknown): TransportLoggingConfig {
@@ -114,9 +134,23 @@ function routeFlags(bindings: HttpRuntimeBindings, path: string, method: string)
     if (typeof pathId === "number" && typeof methodId === "number" && strings[pathId] === path && strings[methodId] === method) {
       if (typeof record.flags !== "number") return 0;
       const compilerFlags = record.flags;
-      return (compilerFlags & (1 << 10) ? RouteFlag.CSRF_ENABLED : 0)
-        | (compilerFlags & (1 << 11) ? RouteFlag.SSE : 0);
+      return (compilerFlags & COMPILER_ROUTE_CSRF ? RouteFlag.CSRF_ENABLED : 0)
+        | (compilerFlags & COMPILER_ROUTE_STREAMING ? RouteFlag.SSE : 0)
+        | (compilerFlags & COMPILER_ROUTE_VIEW_CONTEXT ? RouteFlag.VIEW_CONTEXT : 0);
     }
   }
   return 0;
+}
+function routeNeedsViewScope(bindings: HttpRuntimeBindings, path: string, method: string): boolean {
+  const records = bindings.routeRecords;
+  const strings = bindings.strings;
+  if (records === undefined || strings === undefined) return true;
+  for (const record of records) {
+    const pathId = record.pathId;
+    const methodId = record.methodId;
+    if (typeof pathId === "number" && typeof methodId === "number" && strings[pathId] === path && strings[methodId] === method) {
+      return typeof record.flags !== "number" || (record.flags & (COMPILER_ROUTE_CSRF | COMPILER_ROUTE_STREAMING | COMPILER_ROUTE_VIEW_CONTEXT)) !== 0;
+    }
+  }
+  return true;
 }

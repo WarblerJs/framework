@@ -4,6 +4,8 @@ export { guardRequestSmuggling } from "./request-smuggling-guard";
 export { validateRequestHeaders, type RequestHeaderPolicy } from "./request-header-policy";
 export {
   applySecurityHeaders,
+  createSecurityHeaderApplicator,
   createSecurityHeaderTemplate,
+  type SecurityHeaderApplicator,
   type SecurityHeaderPolicy,
 } from "./security-headers";

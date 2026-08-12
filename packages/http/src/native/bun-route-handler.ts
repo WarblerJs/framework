@@ -3,8 +3,9 @@ import { Console, createCorrelationId, type RequestHandle } from "@warbler/conso
 import { HttpError, renderRequestError } from "../errors";
 import { RouteFlag } from "../compiled";
 import {
-  applySecurityHeaders,
+  createSecurityHeaderApplicator,
   guardRequestSmuggling,
+  type SecurityHeaderApplicator,
   validateRequestHeaders,
   validateRequestHost,
   type RequestHeaderPolicy,
@@ -13,6 +14,14 @@ import { runInViewRequestScope, type ViewRequestScope } from "../view";
 
 /** Bun-native route handler preserving synchronous handlers as synchronous. */
 export type BunRouteHandler = (request: Request, server: Bun.Server<undefined>) => Response | Promise<Response>;
+type HttpProfileStage = "requestPreparation" | "contextPreparation" | "generatedDispatch" | "securityHeaders";
+
+/** Structural profiler contract supplied by Runtime only when HTTP profiling is enabled. */
+export interface HttpHotPathRecorder {
+  readonly enabled: true;
+  record(stage: HttpProfileStage, durationMs: number): void;
+  recordRequest(durationMs: number): void;
+}
 
 /** Process-wide `asset()`/`route()` resolvers, built once at transport startup. */
 export interface ViewBuiltinResolvers {
@@ -31,23 +40,44 @@ export interface BunRouteHandlerOptions {
   readonly builtins: ViewBuiltinResolvers;
   readonly development: boolean;
   readonly logging?: Readonly<{ readonly requests?: boolean; readonly errors?: boolean }>;
+  readonly profiler?: HttpHotPathRecorder;
+  readonly viewScope?: boolean;
 }
 
 function finalize(
   result: Response | Promise<Response>,
-  securityHeaders: Readonly<Record<string, string>>,
+  applyHeaders: SecurityHeaderApplicator,
   requestLog: RequestHandle,
 ): Response | Promise<Response> {
-  if (result instanceof Promise) return result.then((response) => logResponse(requestLog, applySecurityHeaders(response, securityHeaders)));
-  return logResponse(requestLog, applySecurityHeaders(result, securityHeaders));
+  if (result instanceof Promise) return result.then((response) => logResponse(requestLog, applyHeaders(response)));
+  return logResponse(requestLog, applyHeaders(result));
 }
 
 function finalizeQuiet(
   result: Response | Promise<Response>,
-  securityHeaders: Readonly<Record<string, string>>,
+  applyHeaders: SecurityHeaderApplicator,
 ): Response | Promise<Response> {
-  if (result instanceof Promise) return result.then((response) => applySecurityHeaders(response, securityHeaders));
-  return applySecurityHeaders(result, securityHeaders);
+  if (result instanceof Promise) return result.then((response) => applyHeaders(response));
+  return applyHeaders(result);
+}
+
+function finalizeProfiled(
+  result: Response | Promise<Response>,
+  applyHeaders: SecurityHeaderApplicator,
+  profiler: HttpHotPathRecorder,
+): Response | Promise<Response> {
+  if (result instanceof Promise) {
+    return result.then((response) => {
+      const securityStart = performance.now();
+      const secured = applyHeaders(response);
+      profiler.record("securityHeaders", performance.now() - securityStart);
+      return secured;
+    });
+  }
+  const securityStart = performance.now();
+  const secured = applyHeaders(result);
+  profiler.record("securityHeaders", performance.now() - securityStart);
+  return secured;
 }
 
 /** Builds this request's ambient view scope: a lazily minted, memoized CSRF token plus the process-wide resolvers. */
@@ -90,6 +120,7 @@ function errorCode(error: unknown): string | undefined {
  * promise or a native Bun error page.
  */
 export function createBunRouteHandler(options: BunRouteHandlerOptions): BunRouteHandler {
+  if (options.profiler?.enabled === true) return createProfiledBunRouteHandler(options, options.profiler);
   return options.logging?.requests === false ? createQuietBunRouteHandler(options) : createLoggedBunRouteHandler(options);
 }
 
@@ -97,13 +128,15 @@ function createLoggedBunRouteHandler(options: BunRouteHandlerOptions): BunRouteH
   const csrfEnabled = (options.flags & RouteFlag.CSRF_ENABLED) !== 0;
   const sse = (options.flags & RouteFlag.SSE) !== 0;
   const logErrors = options.logging?.errors !== false;
+  const viewScope = options.viewScope !== false;
+  const applyHeaders = createSecurityHeaderApplicator(options.securityHeaders);
   return (request, server) => {
     const url = new URL(request.url);
     const requestLog = Console.request({ method: request.method, path: url.pathname });
-    const scope = createViewRequestScope(request, options);
+    const scope = viewScope ? createViewRequestScope(request, options) : undefined;
     const onError = (error: unknown): Response =>
       logResponse(requestLog, renderRequestError(error, request, requestLog, options.development, logErrors), errorCode(error));
-    const dispatch = (): Response | Promise<Response> => runInViewRequestScope(scope, () => {
+    const execute = (): Response | Promise<Response> => {
       if (csrfEnabled) {
         const csrf = options.csrf;
         if (csrf === undefined) return logResponse(requestLog, csrfFailureResponse(), "CSRF_VALIDATION_FAILED");
@@ -115,11 +148,12 @@ function createLoggedBunRouteHandler(options: BunRouteHandlerOptions): BunRouteH
           if (result.source === "form" || result.source === "json") {
             await stripCsrfBodyField(request, csrf.policy.fieldName, result.source);
           }
-          return finalize(options.handler(request, server), options.securityHeaders, requestLog);
+          return finalize(options.handler(request, server), applyHeaders, requestLog);
         });
       }
-      return finalize(options.handler(request, server), options.securityHeaders, requestLog);
-    });
+      return finalize(options.handler(request, server), applyHeaders, requestLog);
+    };
+    const dispatch = (): Response | Promise<Response> => scope === undefined ? execute() : runInViewRequestScope(scope, execute);
     try {
       guardRequestSmuggling(request);
       validateRequestHeaders(request, options.headers);
@@ -137,24 +171,27 @@ function createQuietBunRouteHandler(options: BunRouteHandlerOptions): BunRouteHa
   const csrfEnabled = (options.flags & RouteFlag.CSRF_ENABLED) !== 0;
   const sse = (options.flags & RouteFlag.SSE) !== 0;
   const logErrors = options.logging?.errors !== false;
+  const viewScope = options.viewScope !== false;
+  const applyHeaders = createSecurityHeaderApplicator(options.securityHeaders);
   return (request, server) => {
-    const scope = createViewRequestScope(request, options);
+    const scope = viewScope ? createViewRequestScope(request, options) : undefined;
     const onError = (error: unknown): Response =>
-      applySecurityHeaders(renderRequestError(error, request, { requestId: createCorrelationId("req") }, options.development, logErrors), options.securityHeaders);
-    const dispatch = (): Response | Promise<Response> => runInViewRequestScope(scope, () => {
+      applyHeaders(renderRequestError(error, request, { requestId: createCorrelationId("req") }, options.development, logErrors));
+    const execute = (): Response | Promise<Response> => {
       if (csrfEnabled) {
         const csrf = options.csrf;
-        if (csrf === undefined) return applySecurityHeaders(csrfFailureResponse(), options.securityHeaders);
+        if (csrf === undefined) return applyHeaders(csrfFailureResponse());
         return csrf.verifier.verify(request, csrf.policy, true).then(async (result) => {
-          if (!result.valid) return applySecurityHeaders(csrfFailureResponse(), options.securityHeaders);
+          if (!result.valid) return applyHeaders(csrfFailureResponse());
           if (result.source === "form" || result.source === "json") {
             await stripCsrfBodyField(request, csrf.policy.fieldName, result.source);
           }
-          return finalizeQuiet(options.handler(request, server), options.securityHeaders);
+          return finalizeQuiet(options.handler(request, server), applyHeaders);
         });
       }
-      return finalizeQuiet(options.handler(request, server), options.securityHeaders);
-    });
+      return finalizeQuiet(options.handler(request, server), applyHeaders);
+    };
+    const dispatch = (): Response | Promise<Response> => scope === undefined ? execute() : runInViewRequestScope(scope, execute);
     try {
       guardRequestSmuggling(request);
       validateRequestHeaders(request, options.headers);
@@ -166,6 +203,73 @@ function createQuietBunRouteHandler(options: BunRouteHandlerOptions): BunRouteHa
       return onError(error);
     }
   };
+}
+
+function createProfiledBunRouteHandler(options: BunRouteHandlerOptions, profiler: HttpHotPathRecorder): BunRouteHandler {
+  const csrfEnabled = (options.flags & RouteFlag.CSRF_ENABLED) !== 0;
+  const sse = (options.flags & RouteFlag.SSE) !== 0;
+  const logErrors = options.logging?.errors !== false;
+  const viewScope = options.viewScope !== false;
+  const applyHeaders = createSecurityHeaderApplicator(options.securityHeaders);
+  return (request, server) => {
+    const requestStart = performance.now();
+    const contextStart = performance.now();
+    const scope = viewScope ? createViewRequestScope(request, options) : undefined;
+    profiler.record("contextPreparation", performance.now() - contextStart);
+    const onError = (error: unknown): Response =>
+      applyHeaders(renderRequestError(error, request, { requestId: createCorrelationId("req") }, options.development, logErrors));
+    const execute = (): Response | Promise<Response> => {
+      if (csrfEnabled) {
+        const csrf = options.csrf;
+        if (csrf === undefined) return applyHeaders(csrfFailureResponse());
+        return csrf.verifier.verify(request, csrf.policy, true).then(async (result) => {
+          if (!result.valid) return applyHeaders(csrfFailureResponse());
+          if (result.source === "form" || result.source === "json") {
+            await stripCsrfBodyField(request, csrf.policy.fieldName, result.source);
+          }
+          return finalizeProfiled(profileGeneratedDispatch(() => options.handler(request, server), profiler), applyHeaders, profiler);
+        });
+      }
+      return finalizeProfiled(profileGeneratedDispatch(() => options.handler(request, server), profiler), applyHeaders, profiler);
+    };
+    const dispatch = (): Response | Promise<Response> => scope === undefined ? execute() : runInViewRequestScope(scope, execute);
+    try {
+      const preparationStart = performance.now();
+      guardRequestSmuggling(request);
+      validateRequestHeaders(request, options.headers);
+      validateRequestHost(request, options.allowedHosts);
+      if (sse) server.timeout(request, 0);
+      profiler.record("requestPreparation", performance.now() - preparationStart);
+      const result = dispatch();
+      if (result instanceof Promise) {
+        return result.then((response) => {
+          profiler.recordRequest(performance.now() - requestStart);
+          return response;
+        }, (error: unknown) => {
+          profiler.recordRequest(performance.now() - requestStart);
+          return onError(error);
+        });
+      }
+      profiler.recordRequest(performance.now() - requestStart);
+      return result;
+    } catch (error) {
+      profiler.recordRequest(performance.now() - requestStart);
+      return onError(error);
+    }
+  };
+}
+
+function profileGeneratedDispatch(callback: () => Response | Promise<Response>, profiler: HttpHotPathRecorder): Response | Promise<Response> {
+  const startedAt = performance.now();
+  const result = callback();
+  if (result instanceof Promise) {
+    return result.then((response) => {
+      profiler.record("generatedDispatch", performance.now() - startedAt);
+      return response;
+    });
+  }
+  profiler.record("generatedDispatch", performance.now() - startedAt);
+  return result;
 }
 function logResponse(request: RequestHandle, response: Response, code?: string): Response {
   const length = response.headers.get("content-length");
