@@ -8,12 +8,14 @@ import { ListUsersUseCase } from "../../application/use-cases/list-users.use-cas
 import { valiateUserID } from "../validators/valiate_user_id.validator";
 import { userPermissionGuard } from "../guards/user-permission.guard";
 import { postUserValidatore } from "../validators/post_user.validator";
+import { Email } from "@warbler/email";
 
 @Controller()
 export class UserController {
   readonly #createUser = inject(CreateUserUseCase);
   readonly #findUser = inject(FindUserUseCase);
   readonly #listUsers = inject(ListUsersUseCase);
+  readonly #appEmail = inject(Email);
 
   @Get("/")
   async list() {
@@ -47,11 +49,20 @@ export class UserController {
 
   @Post("/", {
     name: "users.create",
-    csrf: true,
-    validator: postUserValidatore
+    // csrf: true,
+    // validator: postUserValidatore
   })
   async create(request: AppRequest<typeof postUserValidatore>) {
-    const res = await this.#createUser.execute(request.body);
-    return JsonRes({ res })
+    //const res = await this.#createUser.execute(request.body);
+    await this.#appEmail.send({
+      from: 'alarazigh@gmail.com',
+      to: "bellib6@gmail.com",
+      subject: "Welcome warbler",
+      text: "Welcome to Warbler. Your account is ready: bellib6@gmail.com. User id: playground.",
+     // template: "mail.welcome",
+      data: { email: "bellib6@gmail.com", userId: "playground" },
+    })
+
+    return JsonRes({  })
   }
 }

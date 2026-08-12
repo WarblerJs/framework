@@ -1,10 +1,10 @@
 import { env, envBoolean, envNumber, envString } from "@warbler/config";
 
 export const mailConfig = {
-  default: "log",
+  default: "smtp",
 
   from: {
-    address: envString("MAIL_FROM_ADDRESS", "noreply@example.com"),
+    address: envString("MAIL_FROM_ADDRESS", "habedev@gmail.com"),
     name: env("MAIL_FROM_NAME", "Warbler Playground"),
   },
 

@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { env } from "@warbler/config";
-import { Email, EmailAddressError, EmailEncodingError, normalizeEmailConfig } from "../src";
+import { Email, EmailAddressError, EmailEncodingError, LogTransport, normalizeEmailConfig } from "../src";
 import { createChunkedBase64Encoder, encodeBase64Mime, MemoryTransport, parseSmtpCapabilities, parseSmtpResponse } from "../src/testing";
 import { encoding } from "@warbler/crypto";
 
@@ -28,6 +28,8 @@ describe("@warbler/email", () => {
     expect(raw).toContain("To: Ada <ada@example.test>");
     expect(raw).toContain("Cc: cc@example.test");
     expect(raw).toContain("Reply-To: support@example.test");
+    expect(raw).toContain("Content-Type: text/plain; charset=utf-8");
+    expect(raw).not.toContain("\r\n\r\nContent-Type: text/plain; charset=utf-8");
     expect(raw).not.toContain("Bcc:");
     expect(raw).not.toContain("secret@example.test");
   });
@@ -44,12 +46,34 @@ describe("@warbler/email", () => {
     expect(transport.messages[0]!.message.html).toBe("<p>mail.welcome:user@example.test</p>");
   });
 
+  test("sends text plus template as multipart alternative", async () => {
+    const transport = new MemoryTransport();
+    const email = new Email({ transport: "memory" }, renderer, transport);
+    await email.send({
+      to: "user@example.test",
+      subject: "Template with text",
+      text: "Welcome plain text",
+      template: "mail.welcome",
+      data: { email: "user@example.test" },
+    });
+
+    const raw = transport.messages[0]!.raw;
+    expect(raw).toContain("MIME-Version: 1.0\r\nContent-Type: multipart/alternative;");
+    expect(raw).not.toContain("MIME-Version: 1.0\r\n\r\nContent-Type: multipart/alternative;");
+    expect(raw).toContain("multipart/alternative");
+    expect(raw).toContain("Content-Type: text/plain; charset=utf-8");
+    expect(raw).toContain("Welcome=20plain=20text");
+    expect(raw).toContain("Content-Type: text/html; charset=utf-8");
+    expect(transport.messages[0]!.message.html).toBe("<p>mail.welcome:user@example.test</p>");
+  });
+
   test("encodes utf-8 subjects and inline/regular attachments", async () => {
     const transport = new MemoryTransport();
     const email = new Email({ transport: "memory" }, renderer, transport);
     await email.send({
       to: "user@example.test",
       subject: "Salut été",
+      text: "Hello",
       html: "<img src=\"cid:logo\"><p>Hello</p>",
       attachments: [
         { filename: "logo.txt", content: "LOGO", contentId: "logo", disposition: "inline" },
@@ -61,6 +85,37 @@ describe("@warbler/email", () => {
     expect(raw).toContain("multipart/related");
     expect(raw).toContain("Content-ID: <logo>");
     expect(raw).toContain("multipart/mixed");
+  });
+
+  test("requires text unless a template is provided", async () => {
+    const email = new Email({ transport: "memory" }, renderer, new MemoryTransport());
+    await expect(email.send({
+      to: "user@example.test",
+      subject: "Missing content",
+      html: "<p>Hello</p>",
+    } as unknown as Parameters<Email["send"]>[0])).rejects.toThrow("Email requires text when no template is provided.");
+
+    await expect(email.send({
+      to: "user@example.test",
+      subject: "Template",
+      template: "mail.welcome",
+      data: { email: "user@example.test" },
+    })).resolves.toMatchObject({ transport: "memory" });
+  });
+
+  test("log transport clearly marks messages as not delivered", async () => {
+    const transport = new LogTransport();
+    const email = new Email({ transport: "memory" }, renderer, transport);
+    const info = spyOn(console, "info").mockImplementation(() => {});
+    try {
+      await email.send({ to: "user@example.test", subject: "Log", text: "Hello" });
+      expect(info).toHaveBeenCalledWith("[warbler:email]", expect.objectContaining({
+        transport: "log",
+        delivery: "not_sent",
+      }));
+    } finally {
+      info.mockRestore();
+    }
   });
 
   test("rejects unsafe addresses and custom header injection", async () => {

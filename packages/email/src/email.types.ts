@@ -20,21 +20,34 @@ export interface EmailAttachment {
   readonly disposition?: "attachment" | "inline";
 }
 
-/** High-level message input passed to Email.send(). */
-export interface EmailMessage {
+/** Fields shared by every high-level message input passed to Email.send(). */
+export interface EmailMessageBase {
   readonly from?: EmailAddressInput;
   readonly to?: EmailAddressInput | readonly EmailAddressInput[];
   readonly cc?: EmailAddressInput | readonly EmailAddressInput[];
   readonly bcc?: EmailAddressInput | readonly EmailAddressInput[];
   readonly replyTo?: EmailAddressInput | readonly EmailAddressInput[];
   readonly subject: string;
-  readonly text?: string;
   readonly html?: string;
-  readonly template?: string;
   readonly data?: Readonly<Record<string, unknown>>;
   readonly attachments?: readonly EmailAttachment[];
   readonly headers?: Readonly<Record<string, string>>;
 }
+
+/** Message rendered from a compiled template; `text` is optional. */
+export interface TemplateEmailMessage extends EmailMessageBase {
+  readonly template: string;
+  readonly text?: string;
+}
+
+/** Message without a template; `text` is mandatory. */
+export interface TextEmailMessage extends EmailMessageBase {
+  readonly text: string;
+  readonly template?: undefined;
+}
+
+/** High-level message input passed to Email.send(). */
+export type EmailMessage = TemplateEmailMessage | TextEmailMessage;
 
 /** SMTP envelope plus immutable MIME payload prepared for transport. */
 export interface EncodedEmail {

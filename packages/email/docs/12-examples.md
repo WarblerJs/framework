@@ -14,3 +14,26 @@ export const sendWelcomeEmail = listen(UserCreated, async event => {
   });
 });
 ```
+
+Controllers use the generated injectable email provider:
+
+```ts
+import { inject } from "@warbler/core";
+import { Email } from "@warbler/email";
+
+export class UserController {
+  readonly #email = inject(Email);
+
+  async create(): Promise<Response> {
+    await this.#email.send({
+      to: "user@example.test",
+      subject: "Welcome",
+      text: "Welcome to Warbler.",
+      template: "mail.welcome",
+      data: { email: "user@example.test" },
+    });
+
+    return new Response("ok");
+  }
+}
+```

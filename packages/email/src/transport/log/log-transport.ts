@@ -7,6 +7,8 @@ export class LogTransport implements EmailTransport {
 
   public async send(message: EncodedEmail): Promise<EmailSendResult> {
     const metadata = Object.freeze({
+      transport: "log",
+      delivery: "not_sent",
       messageId: message.messageId,
       to: message.message.to.map((item) => item.email),
       cc: message.message.cc.map((item) => item.email),

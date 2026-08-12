@@ -61,7 +61,7 @@ export default class HomeController {
 
   @Get("/file/image")
   image(): Response {
-    return ImageRes(Bun.file("public/images/sample.png"), { filename: "sample.png" });
+    return ImageRes(Bun.file("public/images/logo.jpg"), { filename: "sample.png" });
   }
 
   @Get("/file/archive")

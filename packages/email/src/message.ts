@@ -40,8 +40,11 @@ export async function normalizeEmailMessage(message: EmailMessage, config: Email
       throw error instanceof EmailEncodingError ? error : new EmailEncodingError(`Email template "${message.template}" failed to render.`, { cause: error });
     }
   }
-  if ((message.text === undefined || message.text.length === 0) && (html === undefined || html.length === 0)) {
-    throw new EmailEncodingError("Email requires text, html, or template content.");
+  if (message.template === undefined && (message.text === undefined || message.text.length === 0)) {
+    throw new EmailEncodingError("Email requires text when no template is provided.");
+  }
+  if (message.template !== undefined && (html === undefined || html.length === 0)) {
+    throw new EmailEncodingError("Email template must render non-empty content.");
   }
   const attachments = await normalizeAttachments(message.attachments, config.limits);
   return Object.freeze({
