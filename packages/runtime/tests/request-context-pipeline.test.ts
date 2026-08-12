@@ -30,6 +30,9 @@ class WhoAmIController {
     });
   }
 }
+class MinimalController {
+  bench(): Response { return new Response("OK"); }
+}
 
 /** Simulates the compiler always calling `prepareHttpValidationInput` (Phase 4), even for a route with no validator. */
 function emptyValidationInput(): Readonly<Record<string, unknown>> { return Object.freeze({}); }
@@ -83,6 +86,56 @@ function application(setValue: unknown, factory: "sync" | "async" = "sync"): Gen
 }
 
 describe("request context pipeline", () => {
+  test("minimal zero-argument routes bypass AppRequest and request context construction", async () => {
+    let inputCount = -1;
+    let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
+    const app: GeneratedApplicationBindings = Object.freeze({
+      application: Object.freeze({
+        strings: Object.freeze([]), graphIds: Object.freeze({ AppGraph: 0 }),
+        providerTable: Object.freeze([]), providerDependencies: Object.freeze([]),
+        routeTable: Object.freeze([Object.freeze({
+          id: 0, controllerId: 0, handlerId: 0, validatorId: -1,
+          guardStart: 0, guardCount: 0, middlewareStart: 0, middlewareCount: 0, flags: 0,
+        })]),
+        socketEventTable: Object.freeze([]),
+        routeGuards: Object.freeze([]), routeMiddleware: Object.freeze([]),
+        socketGuards: Object.freeze([]), socketMiddleware: Object.freeze([]),
+      }),
+      providers: Object.freeze([]),
+      controllers: Object.freeze([
+        Object.freeze({ id: 0, graphId: 0, transport: "http", token: MinimalController, factory: () => new MinimalController() }),
+      ]),
+      handlers: Object.freeze([
+        Object.freeze({
+          id: 0, controllerId: 0, parameterCount: 0,
+          invoke: (controller: MinimalController, ...input: readonly unknown[]) => {
+            inputCount = input.length;
+            return controller.bench();
+          },
+        }),
+      ]),
+      guards: Object.freeze([]),
+      middleware: Object.freeze([]),
+      validators: Object.freeze([]),
+      http: Object.freeze({
+        routes: Object.freeze([Object.freeze({ id: 0 })]),
+        createRoutes: (execute: HttpRouteExecutor) =>
+          Object.freeze({ "/bench": Object.freeze({ GET: (request: Request) => execute(0, request) }) }),
+      }),
+    });
+    const runtime = await startRuntime({
+      application: app,
+      runtimeConfig,
+      transportLaunchers: [{ kind: "http", start(input) { routes = (input.bindings as { readonly routes: typeof routes }).routes; return Object.freeze({}); } }],
+      transportConfigLoader: async (kind) => Object.freeze({ kind }),
+    });
+    const result = routes["/bench"]!.GET!(new Request("http://localhost/bench"));
+    expect(result).toBeInstanceOf(Response);
+    expect(await (result as Response).text()).toBe("OK");
+    expect(inputCount).toBe(0);
+    await runtime.stop();
+  });
+
   test("every route gets a real AppRequest — even with no validator — with real Headers and a real Bun.CookieMap", async () => {
     let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
     const runtime = await startRuntime({

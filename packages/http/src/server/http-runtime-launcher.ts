@@ -22,6 +22,9 @@ interface TransportLoggingConfig {
 interface TransportProfilingConfig {
   readonly http?: HttpHotPathRecorder;
 }
+const COMPILER_ROUTE_CSRF = 1 << 10;
+const COMPILER_ROUTE_STREAMING = 1 << 11;
+const COMPILER_ROUTE_VIEW_CONTEXT = 1 << 16;
 
 /** Generated HTTP bindings supplied by Runtime after one-time pipeline compilation. */
 export interface HttpRuntimeBindings {
@@ -79,6 +82,7 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
             development: config.development,
             logging,
             profiler: profiling.http,
+            viewScope: routeNeedsViewScope(input.bindings, path, method),
           });
         }
         routes[path] = Object.freeze(wrapped);
@@ -130,9 +134,23 @@ function routeFlags(bindings: HttpRuntimeBindings, path: string, method: string)
     if (typeof pathId === "number" && typeof methodId === "number" && strings[pathId] === path && strings[methodId] === method) {
       if (typeof record.flags !== "number") return 0;
       const compilerFlags = record.flags;
-      return (compilerFlags & (1 << 10) ? RouteFlag.CSRF_ENABLED : 0)
-        | (compilerFlags & (1 << 11) ? RouteFlag.SSE : 0);
+      return (compilerFlags & COMPILER_ROUTE_CSRF ? RouteFlag.CSRF_ENABLED : 0)
+        | (compilerFlags & COMPILER_ROUTE_STREAMING ? RouteFlag.SSE : 0)
+        | (compilerFlags & COMPILER_ROUTE_VIEW_CONTEXT ? RouteFlag.VIEW_CONTEXT : 0);
     }
   }
   return 0;
+}
+function routeNeedsViewScope(bindings: HttpRuntimeBindings, path: string, method: string): boolean {
+  const records = bindings.routeRecords;
+  const strings = bindings.strings;
+  if (records === undefined || strings === undefined) return true;
+  for (const record of records) {
+    const pathId = record.pathId;
+    const methodId = record.methodId;
+    if (typeof pathId === "number" && typeof methodId === "number" && strings[pathId] === path && strings[methodId] === method) {
+      return typeof record.flags !== "number" || (record.flags & (COMPILER_ROUTE_CSRF | COMPILER_ROUTE_STREAMING | COMPILER_ROUTE_VIEW_CONTEXT)) !== 0;
+    }
+  }
+  return true;
 }

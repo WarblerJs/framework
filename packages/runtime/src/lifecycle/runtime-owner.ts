@@ -68,6 +68,18 @@ interface OwnedTransport {
   readonly launcher: RuntimeTransportLauncher;
   readonly running: RunningTransport;
 }
+interface HttpRouteExecutionPlan {
+  readonly handlerId: number;
+  readonly pipeline?: (input: unknown) => unknown;
+  readonly minimal: boolean;
+  readonly wrapAppRequest: boolean;
+}
+const COMPILER_ROUTE_VALIDATION = 1 << 7;
+const COMPILER_ROUTE_MIDDLEWARE = 1 << 8;
+const COMPILER_ROUTE_GUARD = 1 << 9;
+const COMPILER_ROUTE_CSRF = 1 << 10;
+const COMPILER_ROUTE_STREAMING = 1 << 11;
+const COMPILER_ROUTE_VIEW_CONTEXT = 1 << 16;
 
 /** Owns one generated application from validation through graceful shutdown. */
 export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionContext {
@@ -254,48 +266,61 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     const http = this.application.http;
     if (http === undefined) return Object.freeze({});
     const profiler = this.#httpProfiler;
-    const pipelines = this.application.application.routeTable.map((record) => this.#compileRecordPipeline(record, true, undefined, profiler));
+    const plans = this.application.application.routeTable.map((record) => this.#compileHttpRoutePlan(record, profiler));
     if (profiler === undefined) {
       return http.createRoutes((routeId, request, validationInput) => {
-        const pipeline = pipelines[routeId];
-        if (pipeline === undefined) throw new RuntimeBootstrapError(`Generated HTTP route not found: ${routeId}`);
+        const plan = plans[routeId];
+        if (plan === undefined) throw new RuntimeBootstrapError(`Generated HTTP route not found: ${routeId}`);
+        if (plan.minimal) return normalizeHttpResult(this.invokeHandler(plan.handlerId, Object.freeze([])));
         const input = this.#translator === undefined
           ? request
           : localizeRequest(request, this.#translator, this.#translator.config);
-        const pipelineInput = validationInput === undefined
-          ? input
-          : Object.freeze({
-            ...(typeof validationInput === "object" && validationInput !== null ? validationInput : {}),
-            __request: input,
-            __translate: typeof input === "object" && input !== null && "tr" in input && typeof input.tr === "function"
-              ? ((translateRequest) => (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => translateRequest(key, parameters))(input.tr as (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => string)
-              : undefined,
-          });
-        const result = pipeline(pipelineInput);
+        const pipelineInput = plan.wrapAppRequest || validationInput !== undefined
+          ? httpPipelineInput(input, validationInput)
+          : input;
+        const result = plan.pipeline!(pipelineInput);
         return normalizeHttpResult(result);
       });
     }
     return http.createRoutes((routeId, request, validationInput) => {
       const routeStart = performance.now();
-      const pipeline = pipelines[routeId];
-      if (pipeline === undefined) throw new RuntimeBootstrapError(`Generated HTTP route not found: ${routeId}`);
+      const plan = plans[routeId];
+      if (plan === undefined) throw new RuntimeBootstrapError(`Generated HTTP route not found: ${routeId}`);
       profiler.record("routeDispatch", performance.now() - routeStart);
+      if (plan.minimal) return normalizeHttpResultProfiled(this.#invokeHandlerProfiled(plan.handlerId, Object.freeze([]), profiler), profiler);
       const contextStart = performance.now();
       const input = this.#translator === undefined
         ? request
         : localizeRequest(request, this.#translator, this.#translator.config);
-      const pipelineInput = validationInput === undefined
-        ? input
-        : Object.freeze({
-          ...(typeof validationInput === "object" && validationInput !== null ? validationInput : {}),
-          __request: input,
-          __translate: typeof input === "object" && input !== null && "tr" in input && typeof input.tr === "function"
-            ? ((translateRequest) => (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => translateRequest(key, parameters))(input.tr as (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => string)
-            : undefined,
-        });
+      const pipelineInput = plan.wrapAppRequest || validationInput !== undefined
+        ? httpPipelineInput(input, validationInput)
+        : input;
       profiler.record("contextPreparation", performance.now() - contextStart);
-      const result = pipeline(pipelineInput);
+      const result = plan.pipeline!(pipelineInput);
       return normalizeHttpResultProfiled(result, profiler);
+    });
+  }
+  #compileHttpRoutePlan(record: Readonly<Record<string, unknown>>, profiler?: HttpHotPathProfiler): HttpRouteExecutionPlan {
+    const handlerId = numberField(record, "handlerId");
+    const validatorId = numberField(record, "validatorId");
+    const controllerId = numberField(record, "controllerId");
+    const flags = typeof record.flags === "number" ? record.flags : 0;
+    const handler = this.#indexes?.handlers[handlerId];
+    const validator = this.#indexes?.validators[validatorId];
+    const parameterCount = typeof handler?.parameterCount === "number" ? handler.parameterCount : 1;
+    const graphId = this.#indexes!.controllers[controllerId]?.graphId;
+    const hasRequestScoped = graphId !== undefined && this.application.providers.some((provider) => provider.scope === "request" && provider.graphId === graphId);
+    const needsValidation = validatorId >= 0 || (flags & COMPILER_ROUTE_VALIDATION) !== 0;
+    const needsMiddleware = (flags & COMPILER_ROUTE_MIDDLEWARE) !== 0 || numberField(record, "middlewareCount") > 0;
+    const needsGuard = (flags & COMPILER_ROUTE_GUARD) !== 0 || numberField(record, "guardCount") > 0;
+    const needsViewContext = (flags & (COMPILER_ROUTE_VIEW_CONTEXT | COMPILER_ROUTE_CSRF | COMPILER_ROUTE_STREAMING)) !== 0;
+    const minimal = !needsValidation && !needsMiddleware && !needsGuard && !hasRequestScoped && !needsViewContext && parameterCount === 0;
+    const usesCompiledValidatorShape = validatorId < 0 || typeof validator?.flags === "number";
+    return Object.freeze({
+      handlerId,
+      minimal,
+      wrapAppRequest: usesCompiledValidatorShape && (parameterCount > 0 || needsValidation || needsMiddleware || needsGuard || hasRequestScoped),
+      ...(minimal ? {} : { pipeline: this.#compileRecordPipeline(record, true, undefined, profiler) }),
     });
   }
   #executeSocket(event: string, message: unknown, context: unknown): unknown {
@@ -437,13 +462,26 @@ function runValidated(
   const startedAt = profiler === undefined ? 0 : performance.now();
   const result = executeValidator(validator, input);
   const successValue = (outcome: Readonly<{ value: unknown }>): unknown =>
-    typeof validator?.flags === "number" ? outcome : outcome.value;
+    typeof validator?.flags === "number" ? outcome : validator === undefined ? unvalidatedValue(input, outcome.value) : outcome.value;
   if (isThenable(result)) return result.then((outcome) => {
     profiler?.record("validator", performance.now() - startedAt);
     return outcome.valid ? terminal(successValue(outcome)) : onInvalid(outcome);
   });
   profiler?.record("validator", performance.now() - startedAt);
   return result.valid ? terminal(successValue(result)) : onInvalid(result);
+}
+function httpPipelineInput(request: Request, validationInput: unknown): Readonly<Record<string, unknown>> {
+  const source = typeof validationInput === "object" && validationInput !== null ? validationInput : Object.freeze({});
+  return Object.freeze({
+    ...source,
+    __request: request,
+    __translate: typeof request === "object" && request !== null && "tr" in request && typeof request.tr === "function"
+      ? ((translateRequest) => (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => translateRequest(key, parameters))(request.tr as (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => string)
+      : undefined,
+  });
+}
+function unvalidatedValue(input: unknown, value: unknown): unknown {
+  return typeof input === "object" && input !== null && "__request" in input && !("value" in input) ? undefined : value;
 }
 function rangeIds(record: Readonly<Record<string, unknown>>, startKey: string, countKey: string, values: readonly number[] | undefined): readonly number[] {
   const start = numberField(record, startKey);

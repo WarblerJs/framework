@@ -40,6 +40,7 @@ export interface BunRouteHandlerOptions {
   readonly development: boolean;
   readonly logging?: Readonly<{ readonly requests?: boolean; readonly errors?: boolean }>;
   readonly profiler?: HttpHotPathRecorder;
+  readonly viewScope?: boolean;
 }
 
 function finalize(
@@ -126,13 +127,14 @@ function createLoggedBunRouteHandler(options: BunRouteHandlerOptions): BunRouteH
   const csrfEnabled = (options.flags & RouteFlag.CSRF_ENABLED) !== 0;
   const sse = (options.flags & RouteFlag.SSE) !== 0;
   const logErrors = options.logging?.errors !== false;
+  const viewScope = options.viewScope !== false;
   return (request, server) => {
     const url = new URL(request.url);
     const requestLog = Console.request({ method: request.method, path: url.pathname });
-    const scope = createViewRequestScope(request, options);
+    const scope = viewScope ? createViewRequestScope(request, options) : undefined;
     const onError = (error: unknown): Response =>
       logResponse(requestLog, renderRequestError(error, request, requestLog, options.development, logErrors), errorCode(error));
-    const dispatch = (): Response | Promise<Response> => runInViewRequestScope(scope, () => {
+    const execute = (): Response | Promise<Response> => {
       if (csrfEnabled) {
         const csrf = options.csrf;
         if (csrf === undefined) return logResponse(requestLog, csrfFailureResponse(), "CSRF_VALIDATION_FAILED");
@@ -148,7 +150,8 @@ function createLoggedBunRouteHandler(options: BunRouteHandlerOptions): BunRouteH
         });
       }
       return finalize(options.handler(request, server), options.securityHeaders, requestLog);
-    });
+    };
+    const dispatch = (): Response | Promise<Response> => scope === undefined ? execute() : runInViewRequestScope(scope, execute);
     try {
       guardRequestSmuggling(request);
       validateRequestHeaders(request, options.headers);
@@ -166,11 +169,12 @@ function createQuietBunRouteHandler(options: BunRouteHandlerOptions): BunRouteHa
   const csrfEnabled = (options.flags & RouteFlag.CSRF_ENABLED) !== 0;
   const sse = (options.flags & RouteFlag.SSE) !== 0;
   const logErrors = options.logging?.errors !== false;
+  const viewScope = options.viewScope !== false;
   return (request, server) => {
-    const scope = createViewRequestScope(request, options);
+    const scope = viewScope ? createViewRequestScope(request, options) : undefined;
     const onError = (error: unknown): Response =>
       applySecurityHeaders(renderRequestError(error, request, { requestId: createCorrelationId("req") }, options.development, logErrors), options.securityHeaders);
-    const dispatch = (): Response | Promise<Response> => runInViewRequestScope(scope, () => {
+    const execute = (): Response | Promise<Response> => {
       if (csrfEnabled) {
         const csrf = options.csrf;
         if (csrf === undefined) return applySecurityHeaders(csrfFailureResponse(), options.securityHeaders);
@@ -183,7 +187,8 @@ function createQuietBunRouteHandler(options: BunRouteHandlerOptions): BunRouteHa
         });
       }
       return finalizeQuiet(options.handler(request, server), options.securityHeaders);
-    });
+    };
+    const dispatch = (): Response | Promise<Response> => scope === undefined ? execute() : runInViewRequestScope(scope, execute);
     try {
       guardRequestSmuggling(request);
       validateRequestHeaders(request, options.headers);
@@ -201,14 +206,15 @@ function createProfiledBunRouteHandler(options: BunRouteHandlerOptions, profiler
   const csrfEnabled = (options.flags & RouteFlag.CSRF_ENABLED) !== 0;
   const sse = (options.flags & RouteFlag.SSE) !== 0;
   const logErrors = options.logging?.errors !== false;
+  const viewScope = options.viewScope !== false;
   return (request, server) => {
     const requestStart = performance.now();
     const contextStart = performance.now();
-    const scope = createViewRequestScope(request, options);
+    const scope = viewScope ? createViewRequestScope(request, options) : undefined;
     profiler.record("contextPreparation", performance.now() - contextStart);
     const onError = (error: unknown): Response =>
       applySecurityHeaders(renderRequestError(error, request, { requestId: createCorrelationId("req") }, options.development, logErrors), options.securityHeaders);
-    const dispatch = (): Response | Promise<Response> => runInViewRequestScope(scope, () => {
+    const execute = (): Response | Promise<Response> => {
       if (csrfEnabled) {
         const csrf = options.csrf;
         if (csrf === undefined) return applySecurityHeaders(csrfFailureResponse(), options.securityHeaders);
@@ -221,7 +227,8 @@ function createProfiledBunRouteHandler(options: BunRouteHandlerOptions, profiler
         });
       }
       return finalizeProfiled(profileGeneratedDispatch(() => options.handler(request, server), profiler), options.securityHeaders, profiler);
-    });
+    };
+    const dispatch = (): Response | Promise<Response> => scope === undefined ? execute() : runInViewRequestScope(scope, execute);
     try {
       const preparationStart = performance.now();
       guardRequestSmuggling(request);

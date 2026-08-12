@@ -3,6 +3,7 @@ import { NotFoundError } from "@warbler/core";
 import { Console } from "@warbler/console";
 import { createBunRouteHandler, createNotFoundFallback, type BunRouteHandlerOptions } from "../src/native";
 import { RouteFlag } from "../src/compiled";
+import { getViewRequestScope } from "../src/view";
 
 function baseOptions(handler: BunRouteHandlerOptions["handler"]): BunRouteHandlerOptions {
   return {
@@ -92,6 +93,16 @@ describe("native request pipeline", () => {
     } finally {
       Console.request = originalRequest as typeof Console.request;
     }
+  });
+
+  test("minimal route handlers can skip ViewRequestScope setup", async () => {
+    const handler = createBunRouteHandler({
+      ...baseOptions(() => Response.json({ scoped: getViewRequestScope() !== undefined })),
+      logging: { requests: false, errors: true },
+      viewScope: false,
+    });
+    const response = await handler(REQUEST(), Object.create(null));
+    expect(await response.json()).toEqual({ scoped: false });
   });
 
   describe("unified exception boundary", () => {

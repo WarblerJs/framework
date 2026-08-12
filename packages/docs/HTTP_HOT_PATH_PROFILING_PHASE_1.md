@@ -146,3 +146,135 @@ Reason: it is the largest exclusive measured bucket at about `36.62%` of measure
 Hypothesis: a compiler/startup-selected native `Response` route path for routes with no request parameter, no validator sources, no guards, no middleware, no request-scoped providers, and no view/CSRF usage will reduce context preparation while preserving security headers and error boundaries.
 
 Do not implement this optimization until a separate branch can prove the behavior and benchmark it independently.
+
+## Lazy Request Context Optimization
+
+Implemented follow-up: minimal generated HTTP routes now use a compile/startup-selected fast path.
+
+A route is eligible only when all of these facts are known at compile/startup time:
+
+- handler parameter count is `0`
+- no validator is attached
+- no guards are attached
+- no middleware is attached
+- the owning graph has no request-scoped providers
+- route flags do not require CSRF, streaming, or view helper context
+
+Eligible routes skip generated validation-input preparation, `AppRequest` construction, `RequestContextStore` creation, and HTTP `ViewRequestScope` / `AsyncLocalStorage` entry. The Bun HTTP wrapper still runs request-smuggling checks, header validation, exception handling, response normalization, and security headers.
+
+Routes with validators, guards, middleware, request parameters, request-scoped providers, `view()`, `csrf()`, or streaming keep the full request-context pipeline.
+
+Measured after implementation, profiling OFF, production logs OFF:
+
+| Metric | Value |
+| --- | ---: |
+| Req/sec | 33,411.74 |
+| Avg latency | 1.08 ms |
+| p50 | 1 ms |
+| p97.5 | 2 ms |
+| p99 | 3 ms |
+| Max latency | 20 ms |
+| Bytes/sec | 21.1 MB |
+| Total requests | 1,002k in 30.02s |
+
+Compared with the Phase 1 profiling-off baseline, `/bench` improved by `12,066.67 req/sec` (`56.54%`) and average latency decreased by `0.66 ms`.
+
+Measured after implementation, profiling ON, production logs OFF:
+
+| Metric | Value |
+| --- | ---: |
+| Req/sec | 32,170.14 |
+| Avg latency | 1.11 ms |
+| p50 | 1 ms |
+| p97.5 | 2 ms |
+| p99 | 3 ms |
+| Max latency | 17 ms |
+| Bytes/sec | 20.4 MB |
+| Total requests | 965k in 30.02s |
+
+Profiler stage summary after stopping the profiling-enabled server:
+
+| Stage | Count | Avg per invocation | Contribution |
+| --- | ---: | ---: | ---: |
+| total | 965,171 | 15.82 us | 100.00% |
+| requestPreparation | 965,171 | 4.63 us | 29.27% |
+| contextPreparation | 965,171 | 0.04 us | 0.28% |
+| generatedDispatch | 965,171 | 3.62 us | 22.86% |
+| routeDispatch | 965,171 | 0.06 us | 0.36% |
+| validator | 0 | 0.00 us | 0.00% |
+| guardMiddleware | 0 | 0.00 us | 0.00% |
+| requestContext | 0 | 0.00 us | 0.00% |
+| diController | 965,171 | 0.15 us | 0.92% |
+| handlerExecution | 965,171 | 2.36 us | 14.90% |
+| responseNormalization | 965,171 | 0.03 us | 0.21% |
+| securityHeaders | 965,171 | 6.93 us | 43.78% |
+| other | 965,171 | 1.63 us | 10.28% |
+
+Measured fact: after lazy request context, security header application is the largest exclusive measured cost on `/bench`.
+
+## Security Headers Fast-Path Optimization
+
+Implemented follow-up: static security policy is still resolved once at HTTP transport startup, but the template now carries a precompiled immutable header-entry list. The request path applies those entries directly to the native response headers and returns the same response when Bun exposes mutable headers. If a future response type rejects header mutation, Warbler falls back to the previous safe reconstruction path.
+
+Preserved behavior:
+
+- security defaults do not overwrite explicit response headers
+- `x-powered-by` is always removed
+- response status, statusText, content type, redirect location, cookies, streams, and file bodies are preserved
+- response header state remains request-local
+- fallback 404 behavior remains unchanged: it still sends its existing `x-content-type-options` header and does not receive the full configured security template
+
+Pre-change benchmark for this task, profiling OFF, production logs OFF:
+
+| Metric | Value |
+| --- | ---: |
+| Req/sec | 34,317.60 |
+| Avg latency | 1.06 ms |
+| p50 | 1 ms |
+| p97.5 | 2 ms |
+| p99 | 3 ms |
+| Max latency | 18 ms |
+| Bytes/sec | 21.7 MB |
+| Total requests | 1,030k in 30.02s |
+
+Post-change benchmark, profiling OFF, production logs OFF:
+
+| Metric | Value |
+| --- | ---: |
+| Req/sec | 37,037.60 |
+| Avg latency | 0.90 ms |
+| p50 | 1 ms |
+| p97.5 | 2 ms |
+| p99 | 2 ms |
+| Max latency | 19 ms |
+| Bytes/sec | 23.4 MB |
+| Total requests | 1,111k in 30.02s |
+
+Measured improvement versus the fresh pre-change run: `+2,720.00 req/sec` (`7.93%`). Average latency decreased by `0.16 ms`; p99 improved from `3 ms` to `2 ms`.
+
+Profiler comparison, profiling ON, production logs OFF:
+
+| Metric | Before | After |
+| --- | ---: | ---: |
+| Req/sec | 32,102.67 | 36,425.87 |
+| Avg latency | 1.11 ms | 0.93 ms |
+| p99 | 3 ms | 3 ms |
+| Total requests | 963k in 30.02s | 1,093k in 30.02s |
+| `securityHeaders` avg | 6.93 us | 4.93 us |
+| `securityHeaders` contribution | 43.53% | 37.22% |
+
+Do not compare profiling-on throughput directly with normal production throughput; profiling records timing on every request.
+
+Allocation changes on the common mutable native `Response` path:
+
+- removed per-response `Object.keys(template)` for compiler-created templates
+- removed per-response `new Headers(response.headers)`
+- removed per-response `new Response(response.body, ...)`
+- retained response-local header mutation and fallback reconstruction for immutable headers
+
+Alternatives benchmarked:
+
+- previous copy-and-reconstruct implementation: `34,317.60 req/sec`, `6.93 us` security stage
+- compiled tuple plus in-place native response header mutation: `37,037.60 req/sec`, `4.93 us` security stage
+
+Measured fact: after this optimization, `requestPreparation` is the largest exclusive non-security stage on `/bench`. Do not optimize it in the security-header branch.

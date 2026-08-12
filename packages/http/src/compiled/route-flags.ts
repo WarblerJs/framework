@@ -7,4 +7,5 @@ export const RouteFlag = Object.freeze({
   STATIC_RESPONSE: 1 << 4,
   FILE_RESPONSE: 1 << 5,
   HTML_RESPONSE: 1 << 6,
+  VIEW_CONTEXT: 1 << 7,
 } as const);
