@@ -278,3 +278,67 @@ Alternatives benchmarked:
 - compiled tuple plus in-place native response header mutation: `37,037.60 req/sec`, `4.93 us` security stage
 
 Measured fact: after this optimization, `requestPreparation` is the largest exclusive non-security stage on `/bench`. Do not optimize it in the security-header branch.
+
+## Request Preparation Investigation
+
+Measured scope in [bun-route-handler.ts](/home/bellib/dev/framework/packages/http/src/native/bun-route-handler.ts:228): `requestPreparation` contains protocol/security checks and SSE timeout preparation only:
+
+- `guardRequestSmuggling(request)`
+- `validateRequestHeaders(request, options.headers)`
+- `validateRequestHost(request, options.allowedHosts)`
+- `server.timeout(request, 0)` when the compiled route is SSE
+
+Observation: on the production quiet `/bench` path, request preparation does not parse `new URL(request.url)`, does not create request IDs, does not allocate request context, does not perform route dispatch, and does not apply security response headers.
+
+Classification:
+
+| Operation | Why it exists | Mandatory for `/bench` | Static work available | Allocation notes |
+| --- | --- | ---: | ---: | --- |
+| Request-smuggling guard | rejects conflicting `Content-Length` / `Transfer-Encoding` framing | yes | no | reads two headers; splits only when `Content-Length` exists |
+| Header limit validation | defense-in-depth header count/name/value/total limits | yes | limits already startup-resolved | traverses all headers and encodes name/value for byte length |
+| Host validation | rejects missing, malformed, or disallowed `Host` | yes | allowed-host list already startup-resolved | parses hostname and lowercases for allow-list lookup |
+| SSE timeout preparation | disables native timeout for SSE routes | no for `/bench` | compiled route flag already startup-resolved | no work when route is not SSE |
+
+Fresh pre-change benchmark for this task, profiling OFF, production logs OFF:
+
+| Metric | Value |
+| --- | ---: |
+| Req/sec | 37,712.00 |
+| Avg latency | 0.83 ms |
+| p50 | 1 ms |
+| p97.5 | 2 ms |
+| p99 | 2 ms |
+| Max latency | 18 ms |
+| Bytes/sec | 23.9 MB |
+| Total requests | 1,131k in 30.02s |
+
+Fresh pre-change profiler run, profiling ON, production logs OFF:
+
+| Metric | Value |
+| --- | ---: |
+| Req/sec | 35,968.27 |
+| Avg latency | 0.94 ms |
+| p99 | 3 ms |
+| Total requests | 1,079k in 30.02s |
+| `requestPreparation` avg | 4.35 us |
+| `requestPreparation` contribution | 32.45% |
+
+Benchmarked candidates:
+
+| Candidate | Normal throughput result | Profiler result | Decision |
+| --- | ---: | ---: | --- |
+| One-pass request preparation helper with manual UTF-8 byte counting | 37,898.40 req/sec, then 36,240.81 req/sec | not kept | rejected: unstable normal throughput and extra complexity |
+| One-pass request preparation helper with module-level `TextEncoder` | median 37,327.74 req/sec across 3 runs | `requestPreparation` 3.72 us, 28.98%; profiled throughput 36,586.94 req/sec | rejected: profiler improved, but normal throughput median was below the fresh baseline and avg latency regressed |
+| Original three guards with module-level `TextEncoder` and hoisted framing regexp | 36,703.74 req/sec, then 36,298.94 req/sec | not kept | rejected: normal throughput and average latency regressed |
+
+Measured fact: the combined one-pass helper reduced measured `requestPreparation` from `4.35 us` to `3.72 us` (`14.48%`) under profiling, but the normal production benchmark did not improve. Per the benchmark gate for this task, the implementation was reverted.
+
+Security/correctness validation run during the rejected experiments:
+
+- `bun run typecheck` passed
+- focused HTTP security/native/body/cookie/route tests passed: `35 pass`, `0 fail`, `192 expect() calls`
+- `playground` production build passed
+
+Final outcome for this phase: no request-preparation source optimization was kept, because no candidate satisfied all success criteria: material profiler reduction, normal throughput improvement, no average latency regression, and no p99 regression.
+
+Profiler-supported next recommendation: leave request preparation unchanged until a more specific security-equivalent design can be proven. Based on the accepted security-header phase profiler, the next promising isolated target remains outside request preparation: reduce remaining `securityHeaders` cost or generated handler execution overhead in a separate task.
