@@ -4,7 +4,7 @@ export { LogTransport } from "./transport/log/log-transport";
 export { MemoryTransport } from "./transport/memory/memory-transport";
 export { SMTPTransport } from "./transport/smtp/smtp-transport";
 export { normalizeEmailAddress } from "./address";
-export type { EmailAddress, EmailAddressInput, EmailAttachment, EmailMessage, EmailSendResult, EmailTransport, EncodedEmail, NormalizedEmailAttachment, NormalizedEmailMessage } from "./email.types";
+export type { EmailAddress, EmailAddressInput, EmailAttachment, EmailMessage, EmailMessageBase, EmailSendResult, EmailTransport, EncodedEmail, NormalizedEmailAttachment, NormalizedEmailMessage, TemplateEmailMessage, TextEmailMessage } from "./email.types";
 export {
   EmailAddressError,
   EmailAttachmentError,

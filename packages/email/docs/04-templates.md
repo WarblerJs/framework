@@ -7,6 +7,7 @@ Templates use Warbler dot notation and the active compiled view artifact:
 await email.send({
   to: "user@example.test",
   subject: "Welcome",
+  text: "Welcome to Warbler.",
   template: "mail.welcome",
   data: { email: "user@example.test" },
 });

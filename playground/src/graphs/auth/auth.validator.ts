@@ -7,9 +7,9 @@ export const loginValidator = defineValidator({
     // confirmPassword: v.string("invalid_string").min(1, "invalid_string"),
     // remember: v.string("invalid_string").min(1, "invalid_string"),
   },
-  // queryRules: {
-  //   type: v.coerce.number("type_not_existe"),
-  // },
+  queryRules: {
+    type: v.coerce.number("type_not_existe"),
+  },
 });
 
 export type LoginInput = InferValidatorOutput<typeof loginValidator>;

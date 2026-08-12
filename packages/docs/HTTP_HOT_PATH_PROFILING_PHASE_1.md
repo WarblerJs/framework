@@ -446,3 +446,79 @@ Correctness validation:
 Raw Bun context: final Warbler median throughput is `81.31%` of the historical Raw Bun baseline (`37,660.54 / 46,322`).
 
 Next recommendation: do not re-open request preparation or security headers immediately. The next isolated candidate should inspect `handlerExecution` and the non-exclusive parts of `generatedDispatch` together, but only after confirming whether the inclusive profiler boundary can be interpreted without adding heavy instrumentation.
+
+## AOT Specialized HTTP Route Execution Investigation
+
+Measured fact: this phase investigated an architectural AOT route-execution change, not a micro-optimization. The tested target was the minimal zero-argument HTTP route path, because `/bench` still reached Runtime through generic route execution:
+
+- generated route closure calls `executeHttpRoute(routeId, request)`
+- Runtime looks up the route plan by `routeId`
+- minimal path calls `this.invokeHandler(handlerId, Object.freeze([]))`
+- `invokeHandler` looks up the handler binding and controller instance
+- `executeHandler` validates `binding.invoke` and calls it with spread arguments
+- generated zero-argument handler bindings still used a rest parameter and spread internally
+
+Hypothesis: moving minimal route execution from request-time interpretation to startup/compiler-selected direct invocation would reduce generic lookup, empty-array allocation, rest/spread overhead, and handler indirection.
+
+Fresh pre-change production baseline, profiling OFF, production logs OFF. Server was warmed up first with `autocannon -c 50 -d 10 http://127.0.0.1:3000/bench`.
+
+| Run | Req/sec | Avg latency | p50 | p97.5 | p99 | Max | Bytes/sec | Total |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 37,408.27 | 0.98 ms | 1 ms | 2 ms | 2 ms | 19 ms | 23.7 MB | 1,122k in 30.02s |
+| 2 | 37,794.40 | 0.96 ms | 1 ms | 2 ms | 2 ms | 17 ms | 23.9 MB | 1,134k in 30.02s |
+| 3 | 38,097.87 | 0.93 ms | 1 ms | 2 ms | 2 ms | 17 ms | 24.1 MB | 1,143k in 30.02s |
+| 4 | 37,322.40 | 0.98 ms | 1 ms | 2 ms | 2 ms | 17 ms | 23.6 MB | 1,120k in 30.02s |
+| 5 | 37,300.54 | 0.98 ms | 1 ms | 2 ms | 2 ms | 16 ms | 23.6 MB | 1,119k in 30.02s |
+
+Measured fact: baseline median throughput was `37,408.27 req/sec`.
+
+Rejected experiment: startup-selected `HttpRouteExecutionPlan.execute` family.
+
+Implementation tested:
+
+- route plans carried a preselected `execute(request, validationInput)` closure
+- minimal routes prebound handler binding, controller instance, and generated `invoke`
+- minimal routes called the generated handler without `this.invokeHandler(...)` and without `Object.freeze([])`
+- feature routes retained the existing validation/guard/middleware/request-context pipeline through a preselected pipeline executor
+
+Production benchmark:
+
+| Run | Req/sec | Avg latency | p99 | Decision |
+| --- | ---: | ---: | ---: | --- |
+| 1 | 37,486.14 | 1.02 ms | 2 ms | rejected |
+| 2 | 37,506.40 | 1.02 ms | 2 ms | rejected |
+| 3 | 36,592.27 | 1.04 ms | 2 ms | rejected |
+| 4 | 38,043.74 | 1.00 ms | 2 ms | rejected |
+| 5 | 37,100.54 | 1.03 ms | 2 ms | rejected |
+
+Measured fact: runtime-only AOT median was `37,486.14 req/sec`, only `+0.21%` over baseline, while median-run average latency regressed from `0.98 ms` to `1.02 ms`. This was not meaningful enough for an architectural change.
+
+Rejected experiment: runtime AOT plus compiler-generated zero-argument handlers without rest/spread.
+
+Additional implementation tested:
+
+- zero-parameter generated handler bindings emitted `controller.method()` instead of `(...input) => controller.method(...input)`
+- non-zero-parameter handlers kept the existing generic generated binding
+
+Production benchmark:
+
+| Run | Req/sec | Avg latency | p99 | Decision |
+| --- | ---: | ---: | ---: | --- |
+| 1 | 36,723.20 | 1.03 ms | 2 ms | rejected |
+| 2 | 37,034.94 | 1.03 ms | 2 ms | rejected |
+| 3 | 36,733.07 | 1.03 ms | 2 ms | rejected |
+| 4 | 37,657.34 | 1.01 ms | 2 ms | rejected |
+| 5 | 36,906.40 | 1.03 ms | 2 ms | rejected |
+
+Measured fact: combined AOT median was `36,906.40 req/sec`, `-1.34%` versus baseline, with worse average latency. The source changes were reverted.
+
+Correctness validation during the rejected AOT experiments:
+
+- `bun run typecheck` passed
+- focused compiler/runtime tests passed: `28 pass`, `0 fail`, `120 expect() calls`
+- focused runtime/http tests passed before the compiler variant: `32 pass`, `0 fail`, `105 expect() calls`
+- `playground` production build passed
+
+Final outcome: no AOT route-execution source change was kept. The current generic/minimal split remains simpler and faster under the five-run production benchmark protocol.
+
+Next recommendation: stop `/bench`-only micro and architecture experiments for now. The next useful phase should be a realistic application benchmark, preferably the proposed e-commerce validation app, because the remaining `/bench` differences are now dominated by mandatory framework/security work and Bun/JSC variance.

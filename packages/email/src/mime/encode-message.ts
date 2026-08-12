@@ -65,7 +65,10 @@ function headersFor(message: NormalizedEmailMessage, messageId: string): readonl
 /** Encodes a normalized message into immutable RFC 5322 MIME text. */
 export function encodeEmailMessage(message: NormalizedEmailMessage, messageId: string): EncodedEmail {
   const body = bodyFor(message);
-  const raw = `${headersFor(message, messageId).join("\r\n")}\r\n${body.includes("Content-Type:") ? "\r\n" : "\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n"}${body}`;
+  const content = body.includes("Content-Type:")
+    ? body
+    : `Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n${body}`;
+  const raw = `${headersFor(message, messageId).join("\r\n")}\r\n${content}`;
   const recipients = Object.freeze([...message.to, ...message.cc, ...message.bcc]);
   return Object.freeze({
     messageId,
