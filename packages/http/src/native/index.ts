@@ -4,6 +4,7 @@ export {
   createBunRouteHandler,
   type BunRouteHandler,
   type BunRouteHandlerOptions,
+  type HttpHotPathRecorder,
 } from "./bun-route-handler";
 export type { BunMethodRouteTable, BunRouteTable } from "./bun-route-table";
 export type {

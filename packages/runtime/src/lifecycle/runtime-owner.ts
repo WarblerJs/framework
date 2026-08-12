@@ -1,10 +1,13 @@
 import {
   loadRuntimeConfig,
   loadLoggingConfig,
+  loadProfilingConfig,
   loadTransportConfig,
   normalizeRuntimeConfig,
   normalizeLoggingConfig,
+  normalizeProfilingConfig,
   type LoggingConfig,
+  type ProfilingConfig,
   type RuntimeConfig,
   type TransportName,
 } from "@warbler/config";
@@ -24,6 +27,7 @@ import {
   RuntimeTransportError,
 } from "../errors/runtime-errors";
 import type { GeneratedApplicationBindings } from "../generated/executable-bindings";
+import { createHttpHotPathProfiler, type HttpHotPathProfiler, type HttpProfileStage } from "../profiling/http-hot-path-profiler";
 import { createMiddlewarePipeline, executeGuardRange, executeHandler, executeValidator } from "../pipelines";
 import { RuntimeState, type RuntimeStateValue } from "../state/runtime-state";
 import { TransportLauncherRegistry } from "../transports/transport-launcher-registry";
@@ -82,6 +86,8 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
   #stopPromise: Promise<void> | undefined;
   #translator: CatalogTranslator | undefined;
   #logging: LoggingConfig = normalizeLoggingConfig();
+  #profiling: ProfilingConfig = normalizeProfilingConfig();
+  #httpProfiler: HttpHotPathProfiler | undefined;
 
   public constructor(options: StartRuntimeOptions) { this.#options = Object.freeze({ ...options }); }
   public get state(): RuntimeStateValue { return this.#state; }
@@ -96,6 +102,8 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
   /** Validates, eagerly constructs, starts enabled transports, and reaches RUNNING. */
   public async start(): Promise<this> {
     this.#logging = await this.#loadLogging();
+    this.#profiling = await this.#loadProfiling();
+    this.#httpProfiler = this.#profiling.http ? createHttpHotPathProfiler() : undefined;
     const timer = this.#logging.startup ? Console.timer("Runtime") : undefined;
     if (this.#logging.startup) Console.runtime("starting");
     this.#transition(RuntimeState.CREATED, RuntimeState.VALIDATING);
@@ -178,6 +186,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     this.#removeAbortListener();
     this.#state = RuntimeState.STOPPED;
     if (this.#logging.runtime) Console.runtime("stopped");
+    if (this.#profiling.summaryOnStop && this.#httpProfiler !== undefined) await Bun.write(Bun.stdout, this.#httpProfiler.summary());
     if (failure !== undefined) throw new RuntimeShutdownError(`${RuntimeDiagnosticCode.SHUTDOWN_FAILED}: Runtime shutdown completed with failures.`, { cause: failure });
   }
   async #loadConfiguration(): Promise<RuntimeConfig> {
@@ -196,6 +205,13 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       return normalizeLoggingConfig({ environment: this.#options.development === false ? "production" : "development" });
     }
   }
+  async #loadProfiling(): Promise<ProfilingConfig> {
+    try {
+      return await loadProfilingConfig(this.#options.workspaceRoot ?? process.cwd());
+    } catch {
+      return normalizeProfilingConfig();
+    }
+  }
   async #startTransports(config: RuntimeConfig): Promise<void> {
     const registry = new TransportLauncherRegistry(this.#options.transportLaunchers ?? Object.freeze([]));
     const loadConfig = this.#options.transportConfigLoader ?? loadTransportConfig;
@@ -207,7 +223,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       if (transportConfig === undefined) throw new RuntimeConfigurationError(`Enabled transport configuration missing: ${kind}`);
       const input = Object.freeze({
         bindings: this.#transportBindings(kind),
-        config: launcherConfiguration(kind, transportConfig, config, this.#options.development ?? false, this.#logging),
+        config: launcherConfiguration(kind, transportConfig, config, this.#options.development ?? false, this.#logging, this.#httpProfiler),
         runtime: this,
         signal: this.#abortController.signal,
       }) satisfies RuntimeTransportStartInput;
@@ -237,10 +253,34 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
   #createHttpRoutes(): Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> {
     const http = this.application.http;
     if (http === undefined) return Object.freeze({});
-    const pipelines = this.application.application.routeTable.map((record) => this.#compileRecordPipeline(record, true));
+    const profiler = this.#httpProfiler;
+    const pipelines = this.application.application.routeTable.map((record) => this.#compileRecordPipeline(record, true, undefined, profiler));
+    if (profiler === undefined) {
+      return http.createRoutes((routeId, request, validationInput) => {
+        const pipeline = pipelines[routeId];
+        if (pipeline === undefined) throw new RuntimeBootstrapError(`Generated HTTP route not found: ${routeId}`);
+        const input = this.#translator === undefined
+          ? request
+          : localizeRequest(request, this.#translator, this.#translator.config);
+        const pipelineInput = validationInput === undefined
+          ? input
+          : Object.freeze({
+            ...(typeof validationInput === "object" && validationInput !== null ? validationInput : {}),
+            __request: input,
+            __translate: typeof input === "object" && input !== null && "tr" in input && typeof input.tr === "function"
+              ? ((translateRequest) => (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => translateRequest(key, parameters))(input.tr as (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => string)
+              : undefined,
+          });
+        const result = pipeline(pipelineInput);
+        return normalizeHttpResult(result);
+      });
+    }
     return http.createRoutes((routeId, request, validationInput) => {
+      const routeStart = performance.now();
       const pipeline = pipelines[routeId];
       if (pipeline === undefined) throw new RuntimeBootstrapError(`Generated HTTP route not found: ${routeId}`);
+      profiler.record("routeDispatch", performance.now() - routeStart);
+      const contextStart = performance.now();
       const input = this.#translator === undefined
         ? request
         : localizeRequest(request, this.#translator, this.#translator.config);
@@ -253,8 +293,9 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
             ? ((translateRequest) => (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => translateRequest(key, parameters))(input.tr as (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => string)
             : undefined,
         });
+      profiler.record("contextPreparation", performance.now() - contextStart);
       const result = pipeline(pipelineInput);
-      return normalizeHttpResult(result);
+      return normalizeHttpResultProfiled(result, profiler);
     });
   }
   #executeSocket(event: string, message: unknown, context: unknown): unknown {
@@ -268,7 +309,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     }
     return Object.freeze(result);
   }
-  #compileRecordPipeline(record: Readonly<Record<string, unknown>>, http: boolean, socketEvent?: string): (input: unknown) => unknown {
+  #compileRecordPipeline(record: Readonly<Record<string, unknown>>, http: boolean, socketEvent?: string, profiler?: HttpHotPathProfiler): (input: unknown) => unknown {
     const handlerId = numberField(record, "handlerId");
     const validatorId = numberField(record, "validatorId");
     const controllerId = numberField(record, "controllerId");
@@ -280,6 +321,18 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     // synchronous fast path when nothing async was set, matching `runValidated`'s.
     const terminal = createMiddlewarePipeline(this.#indexes!.middleware, middlewareIds, (pipelineValue, context) => {
       if (!http) return this.invokeHandler(handlerId, socketInputs(pipelineValue, socketEvent));
+      if (profiler !== undefined) {
+        const settleStart = performance.now();
+        const settled = (context as RequestContextStore).settle();
+        if (isThenable(settled)) {
+          return settled.then(() => {
+            profiler.record("requestContext", performance.now() - settleStart);
+            return this.#invokeHandlerProfiled(handlerId, [pipelineValue], profiler);
+          });
+        }
+        profiler.record("requestContext", performance.now() - settleStart);
+        return this.#invokeHandlerProfiled(handlerId, [pipelineValue], profiler);
+      }
       const settled = (context as RequestContextStore).settle();
       if (isThenable(settled)) return settled.then(() => this.invokeHandler(handlerId, [pipelineValue]));
       return this.invokeHandler(handlerId, [pipelineValue]);
@@ -288,13 +341,20 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       const validationInput = http ? input : socketValidationInput(input, socketEvent);
       const validator = this.#indexes!.validators[validatorId];
       return runValidated(validator, validationInput, (validated) => {
+        const requestContextStart = profiler !== undefined && http ? performance.now() : 0;
         const requestContext = new RequestContextStore();
         const pipelineValue = http ? buildAppRequest(validationInput, validated, requestContext) : socketValidatedEnvelope(input, validated);
         const guardContext = http ? requestContext : socketConnectionContext(pipelineValue);
+        if (profiler !== undefined && http) profiler.record("requestContext", performance.now() - requestContextStart);
+        const guardStart = profiler !== undefined && http ? performance.now() : 0;
         const guarded = executeGuardRange(this.#indexes!.guards, guardIds, pipelineValue, guardContext);
-        if (isThenable(guarded)) return guarded.then((allowed) => allowed ? terminal(pipelineValue, guardContext) : http ? forbidden() : undefined);
+        if (isThenable(guarded)) return guarded.then((allowed) => {
+          if (profiler !== undefined && http) profiler.record("guardMiddleware", performance.now() - guardStart);
+          return allowed ? terminal(pipelineValue, guardContext) : http ? forbidden() : undefined;
+        });
+        if (profiler !== undefined && http) profiler.record("guardMiddleware", performance.now() - guardStart);
         return guarded ? terminal(pipelineValue, guardContext) : http ? forbidden() : undefined;
-      }, (outcome) => http ? invalidHttpValidation(validator, outcome.errors, validationInput) : socketValidationFailure(input, outcome.errors));
+      }, (outcome) => http ? invalidHttpValidation(validator, outcome.errors, validationInput) : socketValidationFailure(input, outcome.errors), profiler !== undefined && http ? profiler : undefined);
     };
     // Only wrap requests in a fresh request-scoped container when the owning Graph actually declares
     // request-scoped providers — otherwise every request would pay for an unused eager-init pass.
@@ -303,6 +363,23 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     if (!hasRequestScoped) return core;
     const graph = this.#graphMap.get(graphId!)!;
     return (input: unknown): unknown => this.#runWithRequestScope(graph, graphId!, () => core(input));
+  }
+  #invokeHandlerProfiled(handlerId: number, input: readonly unknown[], profiler: HttpHotPathProfiler): unknown {
+    const controllerStart = performance.now();
+    const binding = this.#indexes?.handlers[handlerId];
+    if (binding === undefined || this.#controllers === undefined) throw new RuntimeBootstrapError(`Generated Handler not found: ${handlerId}`);
+    const controller = this.#controllers.get(binding.controllerId);
+    profiler.record("diController", performance.now() - controllerStart);
+    const handlerStart = performance.now();
+    const result = executeHandler(binding, controller, input);
+    if (isThenable(result)) {
+      return result.then((value) => {
+        profiler.record("handlerExecution", performance.now() - handlerStart);
+        return value;
+      });
+    }
+    profiler.record("handlerExecution", performance.now() - handlerStart);
+    return result;
   }
   async #runWithRequestScope(graph: GraphProviderContainer, graphId: number, callback: () => unknown): Promise<unknown> {
     const requestContainer = new RequestProviderContainer(this.#indexes!.providers, graphId, graph);
@@ -355,11 +432,17 @@ function runValidated(
   input: unknown,
   terminal: (input: unknown) => unknown,
   onInvalid: (outcome: Readonly<{ valid: boolean; errors?: unknown }>) => unknown = () => invalidRequest(),
+  profiler?: HttpHotPathProfiler,
 ): unknown {
+  const startedAt = profiler === undefined ? 0 : performance.now();
   const result = executeValidator(validator, input);
   const successValue = (outcome: Readonly<{ value: unknown }>): unknown =>
     typeof validator?.flags === "number" ? outcome : outcome.value;
-  if (isThenable(result)) return result.then((outcome) => outcome.valid ? terminal(successValue(outcome)) : onInvalid(outcome));
+  if (isThenable(result)) return result.then((outcome) => {
+    profiler?.record("validator", performance.now() - startedAt);
+    return outcome.valid ? terminal(successValue(outcome)) : onInvalid(outcome);
+  });
+  profiler?.record("validator", performance.now() - startedAt);
   return result.valid ? terminal(successValue(result)) : onInvalid(result);
 }
 function rangeIds(record: Readonly<Record<string, unknown>>, startKey: string, countKey: string, values: readonly number[] | undefined): readonly number[] {
@@ -530,6 +613,28 @@ function normalizeHttpResult(value: unknown): Response | Promise<Response> {
   });
   throw new RuntimeBootstrapError("Generated HTTP Handler returned an invalid response.");
 }
+function normalizeHttpResultProfiled(value: unknown, profiler: HttpHotPathProfiler): Response | Promise<Response> {
+  if (value instanceof Response) {
+    const startedAt = performance.now();
+    const response = normalizeHttpResult(value);
+    profiler.record("responseNormalization", performance.now() - startedAt);
+    return response;
+  }
+  if (isThenable(value)) {
+    return value.then((result) => {
+      const startedAt = performance.now();
+      const response = normalizeHttpResult(result);
+      profiler.record("responseNormalization", performance.now() - startedAt);
+      return response;
+    });
+  }
+  const startedAt = performance.now();
+  try {
+    return normalizeHttpResult(value);
+  } finally {
+    profiler.record("responseNormalization", performance.now() - startedAt);
+  }
+}
 function sanitizeReason(reason: string | undefined): string | undefined {
   if (reason === undefined) return undefined;
   return reason.replace(/[\u0000-\u001f\u007f]/gu, "").slice(0, 123);
@@ -541,6 +646,7 @@ function launcherConfiguration(
   runtime: RuntimeConfig,
   development: boolean,
   logging: LoggingConfig,
+  httpProfiler: HttpHotPathProfiler | undefined,
 ): Readonly<Record<string, unknown>> {
   const value = typeof transport === "object" && transport !== null ? transport : Object.freeze({});
   const activation = runtime.transports[kind];
@@ -561,6 +667,7 @@ function launcherConfiguration(
       startup: logging.startup,
       debug: logging.debug,
     }),
+    ...(kind === "http" && httpProfiler !== undefined ? { profiling: Object.freeze({ http: httpProfiler }) } : {}),
   });
 }
 async function withTimeout(operation: Promise<void>, timeoutMs: number | undefined): Promise<void> {

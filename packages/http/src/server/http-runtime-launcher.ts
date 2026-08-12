@@ -1,5 +1,5 @@
 import type { RuntimeTransportLauncher, RuntimeTransportStartInput, RuntimeTransportStopOptions } from "@warbler/transport";
-import { createBunRouteHandler, type BunRouteTable } from "../native";
+import { createBunRouteHandler, type BunRouteTable, type HttpHotPathRecorder } from "../native";
 import { normalizeHttpConfig } from "../config";
 import { RouteFlag } from "../compiled";
 import { CsrfVerifier } from "../csrf";
@@ -19,6 +19,9 @@ interface TransportLoggingConfig {
   readonly requests?: boolean;
   readonly errors?: boolean;
 }
+interface TransportProfilingConfig {
+  readonly http?: HttpHotPathRecorder;
+}
 
 /** Generated HTTP bindings supplied by Runtime after one-time pipeline compilation. */
 export interface HttpRuntimeBindings {
@@ -33,6 +36,7 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
     async start(input: RuntimeTransportStartInput<HttpRuntimeBindings, unknown>) {
       const config = normalizeHttpConfig(input.config);
       const logging = transportLogging(input.config);
+      const profiling = transportProfiling(input.config);
       const routes: Record<string, unknown> = {
         ...await createStaticRouteTable(process.cwd(), config.static, config.development),
         ...(config.development ? createViewDevelopmentRoutes() : {}),
@@ -74,6 +78,7 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
             builtins,
             development: config.development,
             logging,
+            profiler: profiling.http,
           });
         }
         routes[path] = Object.freeze(wrapped);
@@ -92,6 +97,17 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
     },
     stop(handle: HttpServer, options: RuntimeTransportStopOptions) { return handle.stop(options.closeActiveConnections ?? false); },
   });
+}
+
+function transportProfiling(config: unknown): TransportProfilingConfig {
+  if (typeof config !== "object" || config === null || !("profiling" in config)) return Object.freeze({});
+  const profiling = config.profiling;
+  if (typeof profiling !== "object" || profiling === null || !("http" in profiling)) return Object.freeze({});
+  const http = profiling.http;
+  if (typeof http !== "object" || http === null || !("enabled" in http) || http.enabled !== true) return Object.freeze({});
+  if (!("record" in http) || typeof http.record !== "function") return Object.freeze({});
+  if (!("recordRequest" in http) || typeof http.recordRequest !== "function") return Object.freeze({});
+  return Object.freeze({ http: http as HttpHotPathRecorder });
 }
 
 function transportLogging(config: unknown): TransportLoggingConfig {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { normalizeLoggingConfig, normalizeRuntimeConfig, validateRuntimeConfig } from "../src";
+import { normalizeLoggingConfig, normalizeProfilingConfig, normalizeRuntimeConfig, validateRuntimeConfig } from "../src";
 
 function runtimeConfig(): unknown {
   return {
@@ -74,5 +74,15 @@ describe("logging configuration", () => {
       errors: false,
       fatal: true,
     });
+  });
+});
+
+describe("profiling configuration", () => {
+  test("defaults HTTP profiling off and summary-on-stop on", () => {
+    expect(normalizeProfilingConfig()).toEqual({ http: false, summaryOnStop: true });
+  });
+
+  test("explicit profiling overrides win", () => {
+    expect(normalizeProfilingConfig({ http: true, summaryOnStop: false })).toEqual({ http: true, summaryOnStop: false });
   });
 });

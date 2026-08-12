@@ -62,6 +62,38 @@ describe("native request pipeline", () => {
     }
   });
 
+  test("HTTP profiling records aggregate stages without request logging", async () => {
+    const stages: Record<string, number> = Object.create(null);
+    let requests = 0;
+    let requestLogs = 0;
+    const originalRequest = Console.request.bind(Console);
+    Console.request = ((input) => {
+      requestLogs += 1;
+      return originalRequest(input);
+    }) as typeof Console.request;
+    try {
+      const handler = createBunRouteHandler({
+        ...baseOptions(() => new Response("ok")),
+        logging: { requests: false, errors: true },
+        profiler: Object.freeze({
+          enabled: true,
+          record(stage: string): void { stages[stage] = (stages[stage] ?? 0) + 1; },
+          recordRequest(): void { requests += 1; },
+        }),
+      });
+      const response = await handler(REQUEST(), Object.create(null));
+      expect(response.status).toBe(200);
+      expect(requestLogs).toBe(0);
+      expect(requests).toBe(1);
+      expect(stages.contextPreparation).toBe(1);
+      expect(stages.requestPreparation).toBe(1);
+      expect(stages.generatedDispatch).toBe(1);
+      expect(stages.securityHeaders).toBe(1);
+    } finally {
+      Console.request = originalRequest as typeof Console.request;
+    }
+  });
+
   describe("unified exception boundary", () => {
     test("a synchronous controller throw renders a Response, not a thrown error", async () => {
       const handler = createBunRouteHandler(baseOptions(() => {
