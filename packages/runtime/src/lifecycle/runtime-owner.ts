@@ -28,7 +28,14 @@ import {
 } from "../errors/runtime-errors";
 import type { GeneratedApplicationBindings } from "../generated/executable-bindings";
 import { createHttpHotPathProfiler, type HttpHotPathProfiler, type HttpProfileStage } from "../profiling/http-hot-path-profiler";
-import { createMiddlewarePipeline, executeGuardRange, executeHandler, executeValidator } from "../pipelines";
+import {
+  createGuardPipelineRegistry,
+  createMiddlewarePipeline,
+  executeHandler,
+  executeValidator,
+  linkGuardPipeline,
+  type GuardPipelineRegistry,
+} from "../pipelines";
 import { RuntimeState, type RuntimeStateValue } from "../state/runtime-state";
 import { TransportLauncherRegistry } from "../transports/transport-launcher-registry";
 import type {
@@ -74,12 +81,30 @@ interface HttpRouteExecutionPlan {
   readonly minimal: boolean;
   readonly wrapAppRequest: boolean;
 }
+interface RuntimePipelineRegistry {
+  readonly guard: GuardPipelineRegistry;
+  readonly ranges: Map<string, readonly number[]>;
+}
 const COMPILER_ROUTE_VALIDATION = 1 << 7;
 const COMPILER_ROUTE_MIDDLEWARE = 1 << 8;
 const COMPILER_ROUTE_GUARD = 1 << 9;
 const COMPILER_ROUTE_CSRF = 1 << 10;
 const COMPILER_ROUTE_STREAMING = 1 << 11;
 const COMPILER_ROUTE_VIEW_CONTEXT = 1 << 16;
+const EMPTY_RECORD: Readonly<Record<string, unknown>> = Object.freeze(Object.create(null) as Record<string, unknown>);
+const DEFAULT_TRANSLATE = (key: string): string => key;
+type RuntimeTranslate = (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => string;
+interface HttpPipelineInput {
+  readonly value: unknown;
+  readonly query: unknown;
+  readonly path: unknown;
+  readonly headers: unknown;
+  readonly cookies: unknown;
+  readonly message: unknown;
+  readonly metadata: unknown;
+  readonly __request: Request;
+  readonly __translate: RuntimeTranslate | undefined;
+}
 
 /** Owns one generated application from validation through graceful shutdown. */
 export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionContext {
@@ -266,7 +291,12 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     const http = this.application.http;
     if (http === undefined) return Object.freeze({});
     const profiler = this.#httpProfiler;
-    const plans = this.application.application.routeTable.map((record) => this.#compileHttpRoutePlan(record, profiler));
+    const registry = createRuntimePipelineRegistry();
+    const routeTable = this.application.application.routeTable;
+    const plans = new Array<HttpRouteExecutionPlan>(routeTable.length);
+    for (let index = 0, length = routeTable.length; index < length; index++) {
+      plans[index] = this.#compileHttpRoutePlan(routeTable[index]!, registry, profiler);
+    }
     if (profiler === undefined) {
       return http.createRoutes((routeId, request, validationInput) => {
         const plan = plans[routeId];
@@ -300,7 +330,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       return normalizeHttpResultProfiled(result, profiler);
     });
   }
-  #compileHttpRoutePlan(record: Readonly<Record<string, unknown>>, profiler?: HttpHotPathProfiler): HttpRouteExecutionPlan {
+  #compileHttpRoutePlan(record: Readonly<Record<string, unknown>>, registry: RuntimePipelineRegistry, profiler?: HttpHotPathProfiler): HttpRouteExecutionPlan {
     const handlerId = numberField(record, "handlerId");
     const validatorId = numberField(record, "validatorId");
     const controllerId = numberField(record, "controllerId");
@@ -320,7 +350,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       handlerId,
       minimal,
       wrapAppRequest: usesCompiledValidatorShape && (parameterCount > 0 || needsValidation || needsMiddleware || needsGuard || hasRequestScoped),
-      ...(minimal ? {} : { pipeline: this.#compileRecordPipeline(record, true, undefined, profiler) }),
+      ...(minimal ? {} : { pipeline: this.#compileRecordPipeline(record, registry, true, undefined, profiler) }),
     });
   }
   #executeSocket(event: string, message: unknown, context: unknown): unknown {
@@ -328,18 +358,20 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
   }
   #createSocketPipelines(): Readonly<Record<string, (input: unknown) => unknown>> {
     const result: Record<string, (input: unknown) => unknown> = Object.create(null);
+    const registry = createRuntimePipelineRegistry();
     const events: Readonly<Record<string, Readonly<Record<string, unknown>>>> = this.application.websocket?.events ?? Object.freeze({});
     for (const [event, record] of Object.entries(events)) {
-      result[event] = this.#compileRecordPipeline(record, false, event);
+      result[event] = this.#compileRecordPipeline(record, registry, false, event);
     }
     return Object.freeze(result);
   }
-  #compileRecordPipeline(record: Readonly<Record<string, unknown>>, http: boolean, socketEvent?: string, profiler?: HttpHotPathProfiler): (input: unknown) => unknown {
+  #compileRecordPipeline(record: Readonly<Record<string, unknown>>, registry: RuntimePipelineRegistry, http: boolean, socketEvent?: string, profiler?: HttpHotPathProfiler): (input: unknown) => unknown {
     const handlerId = numberField(record, "handlerId");
     const validatorId = numberField(record, "validatorId");
     const controllerId = numberField(record, "controllerId");
-    const guardIds = rangeIds(record, "guardStart", "guardCount", http ? this.application.application.routeGuards : this.application.application.socketGuards);
-    const middlewareIds = rangeIds(record, "middlewareStart", "middlewareCount", http ? this.application.application.routeMiddleware : this.application.application.socketMiddleware);
+    const guardIds = linkedRange(registry, http ? "http:guard" : "socket:guard", record, "guardStart", "guardCount", http ? this.application.application.routeGuards : this.application.application.socketGuards);
+    const middlewareIds = linkedRange(registry, http ? "http:middleware" : "socket:middleware", record, "middlewareStart", "middlewareCount", http ? this.application.application.routeMiddleware : this.application.application.socketMiddleware);
+    const guardPipeline = linkGuardPipeline(this.#indexes!.guards, guardIds, registry.guard);
     // For HTTP, `context` is the request's RequestContextStore: guards/middleware may
     // still call `.set(...)` right up until this terminal step, so it's settled here —
     // right before the handler runs — rather than eagerly. `settle()` keeps its own
@@ -372,7 +404,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
         const guardContext = http ? requestContext : socketConnectionContext(pipelineValue);
         if (profiler !== undefined && http) profiler.record("requestContext", performance.now() - requestContextStart);
         const guardStart = profiler !== undefined && http ? performance.now() : 0;
-        const guarded = executeGuardRange(this.#indexes!.guards, guardIds, pipelineValue, guardContext);
+        const guarded = guardPipeline.execute(pipelineValue, guardContext);
         if (isThenable(guarded)) return guarded.then((allowed) => {
           if (profiler !== undefined && http) profiler.record("guardMiddleware", performance.now() - guardStart);
           return allowed ? terminal(pipelineValue, guardContext) : http ? forbidden() : undefined;
@@ -471,22 +503,52 @@ function runValidated(
   return result.valid ? terminal(successValue(result)) : onInvalid(result);
 }
 function httpPipelineInput(request: Request, validationInput: unknown): Readonly<Record<string, unknown>> {
-  const source = typeof validationInput === "object" && validationInput !== null ? validationInput : Object.freeze({});
-  return Object.freeze({
-    ...source,
+  const source = typeof validationInput === "object" && validationInput !== null ? validationInput as Readonly<Record<string, unknown>> : EMPTY_RECORD;
+  const localized = request as Request & Readonly<{ readonly tr?: unknown }>;
+  const translate = typeof localized.tr === "function" ? localized.tr as RuntimeTranslate : undefined;
+  return {
+    value: source.value,
+    query: source.query,
+    path: source.path,
+    headers: source.headers,
+    cookies: source.cookies,
+    message: source.message,
+    metadata: source.metadata,
     __request: request,
-    __translate: typeof request === "object" && request !== null && "tr" in request && typeof request.tr === "function"
-      ? ((translateRequest) => (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => translateRequest(key, parameters))(request.tr as (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => string)
-      : undefined,
-  });
+    __translate: translate,
+  } satisfies HttpPipelineInput;
 }
 function unvalidatedValue(input: unknown, value: unknown): unknown {
-  return typeof input === "object" && input !== null && "__request" in input && !("value" in input) ? undefined : value;
+  return typeof input === "object" && input !== null && "__request" in input ? undefined : value;
 }
-function rangeIds(record: Readonly<Record<string, unknown>>, startKey: string, countKey: string, values: readonly number[] | undefined): readonly number[] {
+function createRuntimePipelineRegistry(): RuntimePipelineRegistry {
+  return { guard: createGuardPipelineRegistry(), ranges: new Map() };
+}
+function linkedRange(
+  registry: RuntimePipelineRegistry,
+  namespace: string,
+  record: Readonly<Record<string, unknown>>,
+  startKey: string,
+  countKey: string,
+  values: readonly number[] | undefined,
+): readonly number[] {
   const start = numberField(record, startKey);
   const count = numberField(record, countKey);
-  return count === 0 ? Object.freeze([]) : Object.freeze(values!.slice(start, start + count));
+  if (count === 0) return EMPTY_NUMBER_ARRAY;
+  const key = rangeKey(namespace, values!, start, count);
+  const existing = registry.ranges.get(key);
+  if (existing !== undefined) return existing;
+  const result = new Array<number>(count);
+  for (let index = 0; index < count; index++) result[index] = values![start + index]!;
+  const linked = Object.freeze(result);
+  registry.ranges.set(key, linked);
+  return linked;
+}
+const EMPTY_NUMBER_ARRAY: readonly number[] = Object.freeze([]);
+function rangeKey(namespace: string, values: readonly number[], start: number, count: number): string {
+  let key = namespace;
+  for (let index = 0; index < count; index++) key += `:${values[start + index]!}`;
+  return key;
 }
 function numberField(record: Readonly<Record<string, unknown>>, key: string): number {
   const value = record[key];
@@ -534,18 +596,19 @@ function buildAppRequest(validationInput: unknown, body: unknown, requestContext
   const request = validationInput.__request;
   if (!(request instanceof Request)) return body;
   const source = request as Request & Readonly<Record<string, unknown>>;
+  const pipelineInput = validationInput as Readonly<Record<string, unknown>>;
   const outcome = validationOutcome(body);
-  return Object.freeze({
+  return {
     native: request,
     body: outcome?.value ?? body,
-    params: outcome?.path ?? source.params ?? Object.freeze({}),
-    query: outcome?.query ?? source.query ?? Object.freeze({}),
+    params: outcome?.path ?? source.params ?? EMPTY_RECORD,
+    query: outcome?.query ?? source.query ?? EMPTY_RECORD,
     headers: request.headers,
     cookies: requestCookieMap(request),
     get context(): Readonly<Record<string, unknown>> { return requestContext.currentView(); },
     locale: typeof source.locale === "string" ? source.locale : "en",
-    tr: typeof source.tr === "function" ? source.tr : (key: string) => key,
-  });
+    tr: typeof pipelineInput.__translate === "function" ? pipelineInput.__translate as RuntimeTranslate : DEFAULT_TRANSLATE,
+  };
 }
 /**
  * Reuses `BunRequest.cookies` when present (already lazily parsed by Bun for every
@@ -641,7 +704,7 @@ function validationErrors(input: unknown): Readonly<Record<string, readonly Read
 }
 function translatorFromInput(input: unknown): (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => string {
   if (typeof input === "object" && input !== null && "__translate" in input && typeof input.__translate === "function") return input.__translate as ReturnType<typeof translatorFromInput>;
-  return (key) => key;
+  return DEFAULT_TRANSLATE;
 }
 function normalizeHttpResult(value: unknown): Response | Promise<Response> {
   if (value instanceof Response) return value;

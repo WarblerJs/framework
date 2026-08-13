@@ -1,1 +1,10 @@
-export { createMiddlewarePipeline, executeGuardRange, executeHandler, executeValidator } from "./execute-pipeline";
+export {
+  createGuardPipelineRegistry,
+  createMiddlewarePipeline,
+  executeGuardRange,
+  executeHandler,
+  executeValidator,
+  linkGuardPipeline,
+  type CompiledGuardPipeline,
+  type GuardPipelineRegistry,
+} from "./execute-pipeline";
