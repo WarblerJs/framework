@@ -27,7 +27,7 @@ export const httpConfig = {
     timeouts: { headers: 5_000, body: 30_000, request: 60_000, idle: 10_000 },
   },
   csrf: {
-    enabled: true,
+    enabled: false,
     methods: ["POST", "PUT", "PATCH", "DELETE"],
     headerName: "x-csrf-token",
     cookieName: "__Host-warbler-csrf",
@@ -44,7 +44,7 @@ export const httpConfig = {
     frameOptions: "DENY",
   },
   static: {
-    enabled: true,
+    enabled: false,
     root: "public",
     prefix: "/",
     indexFiles: ["index.html"],

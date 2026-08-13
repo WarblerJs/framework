@@ -49,8 +49,8 @@ export class UserController {
 
   @Post("/", {
     name: "users.create",
-    // csrf: true,
-    // validator: postUserValidatore
+    csrf: true,
+    validator: postUserValidatore
   })
   async create(request: AppRequest<typeof postUserValidatore>) {
     //const res = await this.#createUser.execute(request.body);
@@ -58,8 +58,8 @@ export class UserController {
       from: 'alarazigh@gmail.com',
       to: "bellib6@gmail.com",
       subject: "Welcome warbler",
-      text: "Welcome to Warbler. Your account is ready: bellib6@gmail.com. User id: playground.",
-     // template: "mail.welcome",
+     // text: "Welcome to Warbler. Your account is ready: bellib6@gmail.com. User id: playground.",
+      template: "mail.welcome",
       data: { email: "bellib6@gmail.com", userId: "playground" },
     })
 

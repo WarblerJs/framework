@@ -59,6 +59,7 @@ function applySecurityHeaderEntries(response: Response, entries: SecurityHeaderE
     applyHeaderEntries(response.headers, entries);
     return response;
   } catch {
+  
     const headers = new Headers(response.headers);
     applyHeaderEntries(headers, entries);
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
