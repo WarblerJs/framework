@@ -15,6 +15,7 @@ import {
   type ProviderBindingContext,
   type RuntimeTransportLauncher,
 } from "../src";
+import { createGuardPipelineRegistry, linkGuardPipeline } from "../src/pipelines/execute-pipeline";
 
 const runtimeConfig = (http: boolean, websocket = false): RuntimeConfig => Object.freeze({
   network: Object.freeze({ host: "127.0.0.1" }),
@@ -244,6 +245,32 @@ describe("binding validation and Guard execution", () => {
     expect(calls).toEqual([0, 1]);
     expect(await executeGuardRange([{ id: 0, execute: async () => true }], [0], {}, undefined)).toBe(true);
     expect(() => executeGuardRange([{ id: 0, execute: () => "yes" }], [0], {}, undefined)).toThrow(InvalidGuardResultError);
+  });
+
+  test("links and deduplicates guard pipelines before request execution", async () => {
+    const calls: string[] = [];
+    const registry = createGuardPipelineRegistry();
+    const bindings = Object.freeze([
+      Object.freeze({ id: 0, execute: () => { calls.push("auth"); return true; } }),
+      Object.freeze({ id: 1, execute: async () => { calls.push("tenant"); return true; } }),
+      Object.freeze({ id: 2, execute: () => { calls.push("admin"); return false; } }),
+    ]);
+
+    const first = linkGuardPipeline(bindings, Object.freeze([0, 1]), registry);
+    const reused = linkGuardPipeline(bindings, Object.freeze([0, 1]), registry);
+    const different = linkGuardPipeline(bindings, Object.freeze([0, 2, 1]), registry);
+
+    expect(reused).toBe(first);
+    expect(different).not.toBe(first);
+    expect(first.ids).toEqual([0, 1]);
+    const result = first.execute({}, undefined);
+    expect(result).toBeInstanceOf(Promise);
+    expect(await result).toBe(true);
+    expect(calls).toEqual(["auth", "tenant"]);
+    calls.length = 0;
+    expect(different.execute({}, undefined)).toBe(false);
+    expect(calls).toEqual(["auth", "admin"]);
+    expect(() => linkGuardPipeline(Object.freeze([Object.freeze({ id: 0, execute: () => "yes" })]), Object.freeze([0]), createGuardPipelineRegistry()).execute({}, undefined)).toThrow(InvalidGuardResultError);
   });
 });
 

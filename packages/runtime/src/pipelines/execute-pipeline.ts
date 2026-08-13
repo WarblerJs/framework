@@ -9,6 +9,56 @@ import type {
   ValidatorBinding,
 } from "../generated/executable-bindings";
 
+/** Startup-linked immutable guard execution plan shared by routes with the same guard sequence. */
+export interface CompiledGuardPipeline {
+  readonly ids: readonly number[];
+  execute(input: unknown, context: unknown): boolean | Promise<boolean>;
+}
+/** Compiler/startup-local registry used to deduplicate equal guard ID sequences safely. */
+export interface GuardPipelineRegistry {
+  readonly pipelines: Map<string, CompiledGuardPipeline>;
+}
+const EMPTY_GUARD_IDS: readonly number[] = Object.freeze([]);
+const EMPTY_GUARD_PIPELINE: CompiledGuardPipeline = Object.freeze({
+  ids: EMPTY_GUARD_IDS,
+  execute: () => true,
+});
+
+/** Creates one startup-local guard pipeline registry. Do not retain request state in it. */
+export function createGuardPipelineRegistry(): GuardPipelineRegistry {
+  return { pipelines: new Map() };
+}
+
+/** Links and deduplicates one ordered guard ID sequence against validated guard bindings. */
+export function linkGuardPipeline(
+  bindings: readonly (GuardBinding | undefined)[],
+  ids: readonly number[],
+  registry: GuardPipelineRegistry,
+): CompiledGuardPipeline {
+  if (ids.length === 0) return EMPTY_GUARD_PIPELINE;
+  const key = guardPipelineKey(ids);
+  const existing = registry.pipelines.get(key);
+  if (existing !== undefined) return existing;
+  const guardIds = new Array<number>(ids.length);
+  const guards = new Array<RuntimeGuard>(ids.length);
+  for (let index = 0, length = ids.length; index < length; index++) {
+    const guardId = ids[index]!;
+    const execute = bindings[guardId]?.execute;
+    if (typeof execute !== "function") invalidBinding(`Guard binding ${guardId} is not executable.`);
+    guardIds[index] = guardId;
+    guards[index] = execute as RuntimeGuard;
+  }
+  const frozenIds = Object.freeze(guardIds);
+  const frozenGuards = Object.freeze(guards);
+  const pipeline = Object.freeze({
+    ids: frozenIds,
+    execute: (input: unknown, context: unknown): boolean | Promise<boolean> =>
+      executeCompiledGuardPipeline(frozenIds, frozenGuards, input, context),
+  });
+  registry.pipelines.set(key, pipeline);
+  return pipeline;
+}
+
 /** Executes generated Guards in order while retaining a synchronous fast path. */
 export function executeGuardRange(bindings: readonly (GuardBinding | undefined)[], ids: readonly number[], input: unknown, context: unknown): boolean | Promise<boolean> {
   for (let index = 0; index < ids.length; index++) {
@@ -97,6 +147,20 @@ export function createMiddlewarePipeline(
   }
   return pipeline;
 }
+function executeCompiledGuardPipeline(
+  ids: readonly number[],
+  guards: readonly RuntimeGuard[],
+  input: unknown,
+  context: unknown,
+): boolean | Promise<boolean> {
+  for (let index = 0, length = guards.length; index < length; index++) {
+    const result = guards[index]!(input, context);
+    if (isThenable(result)) return continueCompiledGuards(result, guards, ids, input, context, index + 1);
+    if (typeof result !== "boolean") throw new InvalidGuardResultError(`${RuntimeDiagnosticCode.GUARD_RESULT_INVALID}: Guard ${ids[index]!} returned a non-boolean result.`);
+    if (!result) return false;
+  }
+  return true;
+}
 async function continueGuards(
   first: Promise<boolean>,
   bindings: readonly (GuardBinding | undefined)[],
@@ -118,6 +182,30 @@ async function continueGuards(
     if (!allowed) return false;
   }
   return true;
+}
+async function continueCompiledGuards(
+  first: Promise<boolean>,
+  guards: readonly RuntimeGuard[],
+  ids: readonly number[],
+  input: unknown,
+  context: unknown,
+  start: number,
+): Promise<boolean> {
+  const initial = await first;
+  if (typeof initial !== "boolean") throw new InvalidGuardResultError(`${RuntimeDiagnosticCode.GUARD_RESULT_INVALID}: Guard returned a non-boolean result.`);
+  if (!initial) return false;
+  for (let index = start, length = guards.length; index < length; index++) {
+    const result = guards[index]!(input, context);
+    const allowed = isThenable(result) ? await result : result;
+    if (typeof allowed !== "boolean") throw new InvalidGuardResultError(`${RuntimeDiagnosticCode.GUARD_RESULT_INVALID}: Guard ${ids[index]!} returned a non-boolean result.`);
+    if (!allowed) return false;
+  }
+  return true;
+}
+function guardPipelineKey(ids: readonly number[]): string {
+  let key = "";
+  for (let index = 0, length = ids.length; index < length; index++) key += index === 0 ? String(ids[index]!) : `,${ids[index]!}`;
+  return key;
 }
 function isThenable(value: unknown): value is Promise<unknown> {
   return typeof value === "object" && value !== null && "then" in value && typeof value.then === "function";

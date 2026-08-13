@@ -522,3 +522,80 @@ Correctness validation during the rejected AOT experiments:
 Final outcome: no AOT route-execution source change was kept. The current generic/minimal split remains simpler and faster under the five-run production benchmark protocol.
 
 Next recommendation: stop `/bench`-only micro and architecture experiments for now. The next useful phase should be a realistic application benchmark, preferably the proposed e-commerce validation app, because the remaining `/bench` differences are now dominated by mandatory framework/security work and Bun/JSC variance.
+
+## Compile-Time Zero-Copy Phase 1 Follow-Up: HTTP Request Shape
+
+Audit date: 2026-08-13.
+
+Scope: HTTP validation input preparation and Runtime `AppRequest` wrapping for non-minimal routes.
+
+Baseline before change:
+
+- `bun test packages/runtime/tests/start-runtime.test.ts packages/runtime/tests/request-context-pipeline.test.ts playground/tests/validator-pipeline.integration.test.ts playground/tests/http.integration.test.ts`
+- Result: `19 pass`, `0 fail`, `81 expect() calls`
+
+Hot-path findings:
+
+- [validation-input.ts](/home/bellib/dev/framework/packages/http/src/request/validation-input.ts:6) built validation input by conditionally adding keys according to validator flags. This avoided unused values but produced different object property sets across routes.
+- [runtime-owner.ts](/home/bellib/dev/framework/packages/runtime/src/lifecycle/runtime-owner.ts:473) cloned validation input with object spread when attaching Runtime-only request references.
+- [runtime-owner.ts](/home/bellib/dev/framework/packages/runtime/src/lifecycle/runtime-owner.ts:532) froze every generated `AppRequest` wrapper during request execution.
+- [validation-input.ts](/home/bellib/dev/framework/packages/http/src/request/validation-input.ts:38) copied Bun route params with object spread.
+
+Kept source changes:
+
+- Prepared HTTP validation input now uses a fixed property set: `value`, `query`, `path`, `headers`, `cookies`. Unneeded slots remain present with `undefined`.
+- Runtime HTTP pipeline input now uses a fixed property set and references prepared values directly instead of spreading/cloning them.
+- Runtime `AppRequest` wrappers keep the stable handler-facing property set but are no longer frozen per request; nested parsed records that were already frozen remain frozen.
+- Native route params are copied into an owned null-prototype record without object spread.
+
+Correctness validation after change:
+
+- `bun test packages/http/tests/validation-input.test.ts packages/runtime/tests/request-context-pipeline.test.ts packages/runtime/tests/start-runtime.test.ts playground/tests/validator-pipeline.integration.test.ts playground/tests/http.integration.test.ts`
+- Result: `20 pass`, `0 fail`, `90 expect() calls`
+- `bun run --filter '@warbler/http' typecheck`
+- `bun run --filter '@warbler/runtime' typecheck`
+
+Measurement note: no throughput, allocation, p99, or p999 numbers are claimed for this follow-up. This is a Phase 1 structural allocation/object-shape cleanup with correctness guardrails; it still needs the benchmark protocol from the earlier sections before claiming a production performance win.
+
+## Compile-Time Zero-Copy Phase 2 Follow-Up: Guard Pipeline Linking
+
+Audit date: 2026-08-13.
+
+Scope: Runtime linking for HTTP and WebSocket guard ranges, plus the existing HTTP middleware route-lifecycle chain.
+
+Baseline before change:
+
+- `bun test packages/runtime/tests/start-runtime.test.ts packages/runtime/tests/request-context-pipeline.test.ts packages/runtime/tests/request-scope.test.ts packages/compiler/tests/phase2.test.ts playground/tests/http.integration.test.ts playground/tests/validator-pipeline.integration.test.ts`
+- Result: `34 pass`, `0 fail`, `155 expect() calls`
+
+Audit findings:
+
+- The compiler already emits flat guard and middleware ID tables with route/socket `start + count` offsets. No global/graph/controller/route lifecycle hierarchy is currently present in the HTTP runtime surface.
+- Runtime startup still copied each route/socket guard range with `slice()` and kept one copied array per route pipeline.
+- Request execution called `executeGuardRange(...)`, which re-read each guard binding and checked `typeof execute` on every guarded request.
+- Runtime startup also copied middleware ranges per route/socket pipeline. Full middleware pipeline deduplication was not safe in this slice because the terminal closure captures route-specific handler execution and HTTP request-context settling.
+
+Kept source changes:
+
+- Added a startup-local guard pipeline registry that deduplicates identical ordered guard ID sequences.
+- Linked guard bindings to immutable compiled guard pipelines once at Runtime startup.
+- Runtime route/socket pipelines now execute `guardPipeline.execute(...)`, avoiding request-time guard binding lookup and executable checks.
+- Preserved `boolean | Promise<boolean>` semantics: synchronous guard pipelines stay synchronous until an actual async guard is encountered.
+- Deduplicated startup numeric ranges for guard and middleware ID sequences without changing generated artifact format.
+- Replaced HTTP route plan `.map(...)` startup construction with an indexed loop in the performance-sensitive runtime linker.
+
+Rejected or deferred:
+
+- No compiler artifact format change was kept. The existing `start + count` flat tables already express the static relationship compactly, and startup linking is enough for this slice.
+- No separate HTTP lifecycle-pipeline table was invented; the current HTTP lifecycle behavior is middleware plus request-context settling, not a before/after/error hook hierarchy.
+- Full middleware pipeline deduplication is deferred because route-specific terminal behavior would require a larger execution-plan refactor.
+
+Correctness validation after change:
+
+- `bun test packages/runtime/tests/start-runtime.test.ts packages/runtime/tests/request-context-pipeline.test.ts packages/runtime/tests/request-scope.test.ts playground/tests/http.integration.test.ts playground/tests/validator-pipeline.integration.test.ts`
+- Result: `24 pass`, `0 fail`, `100 expect() calls`
+- `bun run --filter '@warbler/runtime' typecheck`
+- `bun run typecheck`
+- `bun test`: `583 pass`, `0 fail`, `1860 expect() calls`
+
+Measurement note: no throughput, allocation, p99, or p999 numbers are claimed for this follow-up. The kept change removes confirmed request-time guard binding lookup/type checks and startup duplicate range copies, but production performance still requires the benchmark protocol from the earlier sections.

@@ -27,6 +27,8 @@ class WhoAmIController {
       cookiesIsCookieMap: (request as { cookies?: unknown }).cookies instanceof Bun.CookieMap,
       sessionCookie: (request as { cookies: Bun.CookieMap }).cookies.get("session"),
       context: (request as { context: unknown }).context,
+      keys: Object.keys(request as Record<string, unknown>),
+      frozen: Object.isFrozen(request),
     });
   }
 }
@@ -151,6 +153,8 @@ describe("request context pipeline", () => {
     expect(body.headersIsHeaders).toBe(true);
     expect(body.cookiesIsCookieMap).toBe(true);
     expect(body.sessionCookie).toBe("abc");
+    expect(body.keys).toEqual(["native", "body", "params", "query", "headers", "cookies", "context", "locale", "tr"]);
+    expect(body.frozen).toBe(false);
     await runtime.stop();
   });
 
