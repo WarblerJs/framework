@@ -183,6 +183,8 @@ describe("executable bindings", () => {
     const httpGenerated = await Bun.file(join(directory, "http.generated.ts")).text();
     expect(httpGenerated).not.toContain("prepareHttpValidationInput(request, 0)");
     expect(httpGenerated).toContain("executeHttpRoute(1, request)");
+    expect(httpGenerated).toContain("httpRouteRequestRequirements");
+    expect(httpGenerated).toContain("input instanceof Promise");
     const providers = await Bun.file(join(directory, "providers.generated.ts")).text();
     expect(providers).toContain("scope: \"root\"");
     expect(providers).toContain("scope: \"graph\"");

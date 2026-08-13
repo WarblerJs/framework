@@ -158,6 +158,76 @@ describe("request context pipeline", () => {
     await runtime.stop();
   });
 
+  test("AppRequest cookies are initialized lazily and reused within one request", async () => {
+    let cookieHeaderReads = 0;
+    class LazyCookieController {
+      show(request: unknown): Response {
+        const keys = Object.keys(request as Record<string, unknown>);
+        const beforeAccess = cookieHeaderReads;
+        const first = (request as { readonly cookies: Bun.CookieMap }).cookies;
+        const second = (request as { readonly cookies: Bun.CookieMap }).cookies;
+        return Response.json({
+          keys,
+          beforeAccess,
+          afterAccess: cookieHeaderReads,
+          sameMap: first === second,
+          session: first.get("session"),
+        });
+      }
+    }
+    const app: GeneratedApplicationBindings = Object.freeze({
+      application: Object.freeze({
+        strings: Object.freeze([]), graphIds: Object.freeze({ AppGraph: 0 }),
+        providerTable: Object.freeze([]), providerDependencies: Object.freeze([]),
+        routeTable: Object.freeze([Object.freeze({
+          id: 0, controllerId: 0, handlerId: 0, validatorId: -1,
+          guardStart: 0, guardCount: 0, middlewareStart: 0, middlewareCount: 0,
+        })]),
+        socketEventTable: Object.freeze([]),
+        routeGuards: Object.freeze([]), routeMiddleware: Object.freeze([]),
+        socketGuards: Object.freeze([]), socketMiddleware: Object.freeze([]),
+      }),
+      providers: Object.freeze([]),
+      controllers: Object.freeze([
+        Object.freeze({ id: 0, graphId: 0, transport: "http", token: LazyCookieController, factory: () => new LazyCookieController() }),
+      ]),
+      handlers: Object.freeze([
+        Object.freeze({ id: 0, controllerId: 0, parameterCount: 1, invoke: (controller: LazyCookieController, request: unknown) => controller.show(request) }),
+      ]),
+      guards: Object.freeze([]),
+      middleware: Object.freeze([]),
+      validators: Object.freeze([]),
+      http: Object.freeze({
+        routes: Object.freeze([Object.freeze({ id: 0 })]),
+        createRoutes: (execute: HttpRouteExecutor) =>
+          Object.freeze({ "/lazy-cookie": Object.freeze({ GET: (request: Request) => execute(0, request) }) }),
+      }),
+    });
+    let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
+    const runtime = await startRuntime({
+      application: app,
+      runtimeConfig,
+      transportLaunchers: [{ kind: "http", start(input) { routes = (input.bindings as { readonly routes: typeof routes }).routes; return Object.freeze({}); } }],
+      transportConfigLoader: async (kind) => Object.freeze({ kind }),
+    });
+    const request = new Request("http://localhost/lazy-cookie", { headers: { cookie: "session=abc" } });
+    const read = request.headers.get.bind(request.headers);
+    Object.defineProperty(request.headers, "get", {
+      value: (name: string): string | null => {
+        if (name.toLowerCase() === "cookie") cookieHeaderReads++;
+        return read(name);
+      },
+    });
+    const response = await routes["/lazy-cookie"]!.GET!(request);
+    const body = await response.json() as Record<string, unknown>;
+    expect(body.keys).toEqual(["native", "body", "params", "query", "headers", "cookies", "context", "locale", "tr"]);
+    expect(body.beforeAccess).toBe(0);
+    expect(body.afterAccess).toBe(1);
+    expect(body.sameMap).toBe(true);
+    expect(body.session).toBe("abc");
+    await runtime.stop();
+  });
+
   test("a value a guard sets via context.set() is visible on req.context in the handler", async () => {
     let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
     const runtime = await startRuntime({

@@ -3,13 +3,25 @@ import { cookieMapRecord, requestCookieMap } from "../cookies";
 import { parseRequestQuery } from "./request-query";
 
 /** Parses only sources required by one precompiled validator before Runtime execution. */
-export async function prepareHttpValidationInput(request: Request, flags: number): Promise<ValidationInput> {
+export function prepareHttpValidationInput(request: Request, flags: number): ValidationInput | Promise<ValidationInput> {
+  if ((flags & ValidatorSourceFlag.BODY) !== 0) return prepareHttpValidationInputWithBody(request, flags);
   let value: unknown;
   let query: unknown;
   let path: unknown;
   let headers: unknown;
   let cookies: unknown;
-  if ((flags & ValidatorSourceFlag.BODY) !== 0) value = await parseBody(request);
+  if ((flags & ValidatorSourceFlag.QUERY) !== 0) query = parseRequestQuery(new URL(request.url), 100);
+  if ((flags & ValidatorSourceFlag.PATH) !== 0) path = nativeParams(request);
+  if ((flags & ValidatorSourceFlag.HEADERS) !== 0) headers = headersRecord(request.headers);
+  if ((flags & ValidatorSourceFlag.COOKIES) !== 0) cookies = cookieMapRecord(requestCookieMap(request));
+  return { value, query, path, headers, cookies };
+}
+async function prepareHttpValidationInputWithBody(request: Request, flags: number): Promise<ValidationInput> {
+  const value = await parseBody(request);
+  let query: unknown;
+  let path: unknown;
+  let headers: unknown;
+  let cookies: unknown;
   if ((flags & ValidatorSourceFlag.QUERY) !== 0) query = parseRequestQuery(new URL(request.url), 100);
   if ((flags & ValidatorSourceFlag.PATH) !== 0) path = nativeParams(request);
   if ((flags & ValidatorSourceFlag.HEADERS) !== 0) headers = headersRecord(request.headers);

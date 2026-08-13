@@ -370,11 +370,20 @@ ${bindings.map((binding) => `  Object.freeze({ id: ${binding.id}, flags: Compile
 function httpBindingsSource(optimized: OptimizedApplication): string {
   const rows = optimized.routes.map((route) => `  Object.freeze(${JSON.stringify(route)}),`).join("\n");
   const hasValidators = optimized.routes.some((route) => route.validatorId >= 0);
+  const requestRequirements = hasValidators
+    ? `const httpRouteRequestRequirements = Object.freeze([
+${optimized.routes.map((route) => `  ${route.validatorId < 0 ? "0" : `validatorBindings[${route.validatorId}]!.flags`},`).join("\n")}
+]);
+`
+    : "";
   const paths = [...new Set(optimized.routes.map((route) => route.pathId))].sort((a, b) => a - b).map((pathId) => {
     const methods = optimized.routes.filter((route) => route.pathId === pathId).map((route) =>
       route.validatorId < 0
         ? `    [strings[${route.methodId}]!]: (request: Request) => executeHttpRoute(${route.id}, request),`
-        : `    [strings[${route.methodId}]!]: (request: Request) => prepareHttpValidationInput(request, validatorBindings[${route.validatorId}]!.flags).then((input) => executeHttpRoute(${route.id}, request, input)),`,
+        : `    [strings[${route.methodId}]!]: (request: Request) => {
+      const input = prepareHttpValidationInput(request, httpRouteRequestRequirements[${route.id}]!);
+      return input instanceof Promise ? input.then((prepared) => executeHttpRoute(${route.id}, request, prepared)) : executeHttpRoute(${route.id}, request, input);
+    },`,
     ).join("\n");
     return `  [strings[${pathId}]!]: Object.freeze({\n${methods}\n  }),`;
   }).join("\n");
@@ -383,6 +392,7 @@ import type { HttpRouteExecutor } from "@warbler/runtime";
 ${hasValidators ? `import { prepareHttpValidationInput } from "@warbler/http";
 import { validatorBindings } from "./validators.generated";` : ""}
 import { strings } from "./tables.generated";
+${requestRequirements}
 export const httpRouteBindings = Object.freeze([
 ${rows}
 ]);

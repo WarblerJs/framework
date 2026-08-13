@@ -599,3 +599,60 @@ Correctness validation after change:
 - `bun test`: `583 pass`, `0 fail`, `1860 expect() calls`
 
 Measurement note: no throughput, allocation, p99, or p999 numbers are claimed for this follow-up. The kept change removes confirmed request-time guard binding lookup/type checks and startup duplicate range copies, but production performance still requires the benchmark protocol from the earlier sections.
+
+## Compile-Time Zero-Copy Phase 3 Follow-Up: Request Requirements And Lazy AppRequest
+
+Audit date: 2026-08-13.
+
+Scope: generated HTTP route validation wrappers, Runtime HTTP route request requirement metadata, request-scoped DI detection, and `AppRequest` optional feature materialization.
+
+Baseline before change:
+
+- Focused correctness suite: `bun test packages/http/tests/validation-input.test.ts packages/runtime/tests/request-context-pipeline.test.ts packages/runtime/tests/request-scope.test.ts packages/runtime/tests/start-runtime.test.ts playground/tests/http.integration.test.ts playground/tests/validator-pipeline.integration.test.ts`
+- Result: `25 pass`, `0 fail`, `107 expect() calls`
+
+Audit findings:
+
+- Bun route lookup already supplies the matched native `Request`; Warbler does not create route metadata arrays per request on the minimal route path.
+- Body parsing was already guarded by validator source flags in [validation-input.ts](/home/bellib/dev/framework/packages/http/src/request/validation-input.ts:6), but the function was declared `async`, so every validated route entered Promise execution even when it only needed query, params, headers, or cookies.
+- Generated validated HTTP route wrappers looked up `validatorBindings[id].flags` and called `.then(...)` on every validated request in [generate-artifacts.ts](/home/bellib/dev/framework/packages/compiler/src/generator/generate-artifacts.ts:370).
+- Runtime route startup already identified minimal zero-argument routes, but it recomputed request-scoped graph presence with provider scans while linking route plans.
+- Non-minimal `AppRequest` construction always materialized `Bun.CookieMap` in [runtime-owner.ts](/home/bellib/dev/framework/packages/runtime/src/lifecycle/runtime-owner.ts:594), even when a handler, guard, or middleware never read `request.cookies`.
+- Query and params were not globally parsed before route execution. Validator query/path preparation remained flag-driven; handler-facing unvalidated query/params can now be materialized lazily on access.
+- Headers remain the native `Headers` object. No header record is built unless header validation requires it.
+- No safe static metadata currently exists for arbitrary guard or middleware request feature usage, so this slice does not infer requirements from source code.
+
+Kept source changes:
+
+- `prepareHttpValidationInput(...)` now returns synchronously unless body parsing is required. Body validators still parse once through the async path.
+- Generated HTTP wrappers now carry a startup/module-time `httpRouteRequestRequirements` table sourced from compiled validator flags, and preserve sync execution for non-body validators.
+- Runtime HTTP route plans now store a compact internal request requirement mask derived at startup from validator flags, AppRequest need, and request-scoped DI need.
+- Request-scoped provider graph detection is precomputed once in the runtime pipeline registry and reused while linking route plans.
+- `AppRequest.params`, `AppRequest.query`, and `AppRequest.cookies` are request-local memoized accessors. `cookies` is no longer parsed merely because an `AppRequest` object exists, and it reuses Bun's native cookie map when already attached.
+- Parsed validation output is still reused by reference for handler-facing body/query/path values when validation succeeds.
+
+Rejected or deferred:
+
+- No auth/session requirement flags were added because the current HTTP surface does not expose safe explicit static metadata for them.
+- No guard/middleware feature inference was added; unsafe source-code inspection would risk skipping security-sensitive work.
+- Body parsing for arbitrary unvalidated `AppRequest.body` was not invented. Existing semantics are preserved: body values come from validator preparation.
+- No request object pools, context pools, or custom allocator abstractions were introduced.
+
+Correctness validation after change:
+
+- Focused suite: `bun test packages/http/tests/validation-input.test.ts packages/runtime/tests/request-context-pipeline.test.ts packages/runtime/tests/request-scope.test.ts packages/runtime/tests/start-runtime.test.ts packages/compiler/tests/phase2.test.ts playground/tests/http.integration.test.ts playground/tests/validator-pipeline.integration.test.ts`
+- Result: `39 pass`, `0 fail`, `183 expect() calls`
+- `bun run --filter '@warbler/http' typecheck`
+- `bun run --filter '@warbler/runtime' typecheck`
+- `bun run --filter '@warbler/compiler' typecheck`
+- `bun run typecheck`
+- `bun test`: `586 pass`, `0 fail`, `1872 expect() calls`
+
+Post-change spot measurement:
+
+- Environment: playground, `APP_ENV=production`, request/startup/runtime/transport/debug/WebSocket logs disabled, HTTP profiling disabled.
+- Warmup: `autocannon -c 50 -d 5 http://127.0.0.1:3000/bench`
+- Samples: three `autocannon -c 50 -d 10 http://127.0.0.1:3000/bench` runs.
+- Results: `36,647.2 req/sec`, `35,909.6 req/sec`, `36,320.81 req/sec`; p50 `1 ms`, p99 `2 ms` on all three runs.
+
+Measurement note: this is a post-change smoke measurement, not a valid before/after benchmark. No throughput, allocation, p99, or p999 improvement is claimed for this slice. The retained changes remove confirmed unnecessary Promise wrapping for non-body validators and confirmed eager cookie materialization for unused `AppRequest.cookies`.

@@ -402,9 +402,8 @@ describe("validator onValidationError", () => {
       })]),
       http: Object.freeze({
         routes: Object.freeze([Object.freeze({ id: 0 })]),
-        // Mirrors the compiler-generated wiring (`prepareHttpValidationInput(...).then((input) =>
-        // executeHttpRoute(...))`), where `execute` always runs inside a `.then()` — a synchronous
-        // throw inside it becomes a promise rejection, exactly like a controller throwing today.
+        // Forces the async wrapper shape used by body-reading validated routes; synchronous
+        // throws inside that wrapper become promise rejections, matching controller throws.
         createRoutes: (execute: HttpRouteExecutor) => Object.freeze({
           "/users": Object.freeze({ GET: (request: Request) => Promise.resolve().then(() => execute(0, request, Object.freeze({}))) }),
         }),

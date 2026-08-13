@@ -79,11 +79,13 @@ interface HttpRouteExecutionPlan {
   readonly handlerId: number;
   readonly pipeline?: (input: unknown) => unknown;
   readonly minimal: boolean;
+  readonly requestRequirements: number;
   readonly wrapAppRequest: boolean;
 }
 interface RuntimePipelineRegistry {
   readonly guard: GuardPipelineRegistry;
   readonly ranges: Map<string, readonly number[]>;
+  readonly requestScopedGraphs: ReadonlySet<number>;
 }
 const COMPILER_ROUTE_VALIDATION = 1 << 7;
 const COMPILER_ROUTE_MIDDLEWARE = 1 << 8;
@@ -91,8 +93,23 @@ const COMPILER_ROUTE_GUARD = 1 << 9;
 const COMPILER_ROUTE_CSRF = 1 << 10;
 const COMPILER_ROUTE_STREAMING = 1 << 11;
 const COMPILER_ROUTE_VIEW_CONTEXT = 1 << 16;
+const VALIDATOR_SOURCE_BODY = 1 << 0;
+const VALIDATOR_SOURCE_QUERY = 1 << 1;
+const VALIDATOR_SOURCE_PATH = 1 << 2;
+const VALIDATOR_SOURCE_HEADERS = 1 << 3;
+const VALIDATOR_SOURCE_COOKIES = 1 << 4;
+const REQUEST_REQUIREMENT_NONE = 0;
+const REQUEST_REQUIREMENT_BODY = 1 << 0;
+const REQUEST_REQUIREMENT_QUERY = 1 << 1;
+const REQUEST_REQUIREMENT_PARAMS = 1 << 2;
+const REQUEST_REQUIREMENT_HEADERS = 1 << 3;
+const REQUEST_REQUIREMENT_COOKIES = 1 << 4;
+const REQUEST_REQUIREMENT_VALIDATION = 1 << 5;
+const REQUEST_REQUIREMENT_APP_REQUEST = 1 << 6;
+const REQUEST_REQUIREMENT_REQUEST_SCOPE = 1 << 7;
 const EMPTY_RECORD: Readonly<Record<string, unknown>> = Object.freeze(Object.create(null) as Record<string, unknown>);
 const DEFAULT_TRANSLATE = (key: string): string => key;
+const UNSET_REQUEST_VALUE = Symbol("warbler.unsetRequestValue");
 type RuntimeTranslate = (key: string, parameters?: Readonly<Record<string, string | number | boolean | bigint | null>>) => string;
 interface HttpPipelineInput {
   readonly value: unknown;
@@ -291,7 +308,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     const http = this.application.http;
     if (http === undefined) return Object.freeze({});
     const profiler = this.#httpProfiler;
-    const registry = createRuntimePipelineRegistry();
+    const registry = createRuntimePipelineRegistry(this.application.providers);
     const routeTable = this.application.application.routeTable;
     const plans = new Array<HttpRouteExecutionPlan>(routeTable.length);
     for (let index = 0, length = routeTable.length; index < length; index++) {
@@ -339,18 +356,20 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     const validator = this.#indexes?.validators[validatorId];
     const parameterCount = typeof handler?.parameterCount === "number" ? handler.parameterCount : 1;
     const graphId = this.#indexes!.controllers[controllerId]?.graphId;
-    const hasRequestScoped = graphId !== undefined && this.application.providers.some((provider) => provider.scope === "request" && provider.graphId === graphId);
+    const hasRequestScoped = graphId !== undefined && registry.requestScopedGraphs.has(graphId);
     const needsValidation = validatorId >= 0 || (flags & COMPILER_ROUTE_VALIDATION) !== 0;
     const needsMiddleware = (flags & COMPILER_ROUTE_MIDDLEWARE) !== 0 || numberField(record, "middlewareCount") > 0;
     const needsGuard = (flags & COMPILER_ROUTE_GUARD) !== 0 || numberField(record, "guardCount") > 0;
     const needsViewContext = (flags & (COMPILER_ROUTE_VIEW_CONTEXT | COMPILER_ROUTE_CSRF | COMPILER_ROUTE_STREAMING)) !== 0;
     const minimal = !needsValidation && !needsMiddleware && !needsGuard && !hasRequestScoped && !needsViewContext && parameterCount === 0;
     const usesCompiledValidatorShape = validatorId < 0 || typeof validator?.flags === "number";
+    const requestRequirements = compileHttpRequestRequirements(validator?.flags, needsValidation, parameterCount > 0 || needsMiddleware || needsGuard, hasRequestScoped);
     return Object.freeze({
       handlerId,
       minimal,
+      requestRequirements,
       wrapAppRequest: usesCompiledValidatorShape && (parameterCount > 0 || needsValidation || needsMiddleware || needsGuard || hasRequestScoped),
-      ...(minimal ? {} : { pipeline: this.#compileRecordPipeline(record, registry, true, undefined, profiler) }),
+      ...(minimal ? {} : { pipeline: this.#compileRecordPipeline(record, registry, true, requestRequirements, undefined, profiler) }),
     });
   }
   #executeSocket(event: string, message: unknown, context: unknown): unknown {
@@ -358,14 +377,14 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
   }
   #createSocketPipelines(): Readonly<Record<string, (input: unknown) => unknown>> {
     const result: Record<string, (input: unknown) => unknown> = Object.create(null);
-    const registry = createRuntimePipelineRegistry();
+    const registry = createRuntimePipelineRegistry(this.application.providers);
     const events: Readonly<Record<string, Readonly<Record<string, unknown>>>> = this.application.websocket?.events ?? Object.freeze({});
     for (const [event, record] of Object.entries(events)) {
-      result[event] = this.#compileRecordPipeline(record, registry, false, event);
+      result[event] = this.#compileRecordPipeline(record, registry, false, REQUEST_REQUIREMENT_NONE, event);
     }
     return Object.freeze(result);
   }
-  #compileRecordPipeline(record: Readonly<Record<string, unknown>>, registry: RuntimePipelineRegistry, http: boolean, socketEvent?: string, profiler?: HttpHotPathProfiler): (input: unknown) => unknown {
+  #compileRecordPipeline(record: Readonly<Record<string, unknown>>, registry: RuntimePipelineRegistry, http: boolean, requestRequirements: number, socketEvent?: string, profiler?: HttpHotPathProfiler): (input: unknown) => unknown {
     const handlerId = numberField(record, "handlerId");
     const validatorId = numberField(record, "validatorId");
     const controllerId = numberField(record, "controllerId");
@@ -400,7 +419,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       return runValidated(validator, validationInput, (validated) => {
         const requestContextStart = profiler !== undefined && http ? performance.now() : 0;
         const requestContext = new RequestContextStore();
-        const pipelineValue = http ? buildAppRequest(validationInput, validated, requestContext) : socketValidatedEnvelope(input, validated);
+        const pipelineValue = http ? buildAppRequest(validationInput, validated, requestContext, requestRequirements) : socketValidatedEnvelope(input, validated);
         const guardContext = http ? requestContext : socketConnectionContext(pipelineValue);
         if (profiler !== undefined && http) profiler.record("requestContext", performance.now() - requestContextStart);
         const guardStart = profiler !== undefined && http ? performance.now() : 0;
@@ -411,12 +430,12 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
         });
         if (profiler !== undefined && http) profiler.record("guardMiddleware", performance.now() - guardStart);
         return guarded ? terminal(pipelineValue, guardContext) : http ? forbidden() : undefined;
-      }, (outcome) => http ? invalidHttpValidation(validator, outcome.errors, validationInput) : socketValidationFailure(input, outcome.errors), profiler !== undefined && http ? profiler : undefined);
+    }, (outcome) => http ? invalidHttpValidation(validator, outcome.errors, validationInput, requestRequirements) : socketValidationFailure(input, outcome.errors), profiler !== undefined && http ? profiler : undefined);
     };
     // Only wrap requests in a fresh request-scoped container when the owning Graph actually declares
     // request-scoped providers — otherwise every request would pay for an unused eager-init pass.
     const graphId = this.#indexes!.controllers[controllerId]?.graphId;
-    const hasRequestScoped = graphId !== undefined && this.application.providers.some((provider) => provider.scope === "request" && provider.graphId === graphId);
+    const hasRequestScoped = graphId !== undefined && registry.requestScopedGraphs.has(graphId);
     if (!hasRequestScoped) return core;
     const graph = this.#graphMap.get(graphId!)!;
     return (input: unknown): unknown => this.#runWithRequestScope(graph, graphId!, () => core(input));
@@ -521,8 +540,33 @@ function httpPipelineInput(request: Request, validationInput: unknown): Readonly
 function unvalidatedValue(input: unknown, value: unknown): unknown {
   return typeof input === "object" && input !== null && "__request" in input ? undefined : value;
 }
-function createRuntimePipelineRegistry(): RuntimePipelineRegistry {
-  return { guard: createGuardPipelineRegistry(), ranges: new Map() };
+function compileHttpRequestRequirements(validatorFlags: number | undefined, needsValidation: boolean, needsAppRequest: boolean, hasRequestScoped: boolean): number {
+  let requirements = REQUEST_REQUIREMENT_NONE;
+  if (needsValidation) requirements |= REQUEST_REQUIREMENT_VALIDATION;
+  if (needsAppRequest) requirements |= REQUEST_REQUIREMENT_APP_REQUEST;
+  if (hasRequestScoped) requirements |= REQUEST_REQUIREMENT_REQUEST_SCOPE;
+  if (validatorFlags === undefined) return requirements;
+  if ((validatorFlags & VALIDATOR_SOURCE_BODY) !== 0) requirements |= REQUEST_REQUIREMENT_BODY;
+  if ((validatorFlags & VALIDATOR_SOURCE_QUERY) !== 0) requirements |= REQUEST_REQUIREMENT_QUERY;
+  if ((validatorFlags & VALIDATOR_SOURCE_PATH) !== 0) requirements |= REQUEST_REQUIREMENT_PARAMS;
+  if ((validatorFlags & VALIDATOR_SOURCE_HEADERS) !== 0) requirements |= REQUEST_REQUIREMENT_HEADERS;
+  if ((validatorFlags & VALIDATOR_SOURCE_COOKIES) !== 0) requirements |= REQUEST_REQUIREMENT_COOKIES;
+  return requirements;
+}
+function createRuntimePipelineRegistry(providers: readonly import("../generated/executable-bindings").ProviderBinding[]): RuntimePipelineRegistry {
+  return {
+    guard: createGuardPipelineRegistry(),
+    ranges: new Map(),
+    requestScopedGraphs: requestScopedGraphSet(providers),
+  };
+}
+function requestScopedGraphSet(providers: readonly import("../generated/executable-bindings").ProviderBinding[]): ReadonlySet<number> {
+  const graphs = new Set<number>();
+  for (let index = 0, length = providers.length; index < length; index++) {
+    const provider = providers[index]!;
+    if (provider.scope === "request" && typeof provider.graphId === "number") graphs.add(provider.graphId);
+  }
+  return graphs;
 }
 function linkedRange(
   registry: RuntimePipelineRegistry,
@@ -591,20 +635,34 @@ function socketValidatedEnvelope(original: unknown, validated: unknown): unknown
  * run, frozen once the pipeline's `settle()` step completes, but always the same
  * object identity end to end.
  */
-function buildAppRequest(validationInput: unknown, body: unknown, requestContext: RequestContextStore): unknown {
+function buildAppRequest(validationInput: unknown, body: unknown, requestContext: RequestContextStore, requestRequirements: number): unknown {
   if (typeof validationInput !== "object" || validationInput === null || !("__request" in validationInput)) return body;
   const request = validationInput.__request;
   if (!(request instanceof Request)) return body;
   const source = request as Request & Readonly<Record<string, unknown>>;
   const pipelineInput = validationInput as Readonly<Record<string, unknown>>;
   const outcome = validationOutcome(body);
+  const bodyValue = outcome?.value ?? body;
+  let paramsValue: unknown = outcome?.path ?? pipelineInput.path ?? source.params ?? UNSET_REQUEST_VALUE;
+  let queryValue: unknown = outcome?.query ?? pipelineInput.query ?? source.query ?? UNSET_REQUEST_VALUE;
+  const cookiesRequired = (requestRequirements & REQUEST_REQUIREMENT_COOKIES) !== 0;
+  let cookiesValue: Bun.CookieMap | typeof UNSET_REQUEST_VALUE = UNSET_REQUEST_VALUE;
   return {
     native: request,
-    body: outcome?.value ?? body,
-    params: outcome?.path ?? source.params ?? EMPTY_RECORD,
-    query: outcome?.query ?? source.query ?? EMPTY_RECORD,
+    body: bodyValue,
+    get params(): unknown {
+      if (paramsValue === UNSET_REQUEST_VALUE) paramsValue = source.params ?? EMPTY_RECORD;
+      return paramsValue;
+    },
+    get query(): unknown {
+      if (queryValue === UNSET_REQUEST_VALUE) queryValue = lazyRequestQuery(request);
+      return queryValue;
+    },
     headers: request.headers,
-    cookies: requestCookieMap(request),
+    get cookies(): Bun.CookieMap {
+      if (cookiesValue === UNSET_REQUEST_VALUE) cookiesValue = cookiesRequired && source.cookies instanceof Bun.CookieMap ? source.cookies : requestCookieMap(request);
+      return cookiesValue;
+    },
     get context(): Readonly<Record<string, unknown>> { return requestContext.currentView(); },
     locale: typeof source.locale === "string" ? source.locale : "en",
     tr: typeof pipelineInput.__translate === "function" ? pipelineInput.__translate as RuntimeTranslate : DEFAULT_TRANSLATE,
@@ -623,6 +681,17 @@ function requestCookieMap(request: Request): Bun.CookieMap {
   const native = request as Request & { readonly cookies?: unknown };
   if (native.cookies instanceof Bun.CookieMap) return native.cookies;
   return new Bun.CookieMap(request.headers.get("cookie") ?? "");
+}
+function lazyRequestQuery(request: Request): Readonly<Record<string, string | readonly string[]>> {
+  const output: Record<string, string | readonly string[]> = Object.create(null);
+  const parameters = new URL(request.url).searchParams;
+  for (const [key, value] of parameters) {
+    const current = output[key];
+    if (current === undefined) output[key] = value;
+    else if (typeof current === "string") output[key] = Object.freeze([current, value]);
+    else output[key] = Object.freeze([...current, value]);
+  }
+  return Object.freeze(output);
 }
 function socketConnectionContext(pipelineValue: unknown): unknown {
   return typeof pipelineValue === "object" && pipelineValue !== null && "context" in pipelineValue ? pipelineValue.context : undefined;
@@ -650,10 +719,11 @@ function invalidHttpValidation(
   validator: import("../generated/executable-bindings").ValidatorBinding | undefined,
   rawErrors: unknown,
   validationInput: unknown,
+  requestRequirements: number,
 ): unknown {
   const handler = validator?.onValidationError;
   if (typeof handler !== "function") return invalidValidationResponse(rawErrors, validationInput);
-  const req = buildAppRequest(validationInput, rawRequestValue(validationInput), new RequestContextStore());
+  const req = buildAppRequest(validationInput, rawRequestValue(validationInput), new RequestContextStore(), requestRequirements);
   return (handler as (req: unknown, errors: unknown) => unknown)(req, rawErrors);
 }
 function rawRequestValue(validationInput: unknown): unknown {
