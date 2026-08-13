@@ -12,16 +12,7 @@ export default class HomeController {
   index(): Response {
     return JsonRes(this.#home.status());
   }
-  @Get("/bench")
-  bench() {
-    return new Response("Ok", {
-      status: 200,
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "X-Custom-Header": "MyValue"
-      },
-    });
-  }
+
 
   @Get("/health")
   async health(): Promise<Response> {
