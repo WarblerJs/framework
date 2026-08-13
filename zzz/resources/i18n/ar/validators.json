@@ -1,0 +1,17 @@
+{
+  "username_not_valid": "اسم المستخدم غير صالح.",
+  "email_not_valid": "البريد الإلكتروني غير صالح.",
+  "invalid_page": "يجب أن تكون الصفحة رقمًا موجبًا.",
+  "invalid_id": "يجب أن يكون المعرّف رقمًا موجبًا.",
+  "invalid_room": "الغرفة غير صالحة.",
+  "invalid_content": "محتوى الرسالة غير صالح.",
+  "content_too_long": "محتوى الرسالة طويل جدًا.",
+  "avatar_required": "ملف الصورة الشخصية مطلوب.",
+  "file_too_large": "يجب ألا يتجاوز الملف :allowed بايت. لقد رفعت :entered بايت.",
+  "invalid_image_type": "يجب أن تكون الصورة بصيغة JPEG أو PNG أو WebP.",
+  "invalid_type": "النوع غير صالح.",
+  "invalid_city": "المدينة غير صالحة.",
+  "invalid_retries": "عدد المحاولات غير صالح.",
+  "invalid_session": "الجلسة غير صالحة.",
+  "unrecognized_keys": "يحتوي الطلب على حقول غير معروفة."
+}

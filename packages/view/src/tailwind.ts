@@ -74,6 +74,67 @@ export async function buildTailwindCss(options: TailwindBuildOptions): Promise<v
   }
 }
 
+
+let tailwindDevProcess: ReturnType<typeof Bun.spawn> | undefined;
+
+/**
+ * Starts one persistent official Tailwind CSS v4 watcher for development.
+ * Call once when `warbler dev` starts; do not restart it for each HTML change.
+ */
+export async function startTailwindDevWatcher(options: TailwindBuildOptions): Promise<void> {
+  if (tailwindDevProcess !== undefined) return;
+
+  if (options.entries.length === 0) {
+    throw new TemplateCompilationError("Tailwind configuration", "Tailwind requires at least one CSS entry.");
+  }
+
+  const official = await resolveOfficialTailwindCli();
+  const buildDirectory = `${options.projectRoot}/.warbler/view`;
+  const input = options.entries.length === 1
+    ? `${options.projectRoot}/${options.entries[0]}`
+    : await writeCombinedEntry(buildDirectory, options.entries);
+
+  if (!await Bun.file(input).exists()) {
+    throw new TemplateCompilationError(input, "Configured Tailwind CSS entry does not exist.");
+  }
+
+  const output = `${options.projectRoot}/${options.publicDirectory}/app.css`;
+
+  tailwindDevProcess = Bun.spawn([
+    process.execPath,
+    official.cli,
+    "--input",
+    input,
+    "--output",
+    output,
+    "--watch",
+  ], {
+    cwd: options.projectRoot,
+    env: {
+      ...process.env,
+      NODE_PATH: [process.env.NODE_PATH, official.moduleRoot].filter(
+        (value): value is string => value !== undefined && value.length > 0,
+      ).join(":"),
+    },
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+
+  // Clear the retained process when Tailwind exits so a future dev start can recover.
+  void tailwindDevProcess.exited.then(() => {
+    tailwindDevProcess = undefined;
+  });
+}
+
+/** Stops the persistent Tailwind development watcher. */
+export function stopTailwindDevWatcher(): void {
+  const child = tailwindDevProcess;
+  if (child === undefined) return;
+
+  tailwindDevProcess = undefined;
+  child.kill();
+}
+
 async function resolveOfficialTailwindCli(): Promise<Readonly<{ cli: string; moduleRoot: string }>> {
   try {
     const manifestPath = Bun.resolveSync("@tailwindcss/cli/package.json", import.meta.dir);

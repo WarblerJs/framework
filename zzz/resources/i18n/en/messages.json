@@ -1,0 +1,9 @@
+{
+  "welcome": "Welcome, :name!",
+  "auth_failed": "Authentication failed.",
+  "invalid_string": "This value must be a string.",
+  "max_message": "Maximum length is :allowed. You entered :entered.",
+  "type_not_existe": "Type is not exist .",
+  "id_invalid_uuid": "UserID, must be valid UUID",
+  "max_length": "Maximum allowed length is :allowed. You entered :entered."
+}

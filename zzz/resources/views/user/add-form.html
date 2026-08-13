@@ -1,0 +1,13 @@
+@extends('layouts.main')
+@section('content') {
+<div class="h-screen flex flex-col justify-center items-center max-w-xl">
+
+    <form method="POST" action="{{ route('users.create') }}" class="rounded-md bg-gray-50 shadow-xl border border-gray-200  p-4 flex flex-col gap-y-2">
+        {{{ csrfField }}}
+        <input type="text" name="email"  class="border border-gray-600 p-0.5 rounded">
+        <input type="password" name="password"  class="border border-gray-600 p-0.5 rounded">
+        <input type="submit" value="Submit" class="bg-gray-900 text-white rounded-md">
+    </form>
+</div>
+
+}

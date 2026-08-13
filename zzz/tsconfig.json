@@ -1,0 +1,30 @@
+
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "module": "Preserve",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ESNext",
+    "paths": {
+      "@pg/*": ["database/warbler/pg/generated/*"],
+      "@errors/*": ["src/shared/errors/*"],
+      "@functions/*": ["src/shared/functions/*"],
+      "@warbler/console": ["../packages/console/src/index.ts"],
+      "@warbler/config": ["../packages/config/src/index.ts"],
+      "@warbler/crypto": ["../packages/crypto/src/index.ts"],
+      "@warbler/email": ["../packages/email/src/index.ts"],
+      "@warbler/events": ["../packages/events/src/index.ts"],
+      "@warbler/view": ["../packages/view/src/index.ts"],
+    }
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts", "database/**/*.ts"]
+}

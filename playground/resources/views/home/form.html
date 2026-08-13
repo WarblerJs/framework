@@ -2,7 +2,14 @@
 @section('content') {
 
   <div class="max-w-xl mx-auto mt-10 flex flex-col gap-y-4">
-    <h1 class="text-xl font-bold">{{ title }}</h1>
+    <h1 class="text-xl font-bold bg-slate-600">{{ title }} </h1>
+
+    <div class="bg-red-100">
+      dddffüüü
+        <p class="text-xs bg-amber-300 text-slate-950 hello">Small text reload</p>
+        <p class="text-sm bg-indigo-800">Text</p>
+        <p class="text-xl bg-green-300">Large text</p>
+    </div>
 
     <form method="POST" action="{{ route('users.create') }}" class="rounded-md bg-gray-50 shadow-xl border border-gray-200 p-4 flex flex-col gap-y-2">
       {{{ csrfField }}}

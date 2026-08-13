@@ -1,0 +1,42 @@
+{
+  "name": "@warbler/zzz",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "warbler": "warbler",
+    "dev": "warbler dev",
+    "build": "warbler build",
+    "start": "warbler start",
+    "doctor": "warbler doctor",
+    "inspect": "warbler inspect",
+    "dev:verb": "warbler dev --verbose",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "clean": "warbler clean"
+  },
+  "dependencies": {
+    "@warbler/crypto": "workspace:*",
+    "@warbler/core": "workspace:*",
+    "@warbler/database": "workspace:*",
+    "@warbler/email": "workspace:*",
+    "@warbler/events": "workspace:*",
+    "@warbler/http": "workspace:*",
+    "@warbler/runtime": "workspace:*",
+    "@warbler/validators": "workspace:*",
+    "@warbler/view": "workspace:*",
+    "@warbler/config": "workspace:*",
+    "@warbler/websocket": "workspace:*",
+    "@warbler/frontend": "workspace:*"
+  },
+  "devDependencies": {
+    "@warbler/cli": "workspace:*",
+    "@warbler/compiler": "workspace:*",
+    "@warbler/transport": "workspace:*",
+    "@types/bun": "latest",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  }
+}

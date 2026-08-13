@@ -2,7 +2,7 @@ export {
   createCompiledViewArtifact,
 } from "./artifact";
 export { compileViewProject, type CompileViewProjectOptions } from "./compiler";
-export { buildTailwindCss, type TailwindBuildOptions } from "./tailwind";
+export { buildTailwindCss, type TailwindBuildOptions } from "./tailwindold";
 export { activateCompiledViews, activeCompiledViews, View } from "./view";
 export {
   closeViewDevelopmentClients,

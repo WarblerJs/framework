@@ -44,7 +44,7 @@ export const httpConfig = {
     frameOptions: "DENY",
   },
   static: {
-    enabled: false,
+    enabled: true,
     root: "public",
     prefix: "/",
     indexFiles: ["index.html"],

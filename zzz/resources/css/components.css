@@ -1,0 +1,56 @@
+
+@layer components {
+    .input-form,
+    .textarea-form,
+    .select-form {
+      @apply w-full rounded-md border border-gray-300
+             bg-white px-4 py-3 text-sm
+             outline-none transition
+             placeholder:text-gray-400
+             focus:border-gray-500
+             focus:ring-2 focus:ring-gray-200
+             disabled:cursor-not-allowed
+             disabled:opacity-50;
+    }
+  
+    .textarea-form {
+      @apply min-h-32 resize-y;
+    }
+  
+    .select-form {
+      @apply cursor-pointer;
+    }
+  
+    .label-form {
+      @apply mb-2 block text-sm font-medium text-gray-700;
+    }
+  
+    .form-error {
+      @apply mt-1 text-xs text-red-600;
+    }
+  }
+  @layer components {
+    .btn,
+    .btn-primary,
+    .btn-secondary,
+    .btn-danger {
+      @apply inline-flex items-center justify-center
+             rounded-md px-4 py-1.5
+             text-sm font-medium transition
+             disabled:pointer-events-none
+             disabled:opacity-50;
+    }
+  
+    .btn-primary {
+      @apply bg-gray-950 text-white hover:bg-gray-800;
+    }
+  
+    .btn-secondary {
+      @apply border border-gray-300 bg-white
+             text-gray-800 hover:bg-gray-50;
+    }
+  
+    .btn-danger {
+      @apply bg-red-600 text-white hover:bg-red-700;
+    }
+  }

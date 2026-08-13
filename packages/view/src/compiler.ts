@@ -10,7 +10,7 @@ import type {
   ViewDependencyMap,
   ViewProjectConfig,
 } from "./types";
-import { buildTailwindCss } from "./tailwind";
+import { buildTailwindCss } from "./tailwindold";
 
 export interface CompileViewProjectOptions {
   readonly projectRoot: string;

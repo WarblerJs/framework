@@ -1,0 +1,10 @@
+{
+  "version": 3,
+  "sources": ["../resources/js/app.ts"],
+  "sourcesContent": [
+    "/// <reference lib=\"dom\" />\nexport {};\n// Set dataset attribute safely\ndocument.documentElement.dataset.warbler = \"ready\";\n"
+  ],
+  "mappings": ";AAGA,SAAS,gBAAgB,QAAQ,UAAU;",
+  "debugId": "A53EF36F0E98120F64756E2164756E21",
+  "names": []
+}
