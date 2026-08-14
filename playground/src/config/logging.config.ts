@@ -70,4 +70,18 @@ export const loggingConfig = {
    */
   startup: env.bool("LOG_STARTUP", env("APP_ENV", "development") !== "production"),
   debug: env.bool("LOG_DEBUG", env("APP_ENV", "development") !== "production"),
+
+  channels: {
+    console: {
+      enabled: env.bool("LOG_CONSOLE", true),
+    },
+    file: {
+      enabled: env.bool("LOG_FILE", true),
+      path: env("LOG_FILE_PATH", "storage/logs"),
+      rotation: "daily",
+      retentionDays: env.int("LOG_RETENTION_DAYS", 14),
+      cleanup: "internal",
+      format: "pretty",
+    },
+  },
 } as const;

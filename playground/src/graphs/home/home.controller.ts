@@ -10,6 +10,7 @@ export default class HomeController {
 
   @Get("/")
   index(): Response {
+    throw new Error('SOmthing not working');
     return JsonRes(this.#home.status());
   }
 
