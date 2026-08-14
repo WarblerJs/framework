@@ -4,7 +4,7 @@ const loginForm = FormBuilder(
   "register-form",
   (v) => ({
     email: [
-      "bellib@hotmail.fr",
+      "bellib6@gmail.com",
       v.required("Email is required"),
       v.email("Enter a valid email"),
     ],

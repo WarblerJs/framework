@@ -230,7 +230,10 @@ export function collectDeclarations(context: CompilerContext): ReadonlyMap<strin
         const symbol = context.typeChecker.getSymbolAtLocation(binding);
         const target = symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0 ? context.typeChecker.getAliasedSymbol(symbol) : symbol;
         const targetDeclarations = target?.declarations ?? [];
-        if (targetDeclarations.length > 0) result.set(binding.text, [...targetDeclarations]);
+        if (targetDeclarations.length > 0) {
+          const current = result.get(binding.text) ?? [];
+          result.set(binding.text, uniqueDeclarations([...current, ...targetDeclarations]));
+        }
       }
     }
   }
@@ -262,6 +265,17 @@ export function declarationName(node: ts.Declaration): ts.DeclarationName | unde
 }
 function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean { return ts.canHaveModifiers(node) && (ts.getModifiers(node)?.some((modifier) => modifier.kind === kind) ?? false); }
 function isTypeOnly(node: ts.Declaration): boolean { return ts.isTypeAliasDeclaration(node) || ts.isInterfaceDeclaration(node); }
+function uniqueDeclarations(declarations: readonly ts.Declaration[]): ts.Declaration[] {
+  const seen = new Set<string>();
+  const result: ts.Declaration[] = [];
+  for (const declaration of declarations) {
+    const key = `${declaration.getSourceFile().fileName}:${declaration.pos}:${declaration.end}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(declaration);
+  }
+  return result;
+}
 /** Resolves the relative import specifier a `.warbler/generated` module uses to reach a source declaration. */
 export function generatedImportPath(root: string, file: string): string {
   const path = relative(`${root}/.warbler/generated`, file).replaceAll("\\", "/").replace(/\.(?:tsx?|mts|cts)$/u, "");

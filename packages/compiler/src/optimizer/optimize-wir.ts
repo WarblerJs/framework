@@ -19,7 +19,7 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
     key: `${graph.name}:${controller.name}:${event.kind}:${event.event}:${event.handler}`, graph: graph.name, controller: controller.name, event,
   })))).sort((left, right) => compare(left.key, right.key));
   const eventRows = wir.events.map((event) => ({ key: `${event.file}:${event.name}`, event })).sort((left, right) => compare(left.key, right.key));
-  const eventIds = idMap(eventRows.map((row) => row.event.name));
+  const eventIds = idMap(eventRows.map((row) => row.event.key));
   const listenerRows = wir.eventListeners.map((listener) => ({ key: `${listener.file}:${listener.name}`, listener })).sort((left, right) => compare(left.key, right.key));
   const interceptorRows = wir.eventInterceptors.map((interceptor) => ({ key: `${interceptor.file}:${interceptor.name}`, interceptor })).sort((left, right) => compare(left.key, right.key));
 
@@ -112,7 +112,7 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
     column: row.listener.column,
   }));
   const eventListenerIds: number[] = [];
-  for (const event of eventRows) for (const listener of eventListeners.filter((item) => item.eventId === eventIds.get(event.event.name)!)) eventListenerIds.push(listener.id);
+  for (const event of eventRows) for (const listener of eventListeners.filter((item) => item.eventId === eventIds.get(event.event.key)!)) eventListenerIds.push(listener.id);
   return Object.freeze({
     strings: Object.freeze(strings), graphIds: Object.freeze(graphIds),
     providers: Object.freeze(providers), providerDependencies: Object.freeze(providerDependencies),
@@ -120,7 +120,7 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
     handlers: named(handlerNames, handlerIds), validators: named(validatorNames, validatorIds),
     middlewares: named(middlewareNames, middlewareIds), guards: named(guardNames, guardIds),
     events: Object.freeze(eventRows.map((row) => Object.freeze({
-      id: eventIds.get(row.event.name)!,
+      id: eventIds.get(row.event.key)!,
       nameId: stringIds.get(row.event.name)!,
       fileId: stringIds.get(row.event.file)!,
       line: row.event.line,

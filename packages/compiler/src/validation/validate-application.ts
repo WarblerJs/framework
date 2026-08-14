@@ -190,7 +190,7 @@ function validateEvents(analysis: AnalysisResult, diagnostics: CompilerDiagnosti
     current.push(listener);
     byEvent.set(listener.event, current);
   }
-  for (const event of events.values()) detectEventCycles(event.name, byEvent, diagnostics);
+  for (const event of events.values()) detectEventCycles(event.key, byEvent, diagnostics);
 }
 function detectEventCycles(start: string, listeners: ReadonlyMap<string, readonly EventListenerWIR[]>, diagnostics: CompilerDiagnostic[]): void {
   const stack: Array<Readonly<{ readonly event: string; readonly via?: EventListenerWIR; readonly conditional: boolean }>> = [Object.freeze({ event: start, conditional: false })];
