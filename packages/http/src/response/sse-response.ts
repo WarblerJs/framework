@@ -1,5 +1,5 @@
 import { Console } from "@warbler/console";
-import { normalizeError } from "@warbler/core";
+import { normalizeError, safeErrorMessage } from "@warbler/core";
 import { InvalidRequestError } from "../errors";
 import { type HeadersInput, toHeaders } from "../internal/header-value";
 import type { ServerSentEvent } from "./response-types";
@@ -52,10 +52,28 @@ export function SseRes(
         // errored/closed) do we fall back to the raw stream error.
         const normalized = normalizeError(error);
         Console.error("SSE stream failed.", { code: normalized.code, status: normalized.status });
+        const report: {
+          code: string;
+          status: number;
+          message: string;
+          developerMessage: string;
+          fatal: boolean;
+          stack?: string;
+          cause: unknown;
+        } = {
+          code: normalized.code,
+          status: normalized.status,
+          message: safeErrorMessage(normalized, false),
+          developerMessage: normalized.developerMessage ?? normalized.message,
+          fatal: normalized.fatal,
+          cause: normalized.cause,
+        };
+        if (normalized.stack !== undefined) report.stack = normalized.stack;
+        Console.errorReport(Object.freeze(report), { transport: "SSE" });
         try {
           controller.enqueue(encodeServerSentEvent({
             event: "error",
-            data: { code: normalized.code, message: normalized.message },
+            data: { code: normalized.code, message: safeErrorMessage(normalized, false) },
           }));
           controller.close();
         } catch {

@@ -1,4 +1,10 @@
 import { ANSI, paint } from "./colors/ansi";
+import {
+  BufferedDailyFileLogger,
+  type DailyFileLoggerConfig,
+  type ErrorLogEntry,
+  type ErrorLogRequestContext,
+} from "./daily-file-logger";
 import { createCorrelationId } from "./ids/create-id";
 import { renderTable } from "./render/table";
 import { terminalCapabilities, type TerminalCapabilities } from "./tty/terminal-capabilities";
@@ -33,6 +39,7 @@ export class WarblerConsole {
   #stdout: ConsoleWriter;
   #stderr: ConsoleWriter;
   #generation = 0;
+  #fileLogger: BufferedDailyFileLogger | undefined;
   readonly #sections = new Map<string, SectionRecord>();
 
   public constructor(options: ConsoleOptions = {}) {
@@ -48,6 +55,55 @@ export class WarblerConsole {
     this.#stderr = options.stderr ?? process.stderr;
     this.#capabilities = terminalCapabilities({ ...options, stdout: this.#stdout });
     return this;
+  }
+  public configureDailyFileLogger(config: DailyFileLoggerConfig | undefined): this {
+    const previous = this.#fileLogger;
+    this.#fileLogger = config === undefined || !config.enabled ? undefined : new BufferedDailyFileLogger(config);
+    if (previous !== undefined) void previous.stop();
+    return this;
+  }
+  public errorReport(
+    error: Readonly<{
+      readonly code: string;
+      readonly status: number;
+      readonly message: string;
+      readonly developerMessage?: string | undefined;
+      readonly stack?: string | undefined;
+      readonly fatal?: boolean | undefined;
+      readonly cause?: unknown;
+    }>,
+    context: ErrorLogRequestContext = {},
+  ): void {
+    const level = error.fatal === true ? "FATAL" : "ERROR";
+    const entry: {
+      timestamp: Date;
+      level: "ERROR" | "FATAL";
+      code: string;
+      status: number;
+      message: string;
+      developerMessage?: string;
+      stack?: string;
+      cause?: unknown;
+      request: ErrorLogRequestContext;
+    } = {
+      timestamp: new Date(),
+      level,
+      code: error.code,
+      status: error.status,
+      message: error.message,
+      request: context,
+    };
+    if (error.developerMessage !== undefined) entry.developerMessage = error.developerMessage;
+    if (error.stack !== undefined) entry.stack = error.stack;
+    if (error.cause !== undefined) entry.cause = error.cause;
+    this.#fileLogger?.enqueue(Object.freeze(entry) satisfies ErrorLogEntry);
+  }
+  public async flushDailyFileLogger(): Promise<void> {
+    await this.#fileLogger?.flush();
+  }
+  public async stopDailyFileLogger(): Promise<void> {
+    await this.#fileLogger?.stop();
+    this.#fileLogger = undefined;
   }
   public get mode(): ConsoleMode { return this.#options.mode ?? "human"; }
   public get colorEnabled(): boolean { return this.#capabilities.color; }

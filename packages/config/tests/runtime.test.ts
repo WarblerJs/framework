@@ -58,6 +58,7 @@ describe("logging configuration", () => {
   test("defaults informational logging by environment and keeps errors/fatal enabled", () => {
     expect(normalizeLoggingConfig({ environment: "development" })).toMatchObject({
       requests: true, runtime: true, transports: true, websocket: true, errors: true, fatal: true,
+      channels: { console: { enabled: true }, file: { enabled: false, path: "storage/logs", retentionDays: 14 } },
     });
     expect(normalizeLoggingConfig({ environment: "staging" })).toMatchObject({
       requests: true, runtime: true, transports: true, websocket: true, errors: true, fatal: true,
@@ -68,11 +69,32 @@ describe("logging configuration", () => {
   });
 
   test("explicit logging overrides win over environment defaults", () => {
-    expect(normalizeLoggingConfig({ environment: "production", requests: true, websocket: true, errors: false })).toMatchObject({
+    expect(normalizeLoggingConfig({
+      environment: "production",
+      requests: true,
+      websocket: true,
+      errors: false,
+      channels: { file: { enabled: true, path: "storage/errors", retentionDays: 30 } },
+    })).toMatchObject({
       requests: true,
       websocket: true,
       errors: false,
       fatal: true,
+      channels: { file: { enabled: true, path: "storage/errors", retentionDays: 30, rotation: "daily", cleanup: "internal", format: "pretty" } },
+    });
+  });
+
+  test("accepts the nested suggested logging object shape", () => {
+    expect(normalizeLoggingConfig({
+      logging: {
+        enabled: true,
+        environment: "production",
+        channels: { file: { enabled: true } },
+      },
+    })).toMatchObject({
+      requests: false,
+      errors: true,
+      channels: { file: { enabled: true, path: "storage/logs", retentionDays: 14 } },
     });
   });
 });

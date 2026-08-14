@@ -3,6 +3,7 @@ import {
   applySecurityHeaders,
   createSecurityHeaderApplicator,
   createSecurityHeaderTemplate,
+  getForwardedClientIp,
   guardRequestSmuggling,
   validateRequestHost,
 } from "../src/security";
@@ -162,5 +163,12 @@ describe("HTTP security", () => {
   test("rejects request smuggling framing", () => {
     expect(() => guardRequestSmuggling(new Request("http://x", { headers: { "content-length": "1", "transfer-encoding": "chunked" } }))).toThrow();
     expect(() => guardRequestSmuggling(new Request("http://x", { headers: [["content-length", "1"], ["content-length", "2"]] }))).toThrow();
+  });
+
+  test("resolves forwarded client IP only for trusted immediate proxies", () => {
+    const request = new Request("http://x/", { headers: { "x-forwarded-for": "203.0.113.10, 10.0.0.5" } });
+    expect(getForwardedClientIp(request, "10.0.0.5", { trustProxy: true, trustedProxies: ["10.0.0.5"] })).toBe("203.0.113.10");
+    expect(getForwardedClientIp(request, "198.51.100.2", { trustProxy: true, trustedProxies: ["10.0.0.5"] })).toBe("198.51.100.2");
+    expect(getForwardedClientIp(request, "10.0.0.5", { trustProxy: false, trustedProxies: ["10.0.0.5"] })).toBe("10.0.0.5");
   });
 });

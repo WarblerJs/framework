@@ -6,7 +6,26 @@
  * subclass) and lets it propagate; the nearest transport boundary catches, normalizes
  * (`normalizeError`), and renders it safely.
  */
+export type WarblerErrorSeverity = "info" | "warning" | "error" | "fatal";
+
+/** Additional normalized metadata carried only on the error path. */
+export interface WarblerErrorOptions extends ErrorOptions {
+  readonly developerMessage?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+  readonly requestId?: string;
+  readonly severity?: WarblerErrorSeverity;
+}
+
 export class WarblerError extends Error {
+  /** Internal diagnostic message for logs/development presenters. Never expose in production. */
+  public readonly developerMessage: string | undefined;
+  /** Transport-neutral severity used by loggers and presenters. */
+  public readonly severity: WarblerErrorSeverity;
+  /** Small structured metadata allow-listed by the thrower. */
+  public readonly metadata: Readonly<Record<string, unknown>> | undefined;
+  /** Optional correlation/request ID attached by a transport boundary. */
+  public readonly requestId: string | undefined;
+
   public constructor(
     /** Stable, machine-readable identifier (e.g. `"USER_NOT_FOUND"`). */
     public readonly code: string,
@@ -17,10 +36,14 @@ export class WarblerError extends Error {
     public readonly expose: boolean = true,
     /** Marks the failure as connection/session-fatal for transports that support that distinction (WebSocket). */
     public readonly fatal: boolean = false,
-    options?: ErrorOptions,
+    options?: WarblerErrorOptions,
   ) {
     super(message ?? code, options);
     this.name = "WarblerError";
+    this.developerMessage = options?.developerMessage;
+    this.metadata = options?.metadata;
+    this.requestId = options?.requestId;
+    this.severity = options?.severity ?? (fatal ? "fatal" : status >= 500 ? "error" : status >= 400 ? "warning" : "info");
   }
 }
 

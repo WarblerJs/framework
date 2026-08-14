@@ -2,10 +2,19 @@ export { CircularDependencyError, DuplicateProviderError, InjectionError, Missin
 export { GraphDefinitionError } from "./graph.error";
 export {
   WarblerError,
+  type WarblerErrorOptions,
+  type WarblerErrorSeverity,
   BadRequestError,
   UnauthorizedError,
   ForbiddenError,
   NotFoundError,
   ConflictError,
 } from "./warbler-error";
-export { normalizeError, type NormalizedWarblerError } from "./normalize-error";
+export {
+  INTERNAL_SERVER_ERROR_MESSAGE,
+  errorCauseChain,
+  normalizeError,
+  safeErrorMessage,
+  type NormalizedWarblerError,
+  type WarblerErrorCauseRecord,
+} from "./normalize-error";
