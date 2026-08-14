@@ -62,7 +62,7 @@ export function analyzeProgram(context: CompilerContext): AnalysisResult {
   for (const sourceFile of context.sourceFiles) {
     const aliases = collectAliases(sourceFile);
     for (const reference of collectFrameworkProviders(sourceFile)) frameworkProviders.set(reference.local, reference);
-    collectEventDeclarations(sourceFile, aliases, events, eventListeners, eventInterceptors, context.diagnostics);
+    collectEventDeclarations(sourceFile, aliases, context.typeChecker, events, eventListeners, eventInterceptors, context.diagnostics);
     const visit = (node: ts.Node): void => {
       if (ts.isClassDeclaration(node) && node.name !== undefined) {
         analyzeClass(node, sourceFile, aliases, graphs, controllers, providers, context.diagnostics);
@@ -351,6 +351,7 @@ function hasModifier(node: ts.Node, kind: ts.SyntaxKind): boolean {
 function collectEventDeclarations(
   source: ts.SourceFile,
   aliases: ReadonlyMap<string, string>,
+  checker: ts.TypeChecker,
   events: Map<string, EventWIR>,
   listeners: Map<string, EventListenerWIR>,
   interceptors: Map<string, EventInterceptorWIR>,
@@ -363,8 +364,9 @@ function collectEventDeclarations(
       const name = declaration.name.text;
       const call = declaration.initializer;
       const callee = ts.isIdentifier(call.expression) ? aliases.get(call.expression.text) ?? call.expression.text : "";
+      const key = eventDeclarationKey(source.fileName, name);
       if (callee === "event") {
-        events.set(name, Object.freeze({ ...location(declaration, source), name }));
+        events.set(key, Object.freeze({ ...location(declaration, source), key, name }));
         continue;
       }
       if (callee === "listen") {
@@ -374,27 +376,27 @@ function collectEventDeclarations(
           continue;
         }
         const callback = call.arguments[1];
-        listeners.set(name, Object.freeze({
+        listeners.set(key, Object.freeze({
           ...location(declaration, source),
           name,
-          event: eventArgument.text,
-          dispatches: Object.freeze(callback === undefined ? [] : collectEventDispatchEdges(callback, aliases, source)),
+          event: eventReferenceKey(eventArgument, source, checker),
+          dispatches: Object.freeze(callback === undefined ? [] : collectEventDispatchEdges(callback, aliases, source, checker)),
         }));
         continue;
       }
       if (callee === "interceptEvent") {
-        interceptors.set(name, Object.freeze({ ...location(declaration, source), name }));
+        interceptors.set(key, Object.freeze({ ...location(declaration, source), name }));
       }
     }
   }
 }
-function collectEventDispatchEdges(node: ts.Node, aliases: ReadonlyMap<string, string>, source: ts.SourceFile): readonly EventDispatchEdgeWIR[] {
+function collectEventDispatchEdges(node: ts.Node, aliases: ReadonlyMap<string, string>, source: ts.SourceFile, checker: ts.TypeChecker): readonly EventDispatchEdgeWIR[] {
   const edges: EventDispatchEdgeWIR[] = [];
   const visit = (child: ts.Node, conditional: boolean): void => {
     if (ts.isCallExpression(child) && isDispatchCall(child.expression)) {
       const first = child.arguments[0];
       if (first !== undefined && ts.isCallExpression(first) && ts.isIdentifier(first.expression)) {
-        edges.push(Object.freeze({ ...location(child, source), event: first.expression.text, unconditional: !conditional }));
+        edges.push(Object.freeze({ ...location(child, source), event: eventReferenceKey(first.expression, source, checker), unconditional: !conditional }));
       }
     }
     const nextConditional = conditional || ts.isIfStatement(child) || ts.isConditionalExpression(child) || ts.isSwitchStatement(child);
@@ -402,6 +404,18 @@ function collectEventDispatchEdges(node: ts.Node, aliases: ReadonlyMap<string, s
   };
   visit(node, false);
   return Object.freeze(edges);
+}
+function eventReferenceKey(identifier: ts.Identifier, source: ts.SourceFile, checker: ts.TypeChecker): string {
+  const symbol = checker.getSymbolAtLocation(identifier);
+  const resolved = symbol === undefined ? undefined : (symbol.flags & ts.SymbolFlags.Alias) === 0 ? symbol : checker.getAliasedSymbol(symbol);
+  const declaration = resolved?.getDeclarations()?.find((item) => ts.isVariableDeclaration(item) && ts.isIdentifier(item.name));
+  if (declaration !== undefined && ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name)) {
+    return eventDeclarationKey(declaration.getSourceFile().fileName, declaration.name.text);
+  }
+  return eventDeclarationKey(source.fileName, identifier.text);
+}
+function eventDeclarationKey(file: string, name: string): string {
+  return `${file.replaceAll("\\", "/")}#${name}`;
 }
 function isDispatchCall(expression: ts.Expression): boolean {
   return ts.isPropertyAccessExpression(expression) &&

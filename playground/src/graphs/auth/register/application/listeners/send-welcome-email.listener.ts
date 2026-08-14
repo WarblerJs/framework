@@ -4,6 +4,7 @@ import { listen } from "@warbler/events";
 import { UserCreated } from "../../domain/events/user-created.event";
 
 export const sendWelcomeEmail = listen(UserCreated, async (event) => {
+  console.log('register...')
   const email = inject(Email);
   await email.send({
     to: event.email,

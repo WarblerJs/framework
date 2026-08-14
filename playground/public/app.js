@@ -995,7 +995,7 @@ var init_register = __esm(() => {
   init_forms();
   loginForm = FormBuilder("register-form", (v) => ({
     email: [
-      "bellib@hotmail.fr",
+      "bellib6@gmail.com",
       v.required("Email is required"),
       v.email("Enter a valid email")
     ],
@@ -1030,4 +1030,4 @@ var init_auth = __esm(() => {
 Promise.resolve().then(() => init_auth());
 document.documentElement.dataset.warbler = "ready";
 
-//# debugId=398490169CDAA68464756E2164756E21
+//# debugId=F46D65AF4635075664756E2164756E21

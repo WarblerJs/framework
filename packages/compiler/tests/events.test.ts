@@ -100,6 +100,60 @@ describe("events compiler integration", () => {
     expect(useCase.events).toBeInstanceOf(EventDispatcher);
   }, 15_000);
 
+  test("binds duplicate event export names by module path and export name", async () => {
+    const root = await eventProject(`
+      import { Graph, Service, inject } from "@warbler/core";
+      import { EventDispatcher } from "@warbler/events";
+      import { UserCreated } from "./auth/user-created.event";
+
+      @Service()
+      export class RegisterUser {
+        readonly events = inject(EventDispatcher);
+        execute() { this.events.dispatch(UserCreated("auth")); }
+      }
+
+      @Graph({ providers: [RegisterUser] })
+      export class AppGraph {}
+    `);
+    mkdirSync(join(root, "src", "auth"), { recursive: true });
+    mkdirSync(join(root, "src", "user"), { recursive: true });
+    mkdirSync(join(root, "src", "auth", "listeners"), { recursive: true });
+    mkdirSync(join(root, "src", "user", "listeners"), { recursive: true });
+    await Bun.write(join(root, "src", "auth", "user-created.event.ts"), `
+      import { event } from "@warbler/events";
+      export const UserCreated = event((scope: string) => ({ scope } as const));
+    `);
+    await Bun.write(join(root, "src", "user", "user-created.event.ts"), `
+      import { event } from "@warbler/events";
+      export const UserCreated = event((userId: string) => ({ userId } as const));
+    `);
+    await Bun.write(join(root, "src", "auth", "listeners", "audit-user-created.listener.ts"), `
+      import { listen } from "@warbler/events";
+      import { UserCreated } from "../user-created.event";
+      export const auditUserCreated = listen(UserCreated, event => event.scope);
+    `);
+    await Bun.write(join(root, "src", "user", "listeners", "audit-user-created.listener.ts"), `
+      import { listen } from "@warbler/events";
+      import { UserCreated } from "../user-created.event";
+      export const auditUserCreated = listen(UserCreated, event => event.userId);
+    `);
+
+    const context = await compileProject(root);
+    expect(context.diagnostics.filter((diagnostic) => diagnostic.category === "error")).toEqual([]);
+    const events = context.generatedApplication!.optimized.events;
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => context.generatedApplication!.optimized.strings[event.nameId])).toEqual(["UserCreated", "UserCreated"]);
+    expect(new Set(events.map((event) => event.id)).size).toBe(2);
+    expect(context.generatedApplication!.optimized.eventListeners).toHaveLength(2);
+    expect(context.generatedApplication!.optimized.eventListeners.map((listener) => listener.eventId)).toEqual([0, 1]);
+
+    const generated = await import(join(root, ".warbler", "generated", "application.generated.ts"));
+    const runtime = createExecutableBindingsRuntime(generated.default);
+    const provider = context.generatedApplication!.bindings!.providers.find((binding) => binding.implementation?.imported === "RegisterUser")!;
+    const useCase = runtime.resolveProvider(provider.graphId, provider.id) as { execute(): void };
+    expect(() => useCase.execute()).not.toThrow();
+  }, 15_000);
+
   test("reports definite cycles as errors and conditional cycles as warnings", async () => {
     const root = await eventProject(`
       import { Graph } from "@warbler/core";

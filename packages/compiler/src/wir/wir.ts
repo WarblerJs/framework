@@ -72,16 +72,19 @@ export interface GraphWIR extends SourceLocationWIR {
 }
 /** Functional event factory metadata. */
 export interface EventWIR extends SourceLocationWIR {
+  readonly key: string;
   readonly name: string;
 }
 /** Functional event listener metadata. */
 export interface EventListenerWIR extends SourceLocationWIR {
   readonly name: string;
+  /** Stable event identity as `{normalized module path}#{export name}`. */
   readonly event: string;
   readonly dispatches: readonly EventDispatchEdgeWIR[];
 }
 /** Static dispatch edge discovered inside a listener. */
 export interface EventDispatchEdgeWIR extends SourceLocationWIR {
+  /** Stable event identity as `{normalized module path}#{export name}`. */
   readonly event: string;
   readonly unconditional: boolean;
 }
