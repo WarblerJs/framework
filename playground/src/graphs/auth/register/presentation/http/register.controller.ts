@@ -22,7 +22,7 @@ export class RegisterController {
         
         return result.match({
             left: (code:string) => {
-                return JsonRes({ error: code,}, {status:409});
+                return JsonRes({ error: request.tr(code),}, {status:409});
             },
         
             right: (user:UserEntity) => {

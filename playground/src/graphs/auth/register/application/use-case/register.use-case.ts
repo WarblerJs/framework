@@ -12,12 +12,13 @@ export class RegisterUseCase {
 
     async execute(data: CreateUserData): Promise<Either<AppErrorCode, UserEntity>> {
         const emailExist = await this.#register.emailExist(data.email);
-        this.#events.dispatch(UserCreated('1', data.email));
-
+        
         if (emailExist) {
             return left(AppErrorCode.EMAIL_EXIST);
         } else {
-            return right(await this.#register.createNewUser(data));
+            const newUser = await this.#register.createNewUser(data);
+            this.#events.dispatch(UserCreated(newUser.id, data.email));
+            return right(newUser);
         }
     }
 }

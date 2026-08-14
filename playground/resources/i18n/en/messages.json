@@ -5,5 +5,6 @@
   "max_message": "Maximum length is :allowed. You entered :entered.",
   "type_not_existe": "Type is not exist .",
   "id_invalid_uuid": "UserID, must be valid UUID",
+  "EMAIL_EXIST": "Email already exist before.",
   "max_length": "Maximum allowed length is :allowed. You entered :entered."
 }
