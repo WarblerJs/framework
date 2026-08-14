@@ -45,6 +45,7 @@ import type {
   RuntimeTransportStartInput,
   RuntimeTransportStopOptions,
 } from "../transports/runtime-transport-launcher";
+import { resolve } from "node:path";
 
 const TRANSPORT_ORDER = Object.freeze(["http", "websocket", "tcp", "udp", "mcp", "webrtc"] as const);
 type KnownTransport = (typeof TRANSPORT_ORDER)[number];
@@ -156,6 +157,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
   /** Validates, eagerly constructs, starts enabled transports, and reaches RUNNING. */
   public async start(): Promise<this> {
     this.#logging = await this.#loadLogging();
+    configureDailyErrorLogging(this.#logging, this.#options.workspaceRoot ?? process.cwd());
     this.#profiling = await this.#loadProfiling();
     this.#httpProfiler = this.#profiling.http ? createHttpHotPathProfiler() : undefined;
     const timer = this.#logging.startup ? Console.timer("Runtime") : undefined;
@@ -241,6 +243,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     this.#state = RuntimeState.STOPPED;
     if (this.#logging.runtime) Console.runtime("stopped");
     if (this.#profiling.summaryOnStop && this.#httpProfiler !== undefined) await Bun.write(Bun.stdout, this.#httpProfiler.summary());
+    await Console.flushDailyFileLogger();
     if (failure !== undefined) throw new RuntimeShutdownError(`${RuntimeDiagnosticCode.SHUTDOWN_FAILED}: Runtime shutdown completed with failures.`, { cause: failure });
   }
   async #loadConfiguration(): Promise<RuntimeConfig> {
@@ -811,6 +814,14 @@ function sanitizeReason(reason: string | undefined): string | undefined {
   return reason.replace(/[\u0000-\u001f\u007f]/gu, "").slice(0, 123);
 }
 function safeError(cause: unknown): string { return cause instanceof Error ? cause.message : "Unknown Runtime failure"; }
+function configureDailyErrorLogging(logging: LoggingConfig, workspaceRoot: string): void {
+  const file = logging.channels.file;
+  Console.configureDailyFileLogger(file.enabled ? Object.freeze({
+    enabled: true,
+    directory: resolve(workspaceRoot, file.path),
+    retentionDays: file.retentionDays,
+  }) : undefined);
+}
 function launcherConfiguration(
   kind: KnownTransport,
   transport: Readonly<unknown>,

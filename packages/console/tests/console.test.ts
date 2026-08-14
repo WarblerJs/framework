@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { WarblerConsole, createCorrelationId, terminalCapabilities } from "../src";
+import { mkdtemp } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import {
+  BufferedDailyFileLogger,
+  cleanupExpiredLogs,
+  formatDailyLogEntry,
+  WarblerConsole,
+  createCorrelationId,
+  terminalCapabilities,
+} from "../src";
 
 function capture(options: Readonly<{ tty?: boolean; mode?: "human" | "json"; color?: boolean; unicode?: boolean; silent?: boolean; verbose?: boolean; noColor?: boolean }> = {}) {
   const lines: string[] = [];
@@ -133,5 +143,90 @@ describe("timing and IDs", () => {
       stdout: { isTTY: true, write() {} },
       environment: { TERM: "xterm" },
     })).toEqual({ color: true, unicode: true, dynamic: true });
+  });
+});
+
+describe("daily file logging", () => {
+  test("formats pretty entries with a blank line and divider", () => {
+    const entry = formatDailyLogEntry({
+      timestamp: new Date("2026-08-14T01:14:32.000Z"),
+      level: "ERROR",
+      code: "INTERNAL_SERVER_ERROR",
+      status: 500,
+      message: "Internal Server Error",
+      developerMessage: "TypeError: Cannot read properties of undefined",
+      stack: "TypeError: Cannot read properties of undefined\n    at src/controllers/user.controller.ts:42:18",
+      request: {
+        method: "GET",
+        path: "/users/42",
+        clientIp: "192.168.1.25",
+        handler: "UserController.show",
+        requestId: "01JWARBLER8F3A",
+      },
+    });
+    expect(entry).toContain("[2026-08-14 01:14:32] ERROR");
+    expect(entry).toContain("Code:       INTERNAL_SERVER_ERROR");
+    expect(entry).toContain("Request:    GET /users/42");
+    expect(entry).toContain("IP:         192.168.1.25");
+    expect(entry).toContain("Handler:    UserController.show");
+    expect(entry).toContain("Request ID: 01JWARBLER8F3A");
+    expect(entry).toContain("- •••••");
+    expect(entry.endsWith("\n\n")).toBe(true);
+  });
+
+  test("buffers writes, flushes asynchronously, and rotates by entry date", async () => {
+    const root = await mkdtemp(join(tmpdir(), "warbler-logs-"));
+    const logger = new BufferedDailyFileLogger({
+      enabled: true,
+      directory: root,
+      retentionDays: 14,
+      flushIntervalMs: 0,
+      now: () => new Date("2026-08-15T00:00:00.000Z"),
+    });
+    logger.enqueue({
+      timestamp: new Date("2026-08-14T23:59:59.000Z"),
+      level: "ERROR",
+      code: "A",
+      status: 500,
+      message: "first",
+    });
+    logger.enqueue({
+      timestamp: new Date("2026-08-15T00:00:01.000Z"),
+      level: "ERROR",
+      code: "B",
+      status: 500,
+      message: "second",
+    });
+    await logger.flush();
+    expect(await Bun.file(join(root, "warbler-2026-08-14.log")).text()).toContain("Code:       A");
+    expect(await Bun.file(join(root, "warbler-2026-08-15.log")).text()).toContain("Code:       B");
+    await logger.stop();
+  });
+
+  test("removes expired daily logs and keeps current logs", async () => {
+    const root = await mkdtemp(join(tmpdir(), "warbler-logs-"));
+    await Bun.write(join(root, "warbler-2026-08-01.log"), "old");
+    await Bun.write(join(root, "warbler-2026-08-10.log"), "new");
+    await Bun.write(join(root, "other.log"), "keep");
+    await cleanupExpiredLogs(root, 7, new Date("2026-08-14T12:00:00.000Z"), 1);
+    expect(await Bun.file(join(root, "warbler-2026-08-01.log")).exists()).toBe(false);
+    expect(await Bun.file(join(root, "warbler-2026-08-10.log")).exists()).toBe(true);
+    expect(await Bun.file(join(root, "other.log")).exists()).toBe(true);
+  });
+
+  test("redacts secrets before writing", () => {
+    const entry = formatDailyLogEntry({
+      timestamp: new Date("2026-08-14T01:14:32.000Z"),
+      level: "ERROR",
+      code: "DB_ERROR",
+      status: 500,
+      message: "Internal Server Error",
+      developerMessage: "password=hunter2 postgres://user:pw@host/db authorization: Bearer abc",
+    });
+    expect(entry).not.toContain("hunter2");
+    expect(entry).not.toContain("postgres://");
+    expect(entry).not.toContain("Bearer abc");
+    expect(entry).not.toMatch(/\d+\[REDACTED\]/);
+    expect(entry).toContain("[REDACTED]");
   });
 });

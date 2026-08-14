@@ -75,6 +75,7 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
             handler,
             flags,
             allowedHosts: config.allowedHosts,
+            forwarded: config.forwarded,
             headers: config.limits.headers,
             securityHeaders,
             csrf,

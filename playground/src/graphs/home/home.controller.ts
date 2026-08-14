@@ -9,8 +9,7 @@ export default class HomeController {
   readonly #sockets = inject(SocketPublisher);
 
   @Get("/")
-  index(): Response {
-    throw new Error('SOmthing not working');
+  index(): Response { 
     return JsonRes(this.#home.status());
   }
 

@@ -1,6 +1,6 @@
 import type { ServerWebSocket } from "bun";
 import { Console } from "@warbler/console";
-import { normalizeError } from "@warbler/core";
+import { normalizeError, safeErrorMessage } from "@warbler/core";
 import type { SocketContext } from "./context";
 
 /**
@@ -22,16 +22,38 @@ export function handleSocketError<TData>(
   logErrors = true,
 ): void {
   const normalized = normalizeError(error);
+  const message = safeErrorMessage(normalized, false);
   if (logErrors) {
     Console.error("WebSocket handler failed.", {
       connectionId: context.connection.id,
       code: normalized.code,
       status: normalized.status,
     });
+    const report: {
+      code: string;
+      status: number;
+      message: string;
+      developerMessage: string;
+      fatal: boolean;
+      stack?: string;
+      cause: unknown;
+    } = {
+      code: normalized.code,
+      status: normalized.status,
+      message,
+      developerMessage: normalized.developerMessage ?? normalized.message,
+      fatal: normalized.fatal,
+      cause: normalized.cause,
+    };
+    if (normalized.stack !== undefined) report.stack = normalized.stack;
+    Console.errorReport(Object.freeze(report), {
+      requestId: context.connection.id,
+      transport: "WebSocket",
+    });
   }
 
   try {
-    dispatch("error", { code: normalized.code, message: normalized.message }, context);
+    dispatch("error", { code: normalized.code, message }, context);
   } catch {
     // A broken application @OnError() handler must never prevent the safe error
     // envelope below from reaching the client.
@@ -47,7 +69,7 @@ export function handleSocketError<TData>(
   }
 
   try {
-    context.send({ event: "error", data: { code: normalized.code, message: normalized.message } });
+    context.send({ event: "error", data: { code: normalized.code, message } });
   } catch {
     try {
       socket.close(1011, "Internal WebSocket error");

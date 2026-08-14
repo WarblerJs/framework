@@ -656,3 +656,31 @@ Post-change spot measurement:
 - Results: `36,647.2 req/sec`, `35,909.6 req/sec`, `36,320.81 req/sec`; p50 `1 ms`, p99 `2 ms` on all three runs.
 
 Measurement note: this is a post-change smoke measurement, not a valid before/after benchmark. No throughput, allocation, p99, or p999 improvement is claimed for this slice. The retained changes remove confirmed unnecessary Promise wrapping for non-body validators and confirmed eager cookie materialization for unused `AppRequest.cookies`.
+
+## Unified Error System And Daily Logging Follow-Up
+
+Audit date: 2026-08-14.
+
+Scope: core error normalization, HTTP/SSE/WebSocket presenters, runtime logging startup, logging configuration, trusted-proxy client IP resolution, and buffered daily file logging.
+
+Kept source changes:
+
+- `normalizeError(...)` now normalizes exactly once into the `WarblerError` model. Existing `WarblerError` instances pass through unchanged; non-Warbler throwables become a generic non-exposed `INTERNAL_SERVER_ERROR`.
+- Presenters use `safeErrorMessage(...)` for client output. Development responses can include stack/cause diagnostics; production responses expose only allow-listed code/message/request ID fields.
+- HTTP browser requests receive a small precompiled monochrome HTML error page. API requests continue to receive structured JSON.
+- SSE stream failures emit a protocol-correct `event: error` frame and close gracefully.
+- WebSocket handler failures dispatch the compiled error lifecycle, send a safe error envelope for recoverable failures, and close with `1011` for fatal errors.
+- `@warbler/console` owns a bounded async `BufferedDailyFileLogger` with daily file names, pretty formatting, retention cleanup, and redaction of common secret patterns.
+- Runtime configures the file logger once from `logging.config.ts`; successful request paths do not enqueue or flush file logs.
+- HTTP error reports include a safely resolved client IP. `X-Forwarded-For` is honored only when the immediate peer is in the trusted proxy list.
+
+Rejected or deferred:
+
+- No new package or external dependency was introduced.
+- No synchronous file I/O is used for error logging.
+- No full request bodies, headers, cookies, tokens, SQL payloads, or arbitrary request objects are retained by the logger.
+
+Correctness validation after change:
+
+- Focused suite: `bun test packages/core/tests/errors.test.ts packages/console/tests/console.test.ts packages/config/tests/runtime.test.ts packages/http/tests/request-error-response.test.ts packages/http/tests/security-headers.test.ts packages/http/tests/sse.test.ts packages/websocket/tests/runtime-launcher.test.ts`
+- Result: `71 pass`, `0 fail`, `347 expect() calls`

@@ -1,5 +1,6 @@
 import { csrfFailureResponse, stripCsrfBodyField, type CsrfPolicy, CsrfVerifier } from "../csrf";
 import { Console, createCorrelationId, type RequestHandle } from "@warbler/console";
+import { WarblerError } from "@warbler/core";
 import { HttpError, renderRequestError } from "../errors";
 import { RouteFlag } from "../compiled";
 import {
@@ -8,6 +9,8 @@ import {
   type SecurityHeaderApplicator,
   validateRequestHeaders,
   validateRequestHost,
+  getForwardedClientIp,
+  type ForwardedHeaderPolicy,
   type RequestHeaderPolicy,
 } from "../security";
 import { runInViewRequestScope, type ViewRequestScope } from "../view";
@@ -34,6 +37,7 @@ export interface BunRouteHandlerOptions {
   readonly handler: BunRouteHandler;
   readonly flags: number;
   readonly allowedHosts: readonly string[];
+  readonly forwarded: ForwardedHeaderPolicy;
   readonly headers: RequestHeaderPolicy;
   readonly securityHeaders: Readonly<Record<string, string>>;
   readonly csrf?: Readonly<{ verifier: CsrfVerifier; policy: CsrfPolicy }>;
@@ -106,6 +110,7 @@ function createViewRequestScope(
 
 /** Reuses `HttpError`'s own stable code where one exists, for consistent `logResponse` metadata. */
 function errorCode(error: unknown): string | undefined {
+  if (error instanceof WarblerError) return error.code;
   return error instanceof HttpError ? error.code : undefined;
 }
 
@@ -135,7 +140,10 @@ function createLoggedBunRouteHandler(options: BunRouteHandlerOptions): BunRouteH
     const requestLog = Console.request({ method: request.method, path: url.pathname });
     const scope = viewScope ? createViewRequestScope(request, options) : undefined;
     const onError = (error: unknown): Response =>
-      logResponse(requestLog, renderRequestError(error, request, requestLog, options.development, logErrors), errorCode(error));
+      logResponse(requestLog, renderRequestError(error, request, requestLog, options.development, {
+        logErrors,
+        clientIp: clientIp(request, server, options.forwarded),
+      }), errorCode(error));
     const execute = (): Response | Promise<Response> => {
       if (csrfEnabled) {
         const csrf = options.csrf;
@@ -176,7 +184,10 @@ function createQuietBunRouteHandler(options: BunRouteHandlerOptions): BunRouteHa
   return (request, server) => {
     const scope = viewScope ? createViewRequestScope(request, options) : undefined;
     const onError = (error: unknown): Response =>
-      applyHeaders(renderRequestError(error, request, { requestId: createCorrelationId("req") }, options.development, logErrors));
+      applyHeaders(renderRequestError(error, request, { requestId: createCorrelationId("req") }, options.development, {
+        logErrors,
+        clientIp: clientIp(request, server, options.forwarded),
+      }));
     const execute = (): Response | Promise<Response> => {
       if (csrfEnabled) {
         const csrf = options.csrf;
@@ -217,7 +228,10 @@ function createProfiledBunRouteHandler(options: BunRouteHandlerOptions, profiler
     const scope = viewScope ? createViewRequestScope(request, options) : undefined;
     profiler.record("contextPreparation", performance.now() - contextStart);
     const onError = (error: unknown): Response =>
-      applyHeaders(renderRequestError(error, request, { requestId: createCorrelationId("req") }, options.development, logErrors));
+      applyHeaders(renderRequestError(error, request, { requestId: createCorrelationId("req") }, options.development, {
+        logErrors,
+        clientIp: clientIp(request, server, options.forwarded),
+      }));
     const execute = (): Response | Promise<Response> => {
       if (csrfEnabled) {
         const csrf = options.csrf;
@@ -280,4 +294,10 @@ function logResponse(request: RequestHandle, response: Response, code?: string):
     ...(code === undefined ? {} : { code }),
   });
   return response;
+}
+
+function clientIp(request: Request, server: Bun.Server<undefined>, policy: ForwardedHeaderPolicy): string {
+  const candidate = typeof server.requestIP === "function" ? server.requestIP(request)?.address : undefined;
+  const immediate = candidate ?? "unknown";
+  return getForwardedClientIp(request, immediate, policy);
 }

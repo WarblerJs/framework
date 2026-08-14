@@ -10,6 +10,7 @@ function baseOptions(handler: BunRouteHandlerOptions["handler"]): BunRouteHandle
     handler,
     flags: 0,
     allowedHosts: ["example.com"],
+    forwarded: { trustProxy: false, trustedProxies: [] },
     headers: { maxCount: 10, maxSize: 1000, maxNameSize: 100, maxValueSize: 500 },
     securityHeaders: { "x-content-type-options": "nosniff" },
     builtins: { asset: (path: string) => path, route: () => "" },
@@ -113,7 +114,7 @@ describe("native request pipeline", () => {
       const response = await handler(REQUEST(), Object.create(null));
       expect(response).toBeInstanceOf(Response);
       expect(response.status).toBe(404);
-      expect(await response.json()).toEqual({ code: "USER_NOT_FOUND", message: "User not found" });
+      expect(await response.json()).toMatchObject({ code: "USER_NOT_FOUND", message: "User not found", requestId: expect.any(String) });
     });
 
     test("an async handler that rejects after its first await renders a Response, not a rejected promise", async () => {
@@ -125,7 +126,7 @@ describe("native request pipeline", () => {
       expect(result).toBeInstanceOf(Promise);
       const response = await result;
       expect(response.status).toBe(404);
-      expect(await response.json()).toEqual({ code: "USER_NOT_FOUND", message: "User not found" });
+      expect(await response.json()).toMatchObject({ code: "USER_NOT_FOUND", message: "User not found", requestId: expect.any(String) });
     });
 
     test("an unexpected native Error is sanitized to a generic 500", async () => {
@@ -135,7 +136,7 @@ describe("native request pipeline", () => {
       const response = await handler(REQUEST(), Object.create(null));
       expect(response.status).toBe(500);
       const body = await response.json() as Readonly<Record<string, unknown>>;
-      expect(body).toEqual({ code: "INTERNAL_SERVER_ERROR", message: "Internal Server Error" });
+      expect(body).toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: "Internal Server Error", requestId: expect.any(String) });
     });
 
     test("a normal request after a failed one still succeeds (process/handler survives)", async () => {

@@ -1,5 +1,6 @@
 import { loadLoggingConfig, normalizeLoggingConfig } from "@warbler/config";
 import { Console } from "@warbler/console";
+import { normalizeError } from "@warbler/core";
 import type { RuntimeHandle } from "./runtime-owner";
 
 /**
@@ -22,9 +23,32 @@ export function installFatalErrorHandlers(runtime: RuntimeHandle): () => void {
     handled = true;
     void loadLoggingConfig(process.cwd()).catch(() => normalizeLoggingConfig({ environment: process.env.NODE_ENV === "production" ? "production" : "development" })).then((logging) => {
       if (logging.fatal) {
+        const normalized = normalizeError(error);
         Console.error("Fatal process error.", {
-          message: error instanceof Error ? error.message : String(error),
+          message: normalized.developerMessage ?? normalized.message,
         });
+        const report: {
+          code: string;
+          status: number;
+          message: string;
+          developerMessage?: string;
+          stack?: string;
+          fatal: boolean;
+          cause: unknown;
+        } = {
+          code: normalized.code,
+          status: normalized.status,
+          message: normalized.message,
+          fatal: normalized.fatal,
+          cause: normalized.cause,
+        };
+        if (normalized.developerMessage !== undefined) report.developerMessage = normalized.developerMessage;
+        if (normalized.stack !== undefined) report.stack = normalized.stack;
+        const context: { transport: string; requestId?: string } = {
+          transport: "process",
+        };
+        if (normalized.requestId !== undefined) context.requestId = normalized.requestId;
+        Console.errorReport(report, Object.freeze(context));
       }
     });
     void Promise.resolve(runtime.stop({ reason: "fatal-error" })).finally(() => {
