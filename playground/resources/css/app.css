@@ -1,19 +1,102 @@
 @import "tailwindcss";
+@import './components';
+
 :root {
   /* color-scheme: light dark; */
-  color-scheme: light ;
+  color-scheme: light;
   font-family: system-ui, sans-serif;
 }
-@theme{
+
+@theme {
   --breakpoint-*: initial;
   --breakpoint-sm: 480px;
   --breakpoint-md: 768px;
   --color-wbdark: #012;
+
+  /* Typography — sqrt(phi) ≈ 1.272 */
+  --text-xs: 0.625rem;
+  /* 10px */
+  --text-sm: 0.8125rem;
+  /* 13px */
+  --text-base: 1rem;
+  /* 16px */
+  --text-lg: 1.25rem;
+  /* 20px */
+  --text-xl: 1.625rem;
+  /* 26px */
+  --text-2xl: 2.0625rem;
+  /* 33px */
+  --text-3xl: 2.625rem;
+  /* 42px */
+  --text-4xl: 3.375rem;
+  /* 54px */
+  --text-5xl: 4.3125rem;
+  /* 69px */
+
+  /* Border radius — phi scale */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 16px;
+  --radius-2xl: 26px;
+  --radius-3xl: 42px;
+
+  /* Spacing — phi-inspired, UI-friendly */
+  --spacing-1: 2px;
+  --spacing-2: 4px;
+  --spacing-3: 6px;
+  --spacing-4: 10px;
+  --spacing-5: 16px;
+  --spacing-6: 26px;
+  --spacing-7: 42px;
+  --spacing-8: 68px;
+  --spacing-9: 110px;
+
+  /* Component heights */
+  --height-xs: 26px;
+  --height-sm: 32px;
+  --height-md: 42px;
+  --height-lg: 52px;
+  --height-xl: 68px;
+
+  /* Icon sizes */
+  --icon-xs: 10px;
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 26px;
+  --icon-xl: 42px;
+
+  /* Content widths */
+  --container-xs: 480px;
+  --container-sm: 768px;
+  --container-md: 1024px;
+  --container-lg: 1280px;
+  --container-xl: 1600px;
+
+  /* Section spacing */
+  --section-sm: 42px;
+  --section-md: 68px;
+  --section-lg: 110px;
+  --section-xl: 178px;
 }
 
 
 
-.logo{
+.logo {
   border-radius: 20px;
   max-width: 200px;
+}
+
+
+button {
+  cursor: pointer;
+}
+
+/* .wb-btn {
+  box-shadow: rgba(16, 17, 27, 0.16) 0px 1px 1px 0px, rgb(216, 222, 228) 0px 0px 0px 1px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px;
+  @apply  disabled:opacity-50 transition-all duration-100  inline-flex justify-center items-center  px-2 py-1 text-s1  rounded-md hover:opacity-70  
+} */
+.sdw {
+  box-shadow: rgba(16, 17, 27, 0.16) 0px 1px 1px 0px, rgb(216, 222, 228) 0px 0px 0px 1px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px
 }

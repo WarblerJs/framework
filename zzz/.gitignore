@@ -1,6 +1,0 @@
-.warbler/
-dist/
-storage/
-database/warbler/pg/generated/
-node_modules
-bun.lock
