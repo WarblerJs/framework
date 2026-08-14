@@ -2,6 +2,7 @@ export * from "./app";
 export * from "./context";
 export * from "./decorators";
 export * from "./di";
+export * from "./either";
 export * from "./errors";
 export * from "./graph";
 export * from "./metadata";

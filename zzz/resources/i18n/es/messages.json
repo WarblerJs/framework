@@ -1,7 +1,0 @@
-{
-  "welcome": "¡Bienvenido, :name!",
-  "auth_failed": "Error de autenticación.",
-  "invalid_string": "Este valor debe ser una cadena.",
-  "max_message": "La longitud máxima es :allowed. Introdujiste :entered.",
-  "max_length": "La longitud máxima es :allowed. Introdujiste :entered."
-}

@@ -1,7 +1,0 @@
-{
-  "welcome": "مرحبًا، :name!",
-  "auth_failed": "فشلت المصادقة.",
-  "invalid_string": "يجب أن تكون هذه القيمة نصًا.",
-  "max_message": "الحد الأقصى للطول هو :allowed. لقد أدخلت :entered.",
-  "max_length": "الحد الأقصى المسموح به هو :allowed. لقد أدخلت :entered."
-}
