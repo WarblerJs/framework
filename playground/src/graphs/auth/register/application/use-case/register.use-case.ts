@@ -10,11 +10,11 @@ export class RegisterUseCase {
     readonly #register = inject(RegisterRepositoryPort);
     readonly #events = inject(EventDispatcher);
 
-    async execute(data: CreateUserData): Promise<Either<AppErrorCode, UserEntity>> {
+    async execute(data: CreateUserData): Promise<Either<string, UserEntity>> {
         const emailExist = await this.#register.emailExist(data.email);
         
         if (emailExist) {
-            return left(AppErrorCode.EMAIL_EXIST);
+            return left('emailExist');
         } else {
             const newUser = await this.#register.createNewUser(data);
             this.#events.dispatch(UserCreated(newUser.id, data.email));

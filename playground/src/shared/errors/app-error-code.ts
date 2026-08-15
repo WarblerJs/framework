@@ -2,7 +2,6 @@
 export const AppErrorCode = Object.freeze({
   USER_NOT_FOUND: "USER_NOT_FOUND",
   ROOM_NOT_FOUND: "ROOM_NOT_FOUND",
-  EMAIL_EXIST: "EMAIL_EXIST",
 } as const);
 
 /** One of the application's stable error codes. */
