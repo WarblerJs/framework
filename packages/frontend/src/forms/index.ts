@@ -1,5 +1,6 @@
 export * from "./serialize";
 export { FormBuilder } from "./form";
+export { page } from "./page";
 export { validators } from "./validators";
 export { FormBuilderError } from "./errors";
 export type {

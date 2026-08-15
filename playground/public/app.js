@@ -1,11 +1,31 @@
 var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
 
+// ../packages/frontend/src/http/errors.ts
+var init_errors = () => {};
+
+// ../packages/frontend/src/http/client.ts
+var init_client = () => {};
+
+// ../packages/frontend/src/http/index.ts
+var init_http = __esm(() => {
+  init_client();
+  init_errors();
+});
+
+// ../packages/frontend/src/csrf/token.ts
+var init_token = () => {};
+
+// ../packages/frontend/src/csrf/index.ts
+var init_csrf = __esm(() => {
+  init_token();
+});
+
 // ../packages/frontend/src/forms/serialize.ts
 var init_serialize = () => {};
 
 // ../packages/frontend/src/forms/errors.ts
 var FormBuilderError;
-var init_errors = __esm(() => {
+var init_errors2 = __esm(() => {
   FormBuilderError = class FormBuilderError extends Error {
     constructor(message) {
       super(`Warbler FormBuilder: ${message}`);
@@ -49,7 +69,7 @@ function safeDomId(value) {
   return value.replace(/[^A-Za-z0-9_-]/gu, "-");
 }
 var init_dom = __esm(() => {
-  init_errors();
+  init_errors2();
 });
 
 // ../packages/frontend/src/signals/init.ts
@@ -221,10 +241,10 @@ class FormControl {
     this.validate(this.#showErrors);
     this.#onMutation();
   }
-  setFormErrors(errors) {
+  setFormErrors(errors2) {
     if (this.#lifecycle.destroyed)
       return;
-    this.#formErrors = errors;
+    this.#formErrors = errors2;
     this.validate(this.#showErrors);
   }
   markAsTouched() {
@@ -484,7 +504,7 @@ function equalValue(left, right) {
 var init_form_control = __esm(() => {
   init_signals();
   init_dom();
-  init_errors();
+  init_errors2();
 });
 
 // ../packages/frontend/src/forms/request-owner.ts
@@ -541,9 +561,9 @@ function normalizeServerErrors(value) {
     return Object.freeze({ fields: Object.freeze({}) });
   const record = value;
   const fields = Object.create(null);
-  const errors = record["errors"];
-  if (typeof errors === "object" && errors !== null && !Array.isArray(errors)) {
-    for (const [name, message] of Object.entries(errors)) {
+  const errors2 = record["errors"];
+  if (typeof errors2 === "object" && errors2 !== null && !Array.isArray(errors2)) {
+    for (const [name, message] of Object.entries(errors2)) {
       if (name !== "__proto__" && name !== "prototype" && name !== "constructor" && typeof message === "string")
         fields[name] = message;
     }
@@ -887,7 +907,7 @@ function stableValue(value) {
 var init_form_group = __esm(() => {
   init_signals();
   init_dom();
-  init_errors();
+  init_errors2();
 });
 
 // ../packages/frontend/src/forms/validators.ts
@@ -983,40 +1003,117 @@ var init_form = __esm(() => {
   owners = new InstanceRegistry;
 });
 
+// ../packages/frontend/src/forms/page.ts
+function page(name, callback) {
+  if (document.documentElement.dataset.page !== name) {
+    return;
+  }
+  console.log("Current page:", document.documentElement.dataset.page);
+  callback();
+}
+
 // ../packages/frontend/src/forms/index.ts
 var init_forms = __esm(() => {
   init_form();
   init_serialize();
 });
 
-// resources/js/pages/auth/register.ts
-var loginForm;
-var init_register = __esm(() => {
+// ../packages/frontend/src/dom/index.ts
+var init_dom2 = () => {};
+
+// ../packages/frontend/src/storage/local.ts
+var init_local = () => {};
+
+// ../packages/frontend/src/storage/session.ts
+var init_session = () => {};
+
+// ../packages/frontend/src/storage/index.ts
+var init_storage = __esm(() => {
+  init_local();
+  init_session();
+});
+
+// ../packages/frontend/src/url/index.ts
+var init_url = () => {};
+
+// ../packages/frontend/src/security/index.ts
+var init_security = () => {};
+
+// ../packages/frontend/src/utils/index.ts
+var init_utils = () => {};
+
+// ../packages/frontend/src/selectors/index.ts
+var init_selectors = () => {};
+
+// ../packages/frontend/src/index.ts
+var init_src = __esm(() => {
+  init_http();
+  init_csrf();
   init_forms();
-  loginForm = FormBuilder("register-form", (v) => ({
-    email: [
-      "bellib6@gmail.com",
-      v.required("Email is required"),
-      v.email("Enter a valid email")
-    ],
-    password: [
-      "",
-      v.required("Password is required"),
-      v.string(),
-      v.minLength(8, "Password must contain at least 8 characters")
-    ],
-    confirmPassword: [
-      "",
-      v.required("Confirm your password")
-    ]
-  }), {
-    validators: (v) => [
-      v.match("password", "confirmPassword", "Passwords do not match")
-    ]
+  init_dom2();
+  init_storage();
+  init_url();
+  init_security();
+  init_utils();
+  init_signals();
+  init_selectors();
+});
+
+// resources/js/pages/auth/register.ts
+var init_register = __esm(() => {
+  init_src();
+  page("register", () => {
+    const loginForm = FormBuilder("register-form", (v) => ({
+      email: [
+        "bellib6@gmail.com",
+        v.required("Email is required"),
+        v.email("Enter a valid email")
+      ],
+      password: [
+        "",
+        v.required("Password is required"),
+        v.string(),
+        v.minLength(8, "Password must contain at least 8 characters")
+      ],
+      confirmPassword: [
+        "",
+        v.required("Confirm your password")
+      ]
+    }), {
+      validators: (v) => [
+        v.match("password", "confirmPassword", "Passwords do not match")
+      ]
+    });
+    loginForm.onSubmit((value) => {
+      console.log("submit:", value);
+      const form = document.getElementById("login-form");
+    });
   });
-  loginForm.onSubmit((value) => {
-    console.log("submit:", value);
-    const form = document.getElementById("login-form");
+});
+
+// resources/js/pages/auth/login.ts
+var init_login = __esm(() => {
+  init_src();
+  page("login", () => {
+    console.log("Login page dev");
+    const loginForm = FormBuilder("login-form", (v) => ({
+      email: [
+        "bellib6@gmail.com",
+        v.required("Email is required"),
+        v.email("Enter a valid email")
+      ],
+      password: [
+        "",
+        v.required("Password is required"),
+        v.string(),
+        v.minLength(8, "Password must contain at least 8 characters")
+      ],
+      remember: [false, v.boolean()]
+    }));
+    loginForm.onSubmit((value) => {
+      console.log("submit:", value);
+      const form = document.getElementById("login-form");
+    });
   });
 });
 
@@ -1024,10 +1121,11 @@ var init_register = __esm(() => {
 var exports_auth = {};
 var init_auth = __esm(() => {
   init_register();
+  init_login();
 });
 
 // resources/js/app.ts
 Promise.resolve().then(() => init_auth());
 document.documentElement.dataset.warbler = "ready";
 
-//# debugId=F46D65AF4635075664756E2164756E21
+//# debugId=F3C4AE713B372A3F64756E2164756E21
