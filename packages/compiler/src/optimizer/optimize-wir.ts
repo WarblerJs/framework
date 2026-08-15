@@ -6,11 +6,15 @@ import type { ApplicationWIR, RouteWIR, SocketEventWIR } from "../wir/wir";
 export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
   const graphKeys = wir.graphs.map((graph) => graph.name).sort(compare);
   const graphIds = idRecord(graphKeys);
-  const providerRows = [
-    ...wir.rootProviders.map((provider) => ({ key: `root:${provider.name}`, graph: "", provider })),
-    ...wir.graphs.flatMap((graph) => graph.providers.map((provider) => ({ key: `${graph.name}:${provider.name}`, graph: graph.name, provider }))),
-  ].sort((left, right) => compare(left.key, right.key));
   const controllerRows = wir.graphs.flatMap((graph) => graph.controllers.map((controller) => ({ key: `${graph.name}:${controller.name}`, graph: graph.name, controller }))).sort((left, right) => compare(left.key, right.key));
+  const controllerIds = idMap(controllerRows.map((row) => row.key));
+  const providerRows = [
+    ...wir.rootProviders.map((provider) => ({ key: `root:${provider.name}`, graph: "", controller: "", provider })),
+    ...wir.graphs.flatMap((graph) => graph.providers.map((provider) => ({ key: `${graph.name}:${provider.name}`, graph: graph.name, controller: "", provider }))),
+    ...wir.graphs.flatMap((graph) => graph.controllers.flatMap((controller) => controller.providers.map((provider) => ({
+      key: `${graph.name}:${controller.name}:${provider.name}`, graph: graph.name, controller: controller.name, provider,
+    })))),
+  ].sort((left, right) => compare(left.key, right.key));
   const routeRows = wir.graphs.flatMap((graph) => graph.controllers.flatMap((controller) => controller.routes.map((route) => ({
     key: `${graph.name}:${route.method}:${joinPath(graph.prefix, controller.prefix, route.path)}:${controller.name}.${route.handler}`,
     graph: graph.name, controller: controller.name, path: joinPath(graph.prefix, controller.prefix, route.path), route,
@@ -24,10 +28,6 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
   const interceptorRows = wir.eventInterceptors.map((interceptor) => ({ key: `${interceptor.file}:${interceptor.name}`, interceptor })).sort((left, right) => compare(left.key, right.key));
 
   const providerIds = idMap(providerRows.map((row) => row.key));
-  const tokenNames = new Map<string, string>();
-  for (const provider of wir.rootProviders) if (provider.token !== undefined) tokenNames.set(provider.token, provider.name);
-  for (const graph of wir.graphs) for (const provider of graph.providers) if (provider.token !== undefined) tokenNames.set(provider.token, provider.name);
-  const controllerIds = idMap(controllerRows.map((row) => row.key));
   const handlerNames = uniqueSorted([
     ...routeRows.map((row) => `${row.graph}:${row.controller}.${row.route.handler}`),
     ...socketRows.map((row) => `${row.graph}:${row.controller}.${row.event.handler}`),
@@ -56,15 +56,11 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
   const providerDependencies: number[] = [];
   const providers: ProviderTableEntry[] = providerRows.map((row) => {
     const dependencyStart = providerDependencies.length;
-    for (const rawDependency of unique(row.provider.dependencies)) {
-      const dependency = tokenNames.get(rawDependency) ?? rawDependency;
-      const rootKey = `root:${dependency}`;
-      const localKey = `${row.graph}:${dependency}`;
-      providerDependencies.push(providerIds.get(localKey) ?? providerIds.get(rootKey) ?? -1);
-    }
+    appendProviderDependencies(providerDependencies, unique(row.provider.dependencies), row, providerRows, providerIds);
     return Object.freeze({
       id: providerIds.get(row.key)!, nameId: stringIds.get(row.provider.name)!,
       graphId: row.graph === "" ? -1 : graphIds[row.graph]!, scope: row.provider.provide,
+      ...(row.controller === "" ? {} : { controllerId: controllerIds.get(`${row.graph}:${row.controller}`)! }),
       dependencyStart, dependencyCount: providerDependencies.length - dependencyStart,
     });
   });
@@ -167,6 +163,41 @@ function appendIds(target: number[], names: readonly string[], ids: ReadonlyMap<
   const start = target.length;
   for (const name of unique(names)) target.push(ids.get(name)!);
   return start;
+}
+function appendProviderDependencies(
+  target: number[],
+  dependencies: readonly string[],
+  owner: Readonly<{ readonly graph: string; readonly controller: string }>,
+  providers: readonly Readonly<{ readonly key: string; readonly graph: string; readonly controller: string; readonly provider: { readonly name: string; readonly token?: string } }>[],
+  providerIds: ReadonlyMap<string, number>,
+): void {
+  for (const rawDependency of dependencies) {
+    const dependency = resolveProviderToken(rawDependency, owner, providers);
+    const controllerKey = owner.controller === "" ? undefined : `${owner.graph}:${owner.controller}:${dependency}`;
+    const graphKey = owner.graph === "" ? undefined : `${owner.graph}:${dependency}`;
+    const rootKey = `root:${dependency}`;
+    target.push(
+      (controllerKey === undefined ? undefined : providerIds.get(controllerKey)) ??
+      (graphKey === undefined ? undefined : providerIds.get(graphKey)) ??
+      providerIds.get(rootKey) ??
+      -1,
+    );
+  }
+}
+function resolveProviderToken(
+  dependency: string,
+  owner: Readonly<{ readonly graph: string; readonly controller: string }>,
+  providers: readonly Readonly<{ readonly graph: string; readonly controller: string; readonly provider: { readonly name: string; readonly token?: string } }>[],
+): string {
+  let graphMatch: string | undefined;
+  let rootMatch: string | undefined;
+  for (const row of providers) {
+    if (row.provider.token !== dependency) continue;
+    if (owner.controller !== "" && row.graph === owner.graph && row.controller === owner.controller) return row.provider.name;
+    if (owner.graph !== "" && row.graph === owner.graph && row.controller === "") graphMatch = row.provider.name;
+    if (row.graph === "" && row.controller === "") rootMatch = row.provider.name;
+  }
+  return graphMatch ?? rootMatch ?? dependency;
 }
 function idMap(values: readonly string[]): ReadonlyMap<string, number> { return new Map(values.map((value, index) => [value, index])); }
 function idRecord(values: readonly string[]): Record<string, number> {

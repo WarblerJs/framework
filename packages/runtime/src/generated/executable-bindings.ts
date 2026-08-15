@@ -10,8 +10,9 @@ export type ProviderBindingFactory<T = unknown> = (context: ProviderBindingConte
 export interface ProviderBinding<T = unknown> {
   readonly id: number;
   readonly token: ProviderToken<T>;
-  readonly scope: "graph" | "root" | "request";
+  readonly scope: "graph" | "root" | "request" | "controller";
   readonly graphId?: number;
+  readonly controllerId?: number;
   readonly dependencyIds: readonly number[];
   readonly factory: ProviderBindingFactory<T>;
   readonly dispose?: (instance: T) => void | Promise<void>;
@@ -21,6 +22,7 @@ export interface ControllerBinding<T = unknown> {
   readonly graphId: number;
   readonly transport: "http" | "websocket";
   readonly token: Constructor<T>;
+  readonly providerIds?: readonly number[];
   readonly factory: ProviderBindingFactory<T>;
   readonly dispose?: (instance: T) => void | Promise<void>;
 }

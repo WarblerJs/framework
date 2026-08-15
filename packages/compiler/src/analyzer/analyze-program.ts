@@ -157,9 +157,13 @@ function analyzeClass(
 
   if (controllerDecorator !== undefined) {
     const kind = controllerDecorator.name === "Controller" ? "http" : "websocket";
+    const controllerOptions = kind === "http" ? controllerObject(controllerDecorator.call) : undefined;
     const result: ControllerWIR = Object.freeze({
       ...location(node, source), name, kind,
-      prefix: kind === "http" ? stringArgument(controllerDecorator.call, 0, "") : "",
+      prefix: kind === "http" ? controllerPrefix(controllerDecorator.call) : "",
+      providerNames: Object.freeze(kind === "http" ? controllerProviderElementNames(controllerOptions, name, aliases, providers, source, diagnostics) : []),
+      providers: Object.freeze([]),
+      dependencies: Object.freeze([...dependencies]),
       routes: Object.freeze(routes), socketEvents: Object.freeze(socketEvents),
     });
     if (controllers.has(name)) diagnostic(diagnostics, kind === "http" ? DiagnosticCode.DUPLICATE_CONTROLLER : DiagnosticCode.DUPLICATE_SOCKET_CONTROLLER, `Duplicate ${kind} controller "${name}".`, node, source, [name]);
@@ -219,7 +223,29 @@ function providerElementNames(
   return property.initializer.elements.map((element, index) => {
     if (ts.isCallExpression(element) && ts.isIdentifier(element.expression) && (aliases.get(element.expression.text) ?? element.expression.text) === "Provider") {
       const syntheticName = `${graphName}#Provider${index}`;
-      const registration = analyzeProviderRegistration(syntheticName, element, graphName, aliases, source, diagnostics);
+      const registration = analyzeProviderRegistration(syntheticName, element, graphName, "graph", aliases, source, diagnostics);
+      if (registration !== undefined) providers.set(syntheticName, registration);
+      return syntheticName;
+    }
+    return referenceName(element);
+  });
+}
+
+/** Parses a Controller's local `providers: [...]` array. */
+function controllerProviderElementNames(
+  object: ts.ObjectLiteralExpression | undefined,
+  controllerName: string,
+  aliases: ReadonlyMap<string, string>,
+  providers: Map<string, ProviderWIR>,
+  source: ts.SourceFile,
+  diagnostics: CompilerDiagnostic[],
+): string[] {
+  const property = object === undefined ? undefined : findProperty(object, "providers");
+  if (property === undefined || !ts.isPropertyAssignment(property) || !ts.isArrayLiteralExpression(property.initializer)) return [];
+  return property.initializer.elements.map((element, index) => {
+    if (ts.isCallExpression(element) && ts.isIdentifier(element.expression) && (aliases.get(element.expression.text) ?? element.expression.text) === "Provider") {
+      const syntheticName = `${controllerName}#Provider${index}`;
+      const registration = analyzeProviderRegistration(syntheticName, element, controllerName, "controller", aliases, source, diagnostics);
       if (registration !== undefined) providers.set(syntheticName, registration);
       return syntheticName;
     }
@@ -231,23 +257,24 @@ function providerElementNames(
 function analyzeProviderRegistration(
   syntheticName: string,
   call: ts.CallExpression,
-  graphName: string,
+  ownerName: string,
+  provide: "graph" | "controller",
   aliases: ReadonlyMap<string, string>,
   source: ts.SourceFile,
   diagnostics: CompilerDiagnostic[],
 ): ProviderWIR | undefined {
   const object = call.arguments[0];
   if (object === undefined || !ts.isObjectLiteralExpression(object)) {
-    diagnostic(diagnostics, DiagnosticCode.INVALID_PROVIDER_SCOPE, `Provider(...) in Graph "${graphName}" requires an object literal argument.`, call, source, [graphName]);
+    diagnostic(diagnostics, DiagnosticCode.INVALID_PROVIDER_SCOPE, `Provider(...) in "${ownerName}" requires an object literal argument.`, call, source, [ownerName]);
     return undefined;
   }
   const provideProperty = findProperty(object, "provide");
   if (provideProperty === undefined || !ts.isPropertyAssignment(provideProperty)) {
-    diagnostic(diagnostics, DiagnosticCode.INVALID_PROVIDER_SCOPE, `Provider(...) in Graph "${graphName}" is missing a "provide" token.`, call, source, [graphName]);
+    diagnostic(diagnostics, DiagnosticCode.INVALID_PROVIDER_SCOPE, `Provider(...) in "${ownerName}" is missing a "provide" token.`, call, source, [ownerName]);
     return undefined;
   }
   const token = referenceName(provideProperty.initializer);
-  const base = { ...location(call, source), name: syntheticName, kind: "registration" as const, provide: "graph" as const, token };
+  const base = { ...location(call, source), name: syntheticName, kind: "registration" as const, provide, token };
 
   const useClass = findProperty(object, "useClass");
   if (useClass !== undefined && ts.isPropertyAssignment(useClass)) {
@@ -269,7 +296,7 @@ function analyzeProviderRegistration(
     const existing = referenceName(useExisting.initializer);
     return Object.freeze({ ...base, registration: "useExisting", existing, dependencies: Object.freeze([existing]) });
   }
-  diagnostic(diagnostics, DiagnosticCode.INVALID_PROVIDER_SCOPE, `Provider(...) in Graph "${graphName}" must declare useClass, useValue, useFactory, or useExisting.`, call, source, [graphName]);
+  diagnostic(diagnostics, DiagnosticCode.INVALID_PROVIDER_SCOPE, `Provider(...) in "${ownerName}" must declare useClass, useValue, useFactory, or useExisting.`, call, source, [ownerName]);
   return undefined;
 }
 
@@ -485,6 +512,17 @@ function objectTransport(object: ts.ObjectLiteralExpression | undefined): string
   if (ts.isStringLiteralLike(value)) return value.text;
   if (ts.isPropertyAccessExpression(value)) return value.name.text.toLowerCase();
   return "http";
+}
+function controllerObject(call: ts.CallExpression | undefined): ts.ObjectLiteralExpression | undefined {
+  const argument = call?.arguments[0];
+  return argument !== undefined && ts.isObjectLiteralExpression(argument) ? argument : undefined;
+}
+function controllerPrefix(call: ts.CallExpression | undefined): string {
+  const argument = call?.arguments[0];
+  if (argument === undefined) return "";
+  if (ts.isStringLiteralLike(argument)) return argument.text;
+  if (ts.isObjectLiteralExpression(argument)) return objectString(argument, "prefix", "");
+  return "";
 }
 function objectNames(object: ts.ObjectLiteralExpression | undefined, key: string): string[] {
   const property = object === undefined ? undefined : findProperty(object, key);

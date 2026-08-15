@@ -3,8 +3,15 @@ import { registerValidator } from "../validators/register.validator";
 import { inject } from "@warbler/core";
 import { RegisterUseCase } from "../../application/use-case/register.use-case";
 import type { UserEntity } from "../../domain/entities/user.entity";
+import { WlbPgRegisterRepository } from "../../infrastructure/persistance/wlb-pg-user.repository";
 
-@Controller('/register')
+@Controller({
+    prefix: '/register',
+    providers: [
+        WlbPgRegisterRepository,
+        RegisterUseCase
+    ]
+})
 export class RegisterController {
 
     readonly registerUseCase = inject(RegisterUseCase);

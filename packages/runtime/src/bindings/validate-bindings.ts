@@ -46,27 +46,44 @@ export function validateApplicationBindings(application: GeneratedApplicationBin
       if (binding.graphId !== undefined) fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Root provider has Graph ownership.", { providerId: binding.id });
     } else if (binding.scope === "graph" || binding.scope === "request") {
       if (binding.graphId === undefined || !graphIds.has(binding.graphId)) fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Graph provider has invalid ownership.", { providerId: binding.id });
+    } else if (binding.scope === "controller") {
+      if (binding.graphId === undefined || !graphIds.has(binding.graphId) || binding.controllerId === undefined) {
+        fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Controller provider has invalid ownership.", { providerId: binding.id });
+      }
     } else fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Provider scope is invalid.", { providerId: binding.id });
     for (const dependencyId of binding.dependencyIds) {
       safeId(dependencyId, "dependencyId");
       if (providers[dependencyId] === undefined) fail(RuntimeDiagnosticCode.PROVIDER_NOT_FOUND, "Provider dependency binding is missing.", { providerId: binding.id, dependencyId });
       const dependency = providers[dependencyId]!;
       if (binding.scope === "root" && dependency.scope !== "root") fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Root provider cannot depend on a Graph provider.", { providerId: binding.id, dependencyId });
-      if ((binding.scope === "graph" || binding.scope === "root") && dependency.scope === "request") {
+      if ((binding.scope === "graph" || binding.scope === "root" || binding.scope === "controller") && dependency.scope === "request") {
         fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Startup-scoped provider cannot depend on a request-scoped provider.", { providerId: binding.id, dependencyId });
       }
       if (
-        (binding.scope === "graph" || binding.scope === "request") &&
-        (dependency.scope === "graph" || dependency.scope === "request") &&
+        (binding.scope === "graph" || binding.scope === "request" || binding.scope === "controller") &&
+        (dependency.scope === "graph" || dependency.scope === "request" || dependency.scope === "controller") &&
         dependency.graphId !== binding.graphId
       ) {
         fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Provider dependency belongs to another Graph.", { providerId: binding.id, dependencyId });
+      }
+      if (binding.scope !== "controller" && dependency.scope === "controller") {
+        fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Only a controller-scoped provider can depend on another controller-scoped provider.", { providerId: binding.id, dependencyId });
+      }
+      if (binding.scope === "controller" && dependency.scope === "controller" && dependency.controllerId !== binding.controllerId) {
+        fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Controller provider dependency belongs to another Controller.", { providerId: binding.id, dependencyId });
       }
     }
   }
   for (const binding of application.controllers) {
     if (!graphIds.has(binding.graphId)) fail(RuntimeDiagnosticCode.INVALID_APPLICATION_BINDINGS, "Controller Graph does not exist.", { controllerId: binding.id, graphId: binding.graphId });
     if (binding.transport !== "http" && binding.transport !== "websocket") fail(RuntimeDiagnosticCode.INVALID_APPLICATION_BINDINGS, "Controller transport is invalid.", { controllerId: binding.id });
+    for (const providerId of binding.providerIds ?? Object.freeze([])) {
+      safeId(providerId, "providerId");
+      const provider = providers[providerId];
+      if (provider === undefined || provider.scope !== "controller" || provider.controllerId !== binding.id) {
+        fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Controller binding references an invalid local provider.", { controllerId: binding.id, providerId });
+      }
+    }
   }
   for (const binding of application.handlers) {
     if (controllers[binding.controllerId] === undefined || typeof binding.invoke !== "function") {

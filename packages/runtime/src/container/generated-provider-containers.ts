@@ -14,8 +14,9 @@ import type { ProviderBinding, ProviderBindingContext } from "../generated/execu
 export class GeneratedProviderContainer implements InjectionResolver {
   readonly #bindings: readonly (ProviderBinding | undefined)[];
   readonly #tokenIds: Map<ProviderToken<unknown>, number>;
-  readonly #scope: "root" | "graph" | "request";
+  readonly #scope: "root" | "graph" | "request" | "controller";
   readonly #graphId: number;
+  readonly #controllerId: number;
   readonly #parent: GeneratedProviderContainer | undefined;
   readonly #instances: unknown[];
   readonly #created: boolean[];
@@ -24,21 +25,35 @@ export class GeneratedProviderContainer implements InjectionResolver {
 
   public constructor(
     bindings: readonly (ProviderBinding | undefined)[],
-    scope: "root" | "graph" | "request",
+    scope: "root" | "graph" | "request" | "controller",
     graphId = -1,
+    controllerId = -1,
     parent?: GeneratedProviderContainer,
   ) {
     this.#bindings = bindings;
     this.#scope = scope;
     this.#graphId = graphId;
+    this.#controllerId = controllerId;
     this.#parent = parent;
     this.#tokenIds = new Map();
-    for (const binding of bindings) if (binding !== undefined) this.#tokenIds.set(binding.token, binding.id);
+    const tokenPriorities = new Map<ProviderToken<unknown>, number>();
+    for (const binding of bindings) {
+      if (binding === undefined) continue;
+      const priority = tokenPriority(binding, scope, graphId, controllerId);
+      if (priority < 0) continue;
+      const current = tokenPriorities.get(binding.token) ?? -1;
+      if (priority >= current) {
+        tokenPriorities.set(binding.token, priority);
+        this.#tokenIds.set(binding.token, binding.id);
+      }
+    }
     this.#instances = new Array(bindings.length);
     this.#created = new Array(bindings.length).fill(false);
   }
   /** Graph owner, or -1 for Root/Request-outside-a-Graph. */
   public get graphId(): number { return this.#graphId; }
+  /** Dense provider binding index shared by generated owner containers. */
+  public get bindings(): readonly (ProviderBinding | undefined)[] { return this.#bindings; }
 
   /** Eagerly creates this container's generated providers in deterministic ID order. */
   public async initialize(): Promise<void> {
@@ -46,6 +61,10 @@ export class GeneratedProviderContainer implements InjectionResolver {
       const binding = this.#bindings[id];
       if (binding !== undefined && this.#owns(binding)) await this.create(id);
     }
+  }
+  /** Eagerly creates selected providers owned by this container. */
+  public async initializeOnly(providerIds: readonly number[]): Promise<void> {
+    for (let index = 0; index < providerIds.length; index++) await this.create(providerIds[index]!);
   }
   /** Creates one provider after its compiler-supplied dependencies. */
   public async create(providerId: number): Promise<unknown> {
@@ -119,6 +138,7 @@ export class GeneratedProviderContainer implements InjectionResolver {
   #owns(binding: ProviderBinding): boolean {
     if (this.#scope === "root") return binding.scope === "root";
     if (this.#scope === "graph") return binding.scope === "graph" && binding.graphId === this.#graphId;
+    if (this.#scope === "controller") return binding.scope === "controller" && binding.graphId === this.#graphId && binding.controllerId === this.#controllerId;
     return binding.scope === "request" && binding.graphId === this.#graphId;
   }
 }
@@ -130,7 +150,13 @@ export class RootProviderContainer extends GeneratedProviderContainer {
 /** Graph provider owner with direct Root fallback. */
 export class GraphProviderContainer extends GeneratedProviderContainer {
   public constructor(bindings: readonly (ProviderBinding | undefined)[], graphId: number, root: RootProviderContainer) {
-    super(bindings, "graph", graphId, root);
+    super(bindings, "graph", graphId, -1, root);
+  }
+}
+/** Controller provider owner with direct Graph fallback. */
+export class ControllerProviderContainer extends GeneratedProviderContainer {
+  public constructor(bindings: readonly (ProviderBinding | undefined)[], graphId: number, controllerId: number, graph: GraphProviderContainer) {
+    super(bindings, "controller", graphId, controllerId, graph);
   }
 }
 /**
@@ -140,7 +166,7 @@ export class GraphProviderContainer extends GeneratedProviderContainer {
  */
 export class RequestProviderContainer extends GeneratedProviderContainer {
   public constructor(bindings: readonly (ProviderBinding | undefined)[], graphId: number, graph: GraphProviderContainer) {
-    super(bindings, "request", graphId, graph);
+    super(bindings, "request", graphId, -1, graph);
   }
 }
 function bindingContext(resolver: InjectionResolver): ProviderBindingContext {
@@ -148,6 +174,13 @@ function bindingContext(resolver: InjectionResolver): ProviderBindingContext {
     resolve: <T>(token: ProviderToken<T>): T => resolver.resolve(token),
     run: <T>(callback: () => T): T => runInInjectionContext(resolver, callback),
   });
+}
+function tokenPriority(binding: ProviderBinding, scope: "root" | "graph" | "request" | "controller", graphId: number, controllerId: number): number {
+  if (binding.scope === "root") return 0;
+  if ((scope === "graph" || scope === "request" || scope === "controller") && binding.graphId === graphId && binding.scope === "graph") return 1;
+  if (scope === "request" && binding.graphId === graphId && binding.scope === "request") return 2;
+  if (scope === "controller" && binding.graphId === graphId && binding.controllerId === controllerId && binding.scope === "controller") return 2;
+  return -1;
 }
 function isThenable<T>(value: T | Promise<T>): value is Promise<T> {
   return typeof value === "object" && value !== null && "then" in value && typeof value.then === "function";

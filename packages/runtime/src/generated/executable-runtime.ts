@@ -14,6 +14,7 @@ export class ExecutableBindingsRuntime {
   readonly #root = new Container();
   readonly #graphs = new Map<number, Container>();
   readonly #controllers: unknown[] = [];
+  readonly #controllerContainers: Array<Container | undefined> = [];
   readonly #controllerBindings: readonly (ControllerBinding | undefined)[];
   readonly #handlerBindings: readonly (HandlerBinding | undefined)[];
 
@@ -23,10 +24,10 @@ export class ExecutableBindingsRuntime {
     this.#controllerBindings = denseById(bindings.controllers);
     this.#handlerBindings = denseById(bindings.handlers);
     for (const graphId of Object.values(bindings.application.graphIds)) this.#graphs.set(graphId, new Container(this.#root));
-    for (const binding of bindings.providers) this.#registerProvider(binding);
+    for (const binding of bindings.providers) if (binding.scope !== "controller") this.#registerProvider(binding);
     for (const binding of bindings.controllers) {
       const container = this.#graph(binding.graphId);
-      container.register({ token: binding.token, useFactory: () => binding.factory(bindingContext(container)) });
+      container.register({ token: binding.token, useFactory: () => this.controller(binding.id) });
     }
   }
 
@@ -34,6 +35,14 @@ export class ExecutableBindingsRuntime {
   public resolveProvider(graphId: number, providerId: number): unknown {
     const binding = this.#bindings.providers[providerId];
     if (binding === undefined || binding.id !== providerId) throw new RuntimeProviderNotFoundError(`Generated provider binding not found: ${providerId}`);
+    if (binding.scope === "controller") {
+      const controllerId = binding.controllerId;
+      if (controllerId === undefined) throw new RuntimeProviderNotFoundError(`Generated controller provider has no Controller owner: ${providerId}`);
+      this.controller(controllerId);
+      const container = this.#controllerContainers[controllerId];
+      if (container === undefined) throw new RuntimeProviderNotFoundError(`Generated Controller container not found: ${controllerId}`);
+      return container.resolve(binding.token);
+    }
     return (binding.scope === "root" ? this.#root : this.#graph(graphId)).resolve(binding.token);
   }
 
@@ -42,7 +51,12 @@ export class ExecutableBindingsRuntime {
     if (controllerId in this.#controllers) return this.#controllers[controllerId];
     const binding = this.#controllerBindings[controllerId];
     if (binding === undefined) throw new GeneratedArtifactError(`Generated controller binding not found: ${controllerId}`);
-    const value = this.#graph(binding.graphId).resolve(binding.token);
+    const graph = this.#graph(binding.graphId);
+    const container = new Container(graph);
+    this.#registerControllerProviders(container, binding);
+    const value = binding.factory(bindingContext(container));
+    container.register({ token: binding.token, useValue: value });
+    this.#controllerContainers[controllerId] = container;
     this.#controllers[controllerId] = value;
     return value;
   }
@@ -78,6 +92,14 @@ export class ExecutableBindingsRuntime {
   #registerProvider(binding: ProviderBinding): void {
     const container = binding.scope === "root" ? this.#root : this.#graph(requiredGraphId(binding));
     container.register({ token: binding.token, useFactory: () => binding.factory(bindingContext(container)) });
+  }
+  #registerControllerProviders(container: Container, controller: ControllerBinding): void {
+    const providerIds = controller.providerIds ?? Object.freeze([]);
+    for (const providerId of providerIds) {
+      const binding = this.#bindings.providers[providerId];
+      if (binding === undefined || binding.scope !== "controller" || binding.controllerId !== controller.id) throw new GeneratedArtifactError(`Generated Controller provider binding not found: ${providerId}`);
+      container.register({ token: binding.token, useFactory: () => binding.factory(bindingContext(container)) });
+    }
   }
   #graph(graphId: number): Container {
     const graph = this.#graphs.get(graphId);

@@ -8,9 +8,6 @@ import { RegisterUseCase } from "./register/application/use-case/register.use-ca
     controllers: [
         RegisterController
     ],
-    providers: [
-        WlbPgRegisterRepository,
-        RegisterUseCase
-    ]
+    providers: []
 })
 export class AuthGraph {}

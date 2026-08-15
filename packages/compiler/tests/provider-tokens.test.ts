@@ -127,6 +127,94 @@ describe("token-based provider resolution", () => {
     expect(greeter.logger.constructor.name).toBe("ConsoleLogger");
   }, 15_000);
 
+  test("controller-scoped providers resolve only for the declaring controller", async () => {
+    const root = await tokenProject(`
+      import { Graph, Service, inject } from "@warbler/core";
+      import { Controller, Get } from "@warbler/http";
+
+      @Service()
+      export class AuthService {}
+
+      @Service()
+      export class RegisterRepository {}
+
+      @Service()
+      export class RegisterUseCase {
+        readonly repository = inject(RegisterRepository);
+        readonly auth = inject(AuthService);
+      }
+
+      @Controller({ prefix: "/register", providers: [RegisterRepository, RegisterUseCase] })
+      export class RegisterController {
+        readonly register = inject(RegisterUseCase);
+        @Get("")
+        show(): Response { return new Response(this.register.repository instanceof RegisterRepository ? "register" : "invalid"); }
+      }
+
+      @Controller("/login")
+      export class LoginController {
+        readonly auth = inject(AuthService);
+        @Get("")
+        show(): Response { return new Response("login"); }
+      }
+
+      @Graph({ prefix: "/auth", controllers: [LoginController, RegisterController], providers: [AuthService] })
+      export class AuthGraph {}
+    `);
+    const context = await compileProject(root);
+    expect(context.diagnostics).toEqual([]);
+    const graph = context.applicationWIR!.graphs[0]!;
+    expect(graph.providers.map((provider) => provider.name)).toEqual(["AuthService"]);
+    const register = graph.controllers.find((controller) => controller.name === "RegisterController")!;
+    const login = graph.controllers.find((controller) => controller.name === "LoginController")!;
+    expect(register.providers.map((provider) => provider.name).sort()).toEqual(["RegisterRepository", "RegisterUseCase"]);
+    expect(login.providers).toEqual([]);
+
+    const optimized = context.generatedApplication!.optimized;
+    const registerControllerId = optimized.controllers.find((controller) => optimized.strings[controller.nameId] === "RegisterController")!.id;
+    const controllerProviderRows = optimized.providers.filter((provider) => provider.scope === "controller");
+    expect(controllerProviderRows).toHaveLength(2);
+    expect(controllerProviderRows.every((provider) => provider.controllerId === registerControllerId)).toBe(true);
+
+    const generated = await import(join(root, ".warbler", "generated", "application.generated.ts"));
+    const runtime = createExecutableBindingsRuntime(generated.default);
+    const routes = runtime.createHttpRoutes();
+    expect(await (await routes["/auth/register"]!.GET!(new Request("http://localhost/auth/register"))).text()).toBe("register");
+    expect(await (await routes["/auth/login"]!.GET!(new Request("http://localhost/auth/login"))).text()).toBe("login");
+  }, 15_000);
+
+  test("controller-scoped providers do not leak into sibling controllers", async () => {
+    const root = await tokenProject(`
+      import { Graph, Service, inject } from "@warbler/core";
+      import { Controller, Get } from "@warbler/http";
+
+      @Service()
+      export class RegisterUseCase {}
+
+      @Controller({ prefix: "/register", providers: [RegisterUseCase] })
+      export class RegisterController {
+        @Get("")
+        show(): Response { return new Response("register"); }
+      }
+
+      @Controller("/login")
+      export class LoginController {
+        readonly register = inject(RegisterUseCase);
+        @Get("")
+        show(): Response { return new Response("login"); }
+      }
+
+      @Graph({ prefix: "/auth", controllers: [LoginController, RegisterController] })
+      export class AuthGraph {}
+    `);
+    const context = await compileProject(root);
+    expect(context.diagnostics.some((diagnostic) =>
+      diagnostic.category === "error" &&
+      diagnostic.code === "WARBLER1009" &&
+      diagnostic.message.includes("cannot be injected into \"LoginController\""),
+    )).toBe(true);
+  }, 15_000);
+
   test("registers SocketPublisher as a framework root provider when imported", async () => {
     const root = await tokenProject(`
       import { Graph, Service, inject } from "@warbler/core";

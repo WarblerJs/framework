@@ -41,6 +41,11 @@ class UsersController {
   readonly users = inject(Users);
   list(request: Request): Response { return new Response(`${request.method}:${this.users.logger instanceof Logger}`); }
 }
+class LocalService {}
+class LocalController {
+  readonly local = inject(LocalService);
+  show(): Response { return new Response(this.local instanceof LocalService ? "local" : "invalid"); }
+}
 
 function application(events: string[], valid = true): GeneratedApplicationBindings {
   return Object.freeze({
@@ -125,6 +130,59 @@ describe("startRuntime generated binding consumption", () => {
     await runtime.stop();
     await runtime.stop();
     expect(events.slice(-4)).toEqual(["transport:stop", "dispose:controller", "dispose:graph", "dispose:root"]);
+  });
+
+  test("creates controller-scoped providers inside the owning Controller container", async () => {
+    const events: string[] = [];
+    let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
+    const launcher: RuntimeTransportLauncher = {
+      kind: "http",
+      start(input) {
+        routes = (input.bindings as { readonly routes: typeof routes }).routes;
+        return Object.freeze({ listening: true });
+      },
+      stop() {},
+    };
+    const runtime = await startRuntime({
+      application: Object.freeze({
+        application: Object.freeze({
+          strings: Object.freeze([]), graphIds: Object.freeze({ AppGraph: 0 }),
+          providerTable: Object.freeze([
+            Object.freeze({ id: 0, nameId: 0, graphId: 0, controllerId: 0, scope: "controller", dependencyStart: 0, dependencyCount: 0 }),
+          ]),
+          providerDependencies: Object.freeze([]),
+          routeTable: Object.freeze([Object.freeze({ id: 0, controllerId: 0, handlerId: 0, validatorId: -1, guardStart: 0, guardCount: 0, middlewareStart: 0, middlewareCount: 0, flags: 0 })]),
+          socketEventTable: Object.freeze([]),
+          routeGuards: Object.freeze([]), routeMiddleware: Object.freeze([]), socketGuards: Object.freeze([]), socketMiddleware: Object.freeze([]),
+        }),
+        providers: Object.freeze([
+          Object.freeze({
+            id: 0, token: LocalService, scope: "controller", graphId: 0, controllerId: 0, dependencyIds: Object.freeze([]),
+            factory: (context: ProviderBindingContext) => context.run(() => { events.push("provider:controller"); return new LocalService(); }),
+          }),
+        ]),
+        controllers: Object.freeze([
+          Object.freeze({
+            id: 0, graphId: 0, transport: "http", token: LocalController, providerIds: Object.freeze([0]),
+            factory: (context: ProviderBindingContext) => context.run(() => { events.push("controller"); return new LocalController(); }),
+          }),
+        ]),
+        handlers: Object.freeze([
+          Object.freeze({ id: 0, controllerId: 0, parameterCount: 0, invoke: (controller: LocalController) => controller.show() }),
+        ]),
+        guards: Object.freeze([]), middleware: Object.freeze([]), validators: Object.freeze([]),
+        http: Object.freeze({
+          routes: Object.freeze([Object.freeze({ id: 0 })]),
+          createRoutes: (execute: HttpRouteExecutor) => Object.freeze({ "/local": Object.freeze({ GET: (request: Request) => execute(0, request) }) }),
+        }),
+      }),
+      runtimeConfig: runtimeConfig(true),
+      transportLaunchers: [launcher],
+      transportConfigLoader: async (kind) => Object.freeze({ kind }),
+    });
+    expect(events).toEqual(["provider:controller", "controller"]);
+    expect(await (await routes["/local"]!.GET!(new Request("http://localhost/local"))).text()).toBe("local");
+    await runtime.stop();
   });
 
   test("does not start a disabled transport and prevents invalid validation from reaching middleware or Handler", async () => {

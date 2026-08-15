@@ -25,7 +25,7 @@ export interface LiteralTokenReference {
 /** A provider/existing token: either an imported declaration or an inline literal. */
 export type TokenReference = BindingImport | LiteralTokenReference;
 export interface ProviderBindingPlan {
-  readonly id: number; readonly graphId: number; readonly scope: "graph" | "root" | "request";
+  readonly id: number; readonly graphId: number; readonly controllerId?: number; readonly scope: "graph" | "root" | "request" | "controller";
   readonly registration: "class" | "useValue" | "useFactory" | "useExisting";
   readonly dependencyIds: readonly number[]; readonly token: TokenReference;
   readonly implementation?: BindingImport;
@@ -35,7 +35,7 @@ export interface ProviderBindingPlan {
   readonly dependencySymbols: readonly BindingImport[];
 }
 export interface ControllerBindingPlan {
-  readonly id: number; readonly graphId: number; readonly transport: "http" | "websocket"; readonly symbol: BindingImport;
+  readonly id: number; readonly graphId: number; readonly transport: "http" | "websocket"; readonly symbol: BindingImport; readonly providerIds: readonly number[];
 }
 export interface HandlerBindingPlan {
   readonly id: number; readonly controllerId: number; readonly method: string; readonly controller: BindingImport; readonly parameterCount: number;
@@ -62,6 +62,9 @@ export function analyzeExecutableBindings(
   const providerOwners = new Map<string, { readonly graph: string; readonly provider: ProviderWIR }>();
   for (const provider of wir.rootProviders) providerOwners.set(`root:${provider.name}`, { graph: "", provider });
   for (const graph of wir.graphs) for (const provider of graph.providers) providerOwners.set(`${graph.name}:${provider.name}`, { graph: graph.name, provider });
+  for (const graph of wir.graphs) for (const controller of graph.controllers) for (const provider of controller.providers) {
+    providerOwners.set(`${graph.name}:${controller.name}:${provider.name}`, { graph: graph.name, provider });
+  }
   const controllerOwners = new Map<string, { readonly graph: string; readonly controller: ControllerWIR }>();
   for (const graph of wir.graphs) for (const controller of graph.controllers) controllerOwners.set(`${graph.name}:${controller.name}`, { graph: graph.name, controller });
 
@@ -114,9 +117,11 @@ export function analyzeExecutableBindings(
   const providers: ProviderBindingPlan[] = [];
   for (const row of optimized.providers) {
     const name = optimized.strings[row.nameId]!;
-    const ownerEntry = [...providerOwners.entries()].find(([key]) => key === (row.scope === "root" ? `root:${name}` : `${graphName(optimized, row.graphId)}:${name}`));
-    if (ownerEntry === undefined) { failed = true; continue; }
-    const owner = ownerEntry[1];
+    const rowGraphName = graphName(optimized, row.graphId);
+    const rowControllerName = row.controllerId === undefined ? "" : controllerName(optimized, row.controllerId);
+    const ownerKey = row.scope === "root" ? `root:${name}` : row.scope === "controller" ? `${rowGraphName}:${rowControllerName}:${name}` : `${rowGraphName}:${name}`;
+    const owner = providerOwners.get(ownerKey);
+    if (owner === undefined) { failed = true; continue; }
     const provider = owner.provider;
     const token = resolveToken(provider.token ?? provider.name);
     if (token === undefined) { failed = true; continue; }
@@ -134,7 +139,7 @@ export function analyzeExecutableBindings(
     const capturedFactory = registration === "useFactory" ? resolveCaptured(provider.capturedFactory) : undefined;
 
     providers.push(Object.freeze({
-      id: row.id, graphId: row.graphId, scope: row.scope, registration,
+      id: row.id, graphId: row.graphId, ...(row.controllerId === undefined ? {} : { controllerId: row.controllerId }), scope: row.scope, registration,
       dependencyIds: Object.freeze(dependencyIds), token,
       ...(implementation === undefined ? {} : { implementation }),
       ...(capturedValue === undefined ? {} : { capturedValue }),
@@ -149,7 +154,8 @@ export function analyzeExecutableBindings(
     const owner = controllerOwners.get(`${graphName(optimized, row.graphId)}:${name}`);
     const symbol = owner === undefined ? undefined : resolveValue(name, owner.controller.file);
     if (owner === undefined || symbol === undefined) { failed = true; continue; }
-    controllers.push(Object.freeze({ id: row.id, graphId: row.graphId, transport: row.websocket ? "websocket" : "http", symbol }));
+    const providerIds = optimized.providers.filter((provider) => provider.scope === "controller" && provider.controllerId === row.id).map((provider) => provider.id);
+    controllers.push(Object.freeze({ id: row.id, graphId: row.graphId, transport: row.websocket ? "websocket" : "http", symbol, providerIds: Object.freeze(providerIds) }));
   }
   const handlers: HandlerBindingPlan[] = [];
   for (const row of optimized.handlers) {
@@ -283,6 +289,10 @@ export function generatedImportPath(root: string, file: string): string {
 }
 function graphName(optimized: OptimizedApplication, id: number): string {
   return Object.entries(optimized.graphIds).find(([, value]) => value === id)?.[0] ?? "";
+}
+function controllerName(optimized: OptimizedApplication, id: number): string {
+  const row = optimized.controllers.find((controller) => controller.id === id);
+  return row === undefined ? "" : optimized.strings[row.nameId] ?? "";
 }
 /** Produces a collision-safe local identifier for a generated import binding. */
 export function safeLocal(name: string, index: number): string { return `Binding${index}_${name.replace(/[^A-Za-z0-9_$]/gu, "_")}`; }

@@ -4,14 +4,13 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "playground",
-    "zzz"
+    "playground"
   ],
   "scripts": {
     "install:all": "bun install",
     "test": "bun test",
     "typecheck": "bun run --filter '*' typecheck",
-    "clean": "rm -rf node_modules rm -rf playground/node_modules rm -f bun.lock rm -f playground/bun.lock rm -rf zzz/node_modules rm -f bun.lock rm -f zzz/bun.lock",
+    "clean": "rm -rf node_modules rm -rf playground/node_modules rm -f bun.lock rm -f playground/bun.lock",
     "test:request": "autocannon -c 50 -d 30 http://0.0.0.0:3000/users/45"
   },
   "devDependencies": {

@@ -238,31 +238,6 @@
         "typescript": "^5.9.2",
       },
     },
-    "zzz": {
-      "name": "@warbler/zzz",
-      "version": "0.1.0",
-      "dependencies": {
-        "@warbler/config": "workspace:*",
-        "@warbler/core": "workspace:*",
-        "@warbler/crypto": "workspace:*",
-        "@warbler/database": "workspace:*",
-        "@warbler/email": "workspace:*",
-        "@warbler/events": "workspace:*",
-        "@warbler/frontend": "workspace:*",
-        "@warbler/http": "workspace:*",
-        "@warbler/runtime": "workspace:*",
-        "@warbler/validators": "workspace:*",
-        "@warbler/view": "workspace:*",
-        "@warbler/websocket": "workspace:*",
-      },
-      "devDependencies": {
-        "@types/bun": "latest",
-        "@warbler/cli": "workspace:*",
-        "@warbler/compiler": "workspace:*",
-        "@warbler/transport": "workspace:*",
-        "typescript": "^5.9.2",
-      },
-    },
   },
   "packages": {
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
@@ -374,8 +349,6 @@
     "@warbler/view": ["@warbler/view@workspace:packages/view"],
 
     "@warbler/websocket": ["@warbler/websocket@workspace:packages/websocket"],
-
-    "@warbler/zzz": ["@warbler/zzz@workspace:zzz"],
 
     "braces": ["braces@3.0.3", "", { "dependencies": { "fill-range": "^7.1.1" } }, "sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA=="],
 

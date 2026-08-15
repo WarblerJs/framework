@@ -7,6 +7,8 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
   const graphNames = new Map<string, AnalyzedGraph>();
   const controllerOwners = new Map<string, AnalyzedGraph>();
   const providerOwners = new Map<string, AnalyzedGraph>();
+  const controllerProviderOwners = new Map<string, string>();
+  const controllerScopedProviderNames = new Set<string>();
   const rootProviders = new Map<string, ProviderWIR>();
   const result: GraphWIR[] = [];
 
@@ -52,7 +54,34 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
         continue;
       }
       controllerOwners.set(name, graph);
-      controllers.push(controller);
+      const controllerProviders: ProviderWIR[] = [];
+      const localControllerProviderNames = new Set<string>();
+      for (const providerName of controller.providerNames) {
+        const provider = analysis.providers.get(providerName);
+        if (provider === undefined) {
+          add(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Controller "${controller.name}" references unknown provider "${providerName}".`, controller, [controller.name, providerName]);
+          continue;
+        }
+        if (localControllerProviderNames.has(providerName)) {
+          add(diagnostics, DiagnosticCode.DUPLICATE_PROVIDER, `Controller "${controller.name}" declares provider "${providerName}" more than once.`, provider, [controller.name, providerName]);
+          continue;
+        }
+        localControllerProviderNames.add(providerName);
+        if (provider.provide === "root") continue;
+        if (provider.provide === "request") {
+          add(diagnostics, DiagnosticCode.PROVIDER_VISIBILITY, `Controller provider "${provider.name}" cannot be request-scoped. Request-scoped providers must be declared at Graph scope.`, provider, [controller.name, provider.name]);
+          continue;
+        }
+        const scoped = provider.provide === "controller" ? provider : controllerScopedProvider(provider);
+        controllerProviders.push(scoped);
+        controllerScopedProviderNames.add(provider.name);
+        controllerProviderOwners.set(`${controller.name}:${provider.name}`, graph.name);
+      }
+      controllers.push(Object.freeze({
+        ...copyLocation(controller), name: controller.name, kind: controller.kind, prefix: controller.prefix,
+        providerNames: controller.providerNames,
+        providers: Object.freeze(controllerProviders), dependencies: controller.dependencies, routes: controller.routes, socketEvents: controller.socketEvents,
+      }));
     }
     for (const name of graph.providerNames) {
       const provider = analysis.providers.get(name);
@@ -87,10 +116,12 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
     if (!controllerOwners.has(controller.name)) add(diagnostics, DiagnosticCode.MISSING_GRAPH, `Controller "${controller.name}" is not owned by a Graph.`, controller, [controller.name]);
   }
   for (const provider of analysis.providers.values()) {
-    if ((provider.provide === "graph" || provider.provide === "request") && !providerOwners.has(provider.name)) add(diagnostics, DiagnosticCode.MISSING_GRAPH, `Graph provider "${provider.name}" is not owned by a Graph.`, provider, [provider.name]);
+    if ((provider.provide === "graph" || provider.provide === "request") && !providerOwners.has(provider.name) && !controllerScopedProviderNames.has(provider.name)) {
+      add(diagnostics, DiagnosticCode.MISSING_GRAPH, `Graph provider "${provider.name}" is not owned by a Graph.`, provider, [provider.name]);
+    }
   }
 
-  validateDependencies(result, rootProviders, providerOwners, tokenNames, diagnostics);
+  validateDependencies(result, rootProviders, providerOwners, controllerProviderOwners, diagnostics);
   validateEvents(analysis, diagnostics);
   validateRouteNames(result, diagnostics);
   return Object.freeze({
@@ -101,6 +132,22 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
     events: Object.freeze([...analysis.events.values()]),
     eventListeners: Object.freeze([...analysis.eventListeners.values()]),
     eventInterceptors: Object.freeze([...analysis.eventInterceptors.values()]),
+  });
+}
+
+function controllerScopedProvider(provider: ProviderWIR): ProviderWIR {
+  return Object.freeze({
+    ...copyLocation(provider),
+    name: provider.name,
+    kind: provider.kind,
+    provide: "controller",
+    ...(provider.token === undefined ? {} : { token: provider.token }),
+    registration: provider.registration,
+    ...(provider.implementation === undefined ? {} : { implementation: provider.implementation }),
+    ...(provider.capturedValue === undefined ? {} : { capturedValue: provider.capturedValue }),
+    ...(provider.capturedFactory === undefined ? {} : { capturedFactory: provider.capturedFactory }),
+    ...(provider.existing === undefined ? {} : { existing: provider.existing }),
+    dependencies: provider.dependencies,
   });
 }
 
@@ -138,18 +185,126 @@ function validateSocketEvents(controllers: readonly ControllerWIR[], diagnostics
     }
   }
 }
-function validateDependencies(graphs: readonly GraphWIR[], roots: ReadonlyMap<string, ProviderWIR>, owners: ReadonlyMap<string, AnalyzedGraph>, tokenNames: ReadonlyMap<string, string>, diagnostics: CompilerDiagnostic[]): void {
+function validateDependencies(
+  graphs: readonly GraphWIR[],
+  roots: ReadonlyMap<string, ProviderWIR>,
+  owners: ReadonlyMap<string, AnalyzedGraph>,
+  controllerOwners: ReadonlyMap<string, string>,
+  diagnostics: CompilerDiagnostic[],
+): void {
+  const rootTokens = providerTokenNames(roots);
   for (const graph of graphs) {
-    const local = new Map(graph.providers.map((provider) => [provider.name, provider]));
-    for (const provider of [...graph.providers, ...roots.values()]) for (const rawDependency of provider.dependencies) {
-      const dependency = tokenNames.get(rawDependency) ?? rawDependency;
-      if (roots.has(dependency) || (provider.provide === "graph" && local.has(dependency))) continue;
-      const owner = owners.get(dependency);
-      if (owner !== undefined) add(diagnostics, DiagnosticCode.PROVIDER_VISIBILITY, `Provider "${dependency}" is scoped to Graph "${owner.name}" and cannot be injected into "${graph.name}". Declare provide: ProviderScope.ROOT if the provider should be globally available.`, provider, [provider.name, dependency, owner.name, graph.name]);
-      else add(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Provider "${provider.name}" depends on unknown provider "${dependency}".`, provider, [provider.name, dependency]);
+    const graphProviders = new Map(graph.providers.map((provider) => [provider.name, provider]));
+    const graphTokens = providerTokenNames(graphProviders);
+    for (const provider of roots.values()) validateProviderDependencies(provider, graph.name, roots, graphProviders, undefined, rootTokens, graphTokens, undefined, owners, controllerOwners, diagnostics);
+    for (const provider of graph.providers) validateProviderDependencies(provider, graph.name, roots, graphProviders, undefined, rootTokens, graphTokens, undefined, owners, controllerOwners, diagnostics);
+    detectCycles([...graph.providers, ...roots.values()], visibleTokenNames(rootTokens, graphTokens, undefined), diagnostics);
+    for (const controller of graph.controllers) {
+      const controllerProviders = new Map(controller.providers.map((provider) => [provider.name, provider]));
+      const controllerTokens = providerTokenNames(controllerProviders);
+      for (const provider of controller.providers) {
+        validateProviderDependencies(provider, graph.name, roots, graphProviders, controllerProviders, rootTokens, graphTokens, controllerTokens, owners, controllerOwners, diagnostics);
+      }
+      validateControllerDependencies(controller, graph.name, roots, graphProviders, controllerProviders, rootTokens, graphTokens, controllerTokens, owners, controllerOwners, diagnostics);
+      detectCycles([...controller.providers, ...graph.providers, ...roots.values()], visibleTokenNames(rootTokens, graphTokens, controllerTokens), diagnostics);
     }
-    detectCycles([...graph.providers, ...roots.values()], tokenNames, diagnostics);
   }
+}
+
+function validateControllerDependencies(
+  controller: ControllerWIR,
+  graphName: string,
+  roots: ReadonlyMap<string, ProviderWIR>,
+  graphProviders: ReadonlyMap<string, ProviderWIR>,
+  controllerProviders: ReadonlyMap<string, ProviderWIR>,
+  rootTokens: ReadonlyMap<string, string>,
+  graphTokens: ReadonlyMap<string, string>,
+  controllerTokens: ReadonlyMap<string, string>,
+  owners: ReadonlyMap<string, AnalyzedGraph>,
+  controllerOwners: ReadonlyMap<string, string>,
+  diagnostics: CompilerDiagnostic[],
+): void {
+  const tokens = visibleTokenNames(rootTokens, graphTokens, controllerTokens);
+  for (const rawDependency of controller.dependencies) {
+    const dependency = tokens.get(rawDependency) ?? rawDependency;
+    const resolved = controllerProviders.get(dependency) ?? graphProviders.get(dependency) ?? roots.get(dependency);
+    if (resolved !== undefined) {
+      if (resolved.provide === "request") add(diagnostics, DiagnosticCode.PROVIDER_VISIBILITY, `Controller "${controller.name}" cannot depend on request-scoped provider "${dependency}".`, controller, [controller.name, dependency]);
+      continue;
+    }
+    const owner = owners.get(dependency);
+    if (owner !== undefined) {
+      add(diagnostics, DiagnosticCode.PROVIDER_VISIBILITY, `Provider "${dependency}" is scoped to Graph "${owner.name}" and cannot be injected into "${graphName}". Declare provide: ProviderScope.ROOT if the provider should be globally available.`, controller, [controller.name, dependency, owner.name, graphName]);
+      continue;
+    }
+    const controllerOwner = controllerOwnerFor(dependency, controllerOwners);
+    if (controllerOwner !== undefined) {
+      add(diagnostics, DiagnosticCode.PROVIDER_VISIBILITY, `Controller provider "${dependency}" is scoped to "${controllerOwner}" and cannot be injected into "${controller.name}".`, controller, [controller.name, dependency, controllerOwner]);
+      continue;
+    }
+    add(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Controller "${controller.name}" depends on unknown provider "${dependency}".`, controller, [controller.name, dependency]);
+  }
+}
+
+function validateProviderDependencies(
+  provider: ProviderWIR,
+  graphName: string,
+  roots: ReadonlyMap<string, ProviderWIR>,
+  graphProviders: ReadonlyMap<string, ProviderWIR>,
+  controllerProviders: ReadonlyMap<string, ProviderWIR> | undefined,
+  rootTokens: ReadonlyMap<string, string>,
+  graphTokens: ReadonlyMap<string, string>,
+  controllerTokens: ReadonlyMap<string, string> | undefined,
+  owners: ReadonlyMap<string, AnalyzedGraph>,
+  controllerOwners: ReadonlyMap<string, string>,
+  diagnostics: CompilerDiagnostic[],
+): void {
+  const tokens = visibleTokenNames(rootTokens, graphTokens, controllerTokens);
+  for (const rawDependency of provider.dependencies) {
+    const dependency = tokens.get(rawDependency) ?? rawDependency;
+    const resolved = controllerProviders?.get(dependency) ?? graphProviders.get(dependency) ?? roots.get(dependency);
+    if (resolved !== undefined) {
+      if ((provider.provide === "root" || provider.provide === "controller") && resolved.provide === "request") {
+        add(diagnostics, DiagnosticCode.PROVIDER_VISIBILITY, `Startup-scoped provider "${provider.name}" cannot depend on request-scoped provider "${dependency}".`, provider, [provider.name, dependency]);
+      }
+      continue;
+    }
+    const owner = owners.get(dependency);
+    if (owner !== undefined) {
+      add(diagnostics, DiagnosticCode.PROVIDER_VISIBILITY, `Provider "${dependency}" is scoped to Graph "${owner.name}" and cannot be injected into "${graphName}". Declare provide: ProviderScope.ROOT if the provider should be globally available.`, provider, [provider.name, dependency, owner.name, graphName]);
+      continue;
+    }
+    const controllerOwner = controllerOwnerFor(dependency, controllerOwners);
+    if (controllerOwner !== undefined) {
+      add(diagnostics, DiagnosticCode.PROVIDER_VISIBILITY, `Controller provider "${dependency}" is scoped to "${controllerOwner}" and cannot be injected here.`, provider, [provider.name, dependency, controllerOwner]);
+      continue;
+    }
+    add(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Provider "${provider.name}" depends on unknown provider "${dependency}".`, provider, [provider.name, dependency]);
+  }
+}
+
+function providerTokenNames(providers: ReadonlyMap<string, ProviderWIR>): ReadonlyMap<string, string> {
+  const result = new Map<string, string>();
+  for (const provider of providers.values()) if (provider.token !== undefined) result.set(provider.token, provider.name);
+  return result;
+}
+function visibleTokenNames(
+  rootTokens: ReadonlyMap<string, string>,
+  graphTokens: ReadonlyMap<string, string>,
+  controllerTokens: ReadonlyMap<string, string> | undefined,
+): ReadonlyMap<string, string> {
+  const result = new Map<string, string>();
+  for (const [key, value] of rootTokens) result.set(key, value);
+  for (const [key, value] of graphTokens) result.set(key, value);
+  if (controllerTokens !== undefined) for (const [key, value] of controllerTokens) result.set(key, value);
+  return result;
+}
+function controllerOwnerFor(providerName: string, owners: ReadonlyMap<string, string>): string | undefined {
+  for (const key of owners.keys()) {
+    const index = key.indexOf(":");
+    if (index >= 0 && key.slice(index + 1) === providerName) return key.slice(0, index);
+  }
+  return undefined;
 }
 function detectCycles(providers: readonly ProviderWIR[], tokenNames: ReadonlyMap<string, string>, diagnostics: CompilerDiagnostic[]): void {
   const table = new Map(providers.map((provider) => [provider.name, provider]));
