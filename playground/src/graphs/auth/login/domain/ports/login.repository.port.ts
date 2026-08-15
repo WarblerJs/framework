@@ -1,11 +1,8 @@
 import type { UserEntity } from "../entities/user.entity";
+import type { FindUserParams } from "../repositories/find-user.params";
 
-export interface LoginUserData{
-    readonly email: string;
-    readonly password: string;
 
-}
 export abstract class LoginRepositoryPort {
-    abstract loginUser(data:LoginUserData): Promise<UserEntity | null>;
+    abstract loginUser( params: FindUserParams): Promise<UserEntity | null>;
     abstract findUserByEmail(email:string): Promise<UserEntity | null>;
 }
