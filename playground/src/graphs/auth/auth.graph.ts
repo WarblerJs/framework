@@ -1,13 +1,18 @@
 import { Graph } from "@warbler/core";
-import { RegisterController } from "./register/presentation/http/register.controller";
-import { LoginController } from "./login/presentation/http/login.controller";
+import { WlbPgAuthRepository } from "./infrastructure/persistence/wlb-pg-auth.repository";
+import { WlbPgSessionRepository } from "./infrastructure/persistence/wlb-pg-session.repository";
+import { LoginController } from "./presentation/http/login.controller";
+import { RegisterController } from "./presentation/http/register.controller";
 
 @Graph({
-    prefix: '/auth',
+    prefix: "/auth",
     controllers: [
         RegisterController,
-        LoginController
+        LoginController,
     ],
-    providers: []
+    providers: [
+        WlbPgAuthRepository,
+        WlbPgSessionRepository,
+    ],
 })
 export class AuthGraph {}
