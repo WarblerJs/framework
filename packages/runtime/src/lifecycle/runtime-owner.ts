@@ -359,7 +359,8 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     const validator = this.#indexes?.validators[validatorId];
     const parameterCount = typeof handler?.parameterCount === "number" ? handler.parameterCount : 1;
     const graphId = this.#indexes!.controllers[controllerId]?.graphId;
-    const hasRequestScoped = graphId !== undefined && registry.requestScopedGraphs.has(graphId);
+    if (graphId === undefined) throw new RuntimeBootstrapError(`Generated Controller has no Graph: ${controllerId}`);
+    const hasRequestScoped = registry.requestScopedGraphs.has(graphId);
     const needsValidation = validatorId >= 0 || (flags & COMPILER_ROUTE_VALIDATION) !== 0;
     const needsMiddleware = (flags & COMPILER_ROUTE_MIDDLEWARE) !== 0 || numberField(record, "middlewareCount") > 0;
     const needsGuard = (flags & COMPILER_ROUTE_GUARD) !== 0 || numberField(record, "guardCount") > 0;
@@ -435,13 +436,16 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
         return guarded ? terminal(pipelineValue, guardContext) : http ? forbidden() : undefined;
     }, (outcome) => http ? invalidHttpValidation(validator, outcome.errors, validationInput, requestRequirements) : socketValidationFailure(input, outcome.errors), profiler !== undefined && http ? profiler : undefined);
     };
-    // Only wrap requests in a fresh request-scoped container when the owning Graph actually declares
-    // request-scoped providers — otherwise every request would pay for an unused eager-init pass.
+    // Route/socket pipelines run with the owning Graph as the ambient DI resolver so guards,
+    // middleware, validators, and handlers can call `inject()` during execution. Only swap
+    // in a fresh request-scoped container when the Graph actually declares request providers.
     const graphId = this.#indexes!.controllers[controllerId]?.graphId;
-    const hasRequestScoped = graphId !== undefined && registry.requestScopedGraphs.has(graphId);
-    if (!hasRequestScoped) return core;
-    const graph = this.#graphMap.get(graphId!)!;
-    return (input: unknown): unknown => this.#runWithRequestScope(graph, graphId!, () => core(input));
+    if (graphId === undefined) throw new RuntimeBootstrapError(`Generated Controller has no Graph: ${controllerId}`);
+    const graph = this.#graphMap.get(graphId);
+    if (graph === undefined) throw new RuntimeBootstrapError(`Generated Graph container not found: ${graphId}`);
+    const hasRequestScoped = registry.requestScopedGraphs.has(graphId);
+    if (hasRequestScoped) return (input: unknown): unknown => this.#runWithRequestScope(graph, graphId, () => core(input));
+    return (input: unknown): unknown => runInRequestContext(graph, () => core(input));
   }
   #invokeHandlerProfiled(handlerId: number, input: readonly unknown[], profiler: HttpHotPathProfiler): unknown {
     const controllerStart = performance.now();

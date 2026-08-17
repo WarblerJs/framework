@@ -64,9 +64,10 @@ export function analyzeContextBindings(context: CompilerContext, optimized: Opti
   return Object.freeze([...typesByKey.entries()].sort(([a], [b]) => compareText(a, b)).map(([key, typeTexts]) => {
     const captures = [...(capturesByKey.get(key) ?? [])].sort(compareText);
     const resolvedImports = captures.map(resolveCapturedType).filter(isImport);
+    const rewrittenTypes = [...typeTexts].sort(compareText).map((text) => rewriteImportedTypeReferences(text, resolvedImports));
     return Object.freeze({
       key,
-      typeText: [...typeTexts].sort(compareText).join(" | "),
+      typeText: [...new Set(rewrittenTypes)].join(" | "),
       imports: Object.freeze(resolvedImports),
     });
   }));
@@ -160,3 +161,13 @@ function collectTypeReferenceNames(node: ts.Node, captures: Set<string>): void {
 function rightmostName(name: ts.EntityName): string { return ts.isIdentifier(name) ? name.text : name.right.text; }
 function compareText(left: string, right: string): number { return left < right ? -1 : left > right ? 1 : 0; }
 function isImport(value: BindingImport | undefined): value is BindingImport { return value !== undefined; }
+function rewriteImportedTypeReferences(text: string, imports: readonly BindingImport[]): string {
+  let result = text;
+  for (const item of imports) {
+    result = result.replace(new RegExp(`import\\((["'])(?:\\\\.|(?!\\1).)*\\1\\)\\.${escapeRegExp(item.imported)}\\b`, "gu"), item.local);
+  }
+  return result;
+}
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}

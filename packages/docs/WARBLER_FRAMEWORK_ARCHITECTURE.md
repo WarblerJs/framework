@@ -1222,11 +1222,9 @@ IntelliSense in every controller, with **zero generics** — this works even
 for a bare `AppRequest` annotation, since context is app-wide rather than
 derived per-route from a validator.
 
-For this to type-check, the project's `tsconfig.json` needs `warbler-env.d.ts`
-(written to the project root by `warbler dev`/`warbler build`, alongside
-`.warbler/generated/`) included — the same pattern Next.js uses for
-`next-env.d.ts`. A newly scaffolded Warbler project has this wired up
-automatically.
+For this to type-check, the project's `tsconfig.json` includes
+`.warbler/generated/context.generated.d.ts`. A newly scaffolded Warbler
+project has this wired up automatically.
 
 ---
 

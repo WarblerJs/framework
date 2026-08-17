@@ -15,6 +15,9 @@ describe("new and generate", () => {
     for (const path of ["package.json", "tsconfig.json", ".gitignore", "src/main.ts", "src/config/runtime.config.ts", "src/config/transports/http.config.ts", "src/graphs/home/home.graph.ts", "src/graphs/home/home.controller.ts"]) {
       expect(await Bun.file(join(root, path)).exists()).toBe(true);
     }
+    const tsconfig = await Bun.file(join(root, "tsconfig.json")).json() as { readonly include?: readonly string[] };
+    expect(tsconfig.include).toContain(".warbler/generated/context.generated.d.ts");
+    expect(await Bun.file(join(root, "warbler-env.d.ts")).exists()).toBe(false);
     expect(await Bun.file(join(root, ".gitignore")).text()).toContain(".warbler/");
   });
   test("generates every supported current API and supports dry-run/force", async () => {

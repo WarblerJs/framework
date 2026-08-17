@@ -62,7 +62,20 @@ function insertInterface(typeName: string, insertable: readonly ColumnMetadata[]
 }
 
 function updateInterface(typeName: string, updatable: readonly ColumnMetadata[]): string {
-  const fields = updatable.map((column) => `  ${column.fieldName}?: ${tsType(column)};`);
+  const fields: string[] = new Array(updatable.length);
+  for (let i = 0; i < updatable.length; i++) {
+    const column = updatable[i]!;
+    fields[i] = `  ${column.fieldName}?: ${tsType(column)};`;
+  }
+  return [`export interface ${typeName} {`, ...fields, "}"].join("\n");
+}
+
+function whereInterface(typeName: string, columns: readonly ColumnMetadata[]): string {
+  const fields: string[] = new Array(columns.length);
+  for (let i = 0; i < columns.length; i++) {
+    const column = columns[i]!;
+    fields[i] = `  readonly ${column.fieldName}?: ${tsType(column)};`;
+  }
   return [`export interface ${typeName} {`, ...fields, "}"].join("\n");
 }
 
@@ -107,7 +120,9 @@ export function generateClientSource(table: TableMetadata): string {
   const rowType = `${name}Row`;
   const insertType = `${name}InsertInput`;
   const updateType = `${name}UpdateInput`;
+  const updateManyType = `${name}UpdateManyInput`;
   const whereType = `${name}UniqueWhere`;
+  const manyWhereType = `${name}Where`;
 
   const columns = selectList(table);
   const order = orderColumn(table);
@@ -189,6 +204,55 @@ export function generateClientSource(table: TableMetadata): string {
     "}",
   ].join("\n");
 
+  const updateManyAssignments: string[] = new Array(updatable.length);
+  for (let i = 0; i < updatable.length; i++) {
+    const column = updatable[i]!;
+    updateManyAssignments[i] = `  if (data.${column.fieldName} !== undefined) columns["${column.columnName}"] = data.${column.fieldName};`;
+  }
+
+  const updateManyPredicates: string[] = new Array(table.columns.length);
+  for (let i = 0; i < table.columns.length; i++) {
+    const column = table.columns[i]!;
+    const accessor = `where.${column.fieldName}`;
+    if (column.nullable) {
+      updateManyPredicates[i] = [
+        `  if (${accessor} !== undefined) {`,
+        `    const next = ${accessor} === null`,
+        `      ? pg\`"${column.columnName}" IS NULL\``,
+        `      : pg\`"${column.columnName}" = \${${accessor} as ${tsType(column)}}\`;`,
+        "    predicate = hasWhere ? pg`${predicate} AND ${next}` : next;",
+        "    hasWhere = true;",
+        "  }",
+      ].join("\n");
+    } else {
+      updateManyPredicates[i] = [
+        `  if (${accessor} !== undefined) {`,
+        `    const next = pg\`"${column.columnName}" = \${${accessor} as ${tsType(column)}}\`;`,
+        "    predicate = hasWhere ? pg`${predicate} AND ${next}` : next;",
+        "    hasWhere = true;",
+        "  }",
+      ].join("\n");
+    }
+  }
+
+  const updateManyBody = [
+    `export async function updateMany(where: ${manyWhereType}, data: ${updateManyType}): Promise<number> {`,
+    "  const columns: Record<string, unknown> = {};",
+    ...updateManyAssignments,
+    "  if (Object.keys(columns).length === 0) {",
+    '    throw new Error("updateMany requires at least one field to update");',
+    "  }",
+    "  let predicate = pg``;",
+    "  let hasWhere = false;",
+    ...updateManyPredicates,
+    "  if (!hasWhere) {",
+    '    throw new Error("updateMany requires at least one where condition");',
+    "  }",
+    `  const [row] = await pg\`WITH updated AS (UPDATE ${tableIdentifier} SET \${pg(columns)} WHERE \${predicate} RETURNING 1) SELECT count(*)::int AS "count" FROM updated\`;`,
+    "  return (row as { count: number }).count;",
+    "}",
+  ].join("\n");
+
   const deleteBody = [
     `export async function deleteOne(where: ${whereType}): Promise<${rowType} | null> {`,
     "  const input = where as Record<string, unknown>;",
@@ -239,7 +303,11 @@ export function generateClientSource(table: TableMetadata): string {
     "",
     updateInterface(updateType, updatable),
     "",
+    updateInterface(updateManyType, updatable),
+    "",
     uniqueWhereType(whereType, uniqueColumns),
+    "",
+    whereInterface(manyWhereType, table.columns),
     "",
     findUniqueBody,
     "",
@@ -250,6 +318,8 @@ export function generateClientSource(table: TableMetadata): string {
     insertBody,
     "",
     updateBody,
+    "",
+    updateManyBody,
     "",
     deleteBody,
     "",
@@ -270,6 +340,7 @@ export function generateClientBarrelSource(tables: readonly TableMetadata[]): st
       `    findMany: ${entry.namespace}.findMany,`,
       `    insert: ${entry.namespace}.insert,`,
       `    update: ${entry.namespace}.update,`,
+      `    updateMany: ${entry.namespace}.updateMany,`,
       `    delete: ${entry.namespace}.deleteOne,`,
       `    count: ${entry.namespace}.count,`,
       "  },",

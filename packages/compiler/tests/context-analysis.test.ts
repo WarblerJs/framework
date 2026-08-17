@@ -23,15 +23,21 @@ async function contextProject(): Promise<string> {
   symlinkSync(join(packagesRoot, "runtime", "node_modules", "@types", "bun"), join(typesScope, "bun"));
   await Bun.write(join(root, "tsconfig.json"), JSON.stringify({
     compilerOptions: { lib: ["ESNext"], types: ["bun"], target: "ESNext", module: "Preserve", moduleResolution: "Bundler", strict: true, skipLibCheck: true, noEmit: true },
-    include: ["src/**/*.ts"],
+    include: ["src/**/*.ts", ".warbler/generated/context.generated.d.ts"],
   }));
   await Bun.write(join(root, "src", "types.ts"), `
     export interface User { readonly id: string; readonly email: string }
     export interface Tenant { readonly id: string }
+    export interface ExternalProfile { readonly userId: string }
+  `);
+  await Bun.write(join(root, "src", "session.ts"), `
+    import type { ExternalProfile } from "./types";
+    export function loadProfile(): ExternalProfile | null { return { userId: "1" }; }
   `);
   await Bun.write(join(root, "src", "application.ts"), `
     import { Graph, Service, inject } from "@warbler/core";
     import { Controller, Get, type Guard, type Middleware } from "@warbler/http";
+    import { loadProfile } from "./session";
     import type { User, Tenant } from "./types";
 
     export const authGuard: Guard = (req, context): boolean => {
@@ -43,6 +49,8 @@ async function contextProject(): Promise<string> {
       context.set<Tenant>("tenant", { id: "t1" });
       context.set("requestId", () => "req-1");
       context.set("session", async () => "session-token");
+      const profile = loadProfile();
+      if (profile) context.set("profile", profile);
       return next();
     };
 
@@ -72,7 +80,7 @@ describe("context.set(...) analysis and WarblerRequestContext generation", () =>
     symlinkSync(join(packagesRoot, "runtime", "node_modules", "@types", "bun"), join(typesScope, "bun"));
     await Bun.write(join(root, "tsconfig.json"), JSON.stringify({
       compilerOptions: { lib: ["ESNext"], types: ["bun"], target: "ESNext", module: "Preserve", moduleResolution: "Bundler", strict: true, skipLibCheck: true, noEmit: true },
-      include: ["src/**/*.ts"],
+      include: ["src/**/*.ts", ".warbler/generated/context.generated.d.ts"],
     }));
     await Bun.write(join(root, "src", "application.ts"), `
       import { Graph, Service } from "@warbler/core";
@@ -82,10 +90,13 @@ describe("context.set(...) analysis and WarblerRequestContext generation", () =>
       @Graph({ prefix: "/api", controllers: [UsersController], providers: [Logger] })
       export class AppGraph {}
     `);
+    await Bun.write(join(root, "warbler-env.d.ts"), `/// <reference path="./.warbler/generated/context.generated.d.ts" />\n`);
     await compileProject(root);
     const text = await Bun.file(join(root, ".warbler", "generated", "context.generated.d.ts")).text();
     expect(text).toContain("declare module \"@warbler/http\"");
     expect(text).toContain("interface WarblerRequestContext");
+    expect(text).toContain("export {};");
+    expect(await Bun.file(join(root, "warbler-env.d.ts")).exists()).toBe(false);
   }, 15_000);
 
   test("extracts key+type from literal, explicit-generic, sync-factory, and async-factory context.set() calls", async () => {
@@ -95,10 +106,13 @@ describe("context.set(...) analysis and WarblerRequestContext generation", () =>
     expect(text).toContain("declare module \"@warbler/http\"");
     expect(text).toMatch(/readonly user\?: User;/);
     expect(text).toMatch(/readonly tenant\?: Tenant;/);
+    expect(text).toMatch(/readonly profile\?: ExternalProfile;/);
     expect(text).toMatch(/readonly requestId\?: string;/);
     expect(text).toMatch(/readonly session\?: string;/); // async factory unwrapped from Promise<string>
     expect(text).toContain("import type { User } from \"../../src/types\"");
     expect(text).toContain("import type { Tenant } from \"../../src/types\"");
+    expect(text).toContain("import type { ExternalProfile } from \"../../src/types\"");
+    expect(text).not.toContain("import(\"");
   }, 15_000);
 
   test("every generated key is optional, since the compiler can't prove every request path sets it", async () => {
@@ -114,17 +128,16 @@ describe("context.set(...) analysis and WarblerRequestContext generation", () =>
     const root = await contextProject();
     await compileProject(root);
     const ts = await import("typescript");
-    const generatedDir = join(root, ".warbler", "generated");
     const probe = join(root, "src", "probe.ts");
     await Bun.write(probe, `
-      /// <reference path="../.warbler/generated/context.generated.d.ts" />
       import type { AppRequest } from "@warbler/http";
       declare const req: AppRequest;
       const userId: string | undefined = req.context.user?.id;
       const tenantId: string | undefined = req.context.tenant?.id;
+      const profileUserId: string | undefined = req.context.profile?.userId;
     `);
     const program = ts.createProgram({
-      rootNames: [probe],
+      rootNames: [probe, join(root, ".warbler", "generated", "context.generated.d.ts")],
       options: {
         strict: true, skipLibCheck: true, noEmit: true, target: ts.ScriptTarget.ESNext,
         module: ts.ModuleKind.Preserve, moduleResolution: ts.ModuleResolutionKind.Bundler,
@@ -133,6 +146,5 @@ describe("context.set(...) analysis and WarblerRequestContext generation", () =>
     });
     const diagnostics = ts.getPreEmitDiagnostics(program).filter((d) => d.file?.fileName === probe);
     expect(diagnostics.map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"))).toEqual([]);
-    void generatedDir;
   }, 15_000);
 });

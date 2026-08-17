@@ -132,6 +132,39 @@ describe("startRuntime generated binding consumption", () => {
     expect(events.slice(-4)).toEqual(["transport:stop", "dispose:controller", "dispose:graph", "dispose:root"]);
   });
 
+  test("runs middleware inside the owning Graph injection context", async () => {
+    const events: string[] = [];
+    const base = application(events);
+    let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
+    const launcher: RuntimeTransportLauncher = {
+      kind: "http",
+      start(input) {
+        routes = (input.bindings as { readonly routes: typeof routes }).routes;
+        return Object.freeze({});
+      },
+    };
+    const runtime = await startRuntime({
+      application: Object.freeze({
+        ...base,
+        middleware: Object.freeze([
+          Object.freeze({
+            id: 0,
+            execute: (input: unknown, _context: unknown, next: (value: unknown) => unknown) => {
+              events.push(inject(Users) instanceof Users ? "middleware:inject" : "middleware:invalid");
+              return next(input);
+            },
+          }),
+        ]),
+      }),
+      runtimeConfig: runtimeConfig(true),
+      transportLaunchers: [launcher],
+    });
+    const response = await routes["/users"]!.GET!(new Request("http://localhost/users"));
+    expect(response.status).toBe(200);
+    expect(events).toContain("middleware:inject");
+    await runtime.stop();
+  });
+
   test("creates controller-scoped providers inside the owning Controller container", async () => {
     const events: string[] = [];
     let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});

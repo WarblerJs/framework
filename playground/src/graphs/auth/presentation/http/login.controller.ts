@@ -18,7 +18,7 @@ export class LoginController {
         middleware: [ sessionMiddleware ]
     })
     index(request: AppRequest) {
-        console.log('App request:ö ', request.context )
+ 
         return view("auth.login.index");
     }
 
