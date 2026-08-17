@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { defineValidator, v } from "@warbler/validators";
 import { Delete, Get, Head, Options, Patch, Post, Put, Sse, getRouteMetadata } from "../src/route";
+import { redirect, redirectTo } from "../src/response";
 import type { AppRequest, Guard, Middleware } from "../src/request";
 
 describe("route decorators", () => {
@@ -83,6 +84,18 @@ describe("route decorators", () => {
   test("bare Guard/Middleware (no generics) type-check on a route with no validator", () => {
     const authGuard: Guard = (req, context) => { context.set("checked", true); return true; };
     const auditMiddleware: Middleware = (req, context, next) => next();
+    const redirectGuard: Guard = () => redirect("/");
+    const namedRedirectGuard: Guard = () => redirectTo("home");
+    const asyncNamedRedirectGuard: Guard = async () => redirectTo("home");
+    const permanent = () => redirect("/", 301);
+    const seeOther = () => redirectTo("home", 303);
+    // @ts-expect-error Redirect statuses are limited to standard redirect codes.
+    const invalidRedirectStatus = () => redirect("/", 304);
+    // @ts-expect-error Redirect statuses are limited to standard redirect codes.
+    const invalidNamedRedirectStatus = () => redirectTo("home", 304);
+    // @ts-expect-error Guard may only return boolean, Response, or a Promise of either.
+    const invalidGuard: Guard = () => "home";
+    void redirectGuard; void namedRedirectGuard; void asyncNamedRedirectGuard; void permanent; void seeOther; void invalidRedirectStatus; void invalidNamedRedirectStatus; void invalidGuard;
     class Controller {
       @Get("/profile/:id", { guards: [authGuard], middleware: [auditMiddleware] })
       profile(req: AppRequest) { return req.params; }

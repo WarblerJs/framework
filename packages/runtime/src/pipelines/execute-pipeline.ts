@@ -5,6 +5,7 @@ import type {
   HandlerBinding,
   MiddlewareBinding,
   RuntimeGuard,
+  RuntimeGuardResult,
   RuntimeMiddleware,
   ValidatorBinding,
 } from "../generated/executable-bindings";
@@ -12,7 +13,7 @@ import type {
 /** Startup-linked immutable guard execution plan shared by routes with the same guard sequence. */
 export interface CompiledGuardPipeline {
   readonly ids: readonly number[];
-  execute(input: unknown, context: unknown): boolean | Promise<boolean>;
+  execute(input: unknown, context: unknown): RuntimeGuardResult | Promise<RuntimeGuardResult>;
 }
 /** Compiler/startup-local registry used to deduplicate equal guard ID sequences safely. */
 export interface GuardPipelineRegistry {
@@ -52,7 +53,7 @@ export function linkGuardPipeline(
   const frozenGuards = Object.freeze(guards);
   const pipeline = Object.freeze({
     ids: frozenIds,
-    execute: (input: unknown, context: unknown): boolean | Promise<boolean> =>
+    execute: (input: unknown, context: unknown): RuntimeGuardResult | Promise<RuntimeGuardResult> =>
       executeCompiledGuardPipeline(frozenIds, frozenGuards, input, context),
   });
   registry.pipelines.set(key, pipeline);
@@ -60,15 +61,16 @@ export function linkGuardPipeline(
 }
 
 /** Executes generated Guards in order while retaining a synchronous fast path. */
-export function executeGuardRange(bindings: readonly (GuardBinding | undefined)[], ids: readonly number[], input: unknown, context: unknown): boolean | Promise<boolean> {
+export function executeGuardRange(bindings: readonly (GuardBinding | undefined)[], ids: readonly number[], input: unknown, context: unknown): RuntimeGuardResult | Promise<RuntimeGuardResult> {
   for (let index = 0; index < ids.length; index++) {
     const guardId = ids[index]!;
     const execute = bindings[guardId]?.execute;
     if (typeof execute !== "function") invalidBinding(`Guard binding ${guardId} is not executable.`);
     const result = (execute as RuntimeGuard)(input, context);
     if (isThenable(result)) return continueGuards(result, bindings, ids, input, context, index + 1);
-    if (typeof result !== "boolean") throw new InvalidGuardResultError(`${RuntimeDiagnosticCode.GUARD_RESULT_INVALID}: Guard ${guardId} returned a non-boolean result.`);
-    if (!result) return false;
+    if (result === true) continue;
+    if (result === false || result instanceof Response) return result;
+    invalidGuardResult(`Guard ${guardId} returned an invalid result.`);
   }
   return true;
 }
@@ -152,53 +154,60 @@ function executeCompiledGuardPipeline(
   guards: readonly RuntimeGuard[],
   input: unknown,
   context: unknown,
-): boolean | Promise<boolean> {
+): RuntimeGuardResult | Promise<RuntimeGuardResult> {
   for (let index = 0, length = guards.length; index < length; index++) {
     const result = guards[index]!(input, context);
     if (isThenable(result)) return continueCompiledGuards(result, guards, ids, input, context, index + 1);
-    if (typeof result !== "boolean") throw new InvalidGuardResultError(`${RuntimeDiagnosticCode.GUARD_RESULT_INVALID}: Guard ${ids[index]!} returned a non-boolean result.`);
-    if (!result) return false;
+    if (result === true) continue;
+    if (result === false || result instanceof Response) return result;
+    invalidGuardResult(`Guard ${ids[index]!} returned an invalid result.`);
   }
   return true;
 }
 async function continueGuards(
-  first: Promise<boolean>,
+  first: Promise<RuntimeGuardResult>,
   bindings: readonly (GuardBinding | undefined)[],
   ids: readonly number[],
   input: unknown,
   context: unknown,
   start: number,
-): Promise<boolean> {
+): Promise<RuntimeGuardResult> {
   const initial = await first;
-  if (typeof initial !== "boolean") throw new InvalidGuardResultError(`${RuntimeDiagnosticCode.GUARD_RESULT_INVALID}: Guard returned a non-boolean result.`);
-  if (!initial) return false;
+  if (initial !== true) {
+    if (initial === false || initial instanceof Response) return initial;
+    invalidGuardResult("Guard returned an invalid result.");
+  }
   for (let index = start; index < ids.length; index++) {
     const guardId = ids[index]!;
     const execute = bindings[guardId]?.execute;
     if (typeof execute !== "function") invalidBinding(`Guard binding ${guardId} is not executable.`);
     const result = (execute as RuntimeGuard)(input, context);
     const allowed = isThenable(result) ? await result : result;
-    if (typeof allowed !== "boolean") throw new InvalidGuardResultError(`${RuntimeDiagnosticCode.GUARD_RESULT_INVALID}: Guard ${guardId} returned a non-boolean result.`);
-    if (!allowed) return false;
+    if (allowed === true) continue;
+    if (allowed === false || allowed instanceof Response) return allowed;
+    invalidGuardResult(`Guard ${guardId} returned an invalid result.`);
   }
   return true;
 }
 async function continueCompiledGuards(
-  first: Promise<boolean>,
+  first: Promise<RuntimeGuardResult>,
   guards: readonly RuntimeGuard[],
   ids: readonly number[],
   input: unknown,
   context: unknown,
   start: number,
-): Promise<boolean> {
+): Promise<RuntimeGuardResult> {
   const initial = await first;
-  if (typeof initial !== "boolean") throw new InvalidGuardResultError(`${RuntimeDiagnosticCode.GUARD_RESULT_INVALID}: Guard returned a non-boolean result.`);
-  if (!initial) return false;
+  if (initial !== true) {
+    if (initial === false || initial instanceof Response) return initial;
+    invalidGuardResult("Guard returned an invalid result.");
+  }
   for (let index = start, length = guards.length; index < length; index++) {
     const result = guards[index]!(input, context);
     const allowed = isThenable(result) ? await result : result;
-    if (typeof allowed !== "boolean") throw new InvalidGuardResultError(`${RuntimeDiagnosticCode.GUARD_RESULT_INVALID}: Guard ${ids[index]!} returned a non-boolean result.`);
-    if (!allowed) return false;
+    if (allowed === true) continue;
+    if (allowed === false || allowed instanceof Response) return allowed;
+    invalidGuardResult(`Guard ${ids[index]!} returned an invalid result.`);
   }
   return true;
 }
@@ -218,4 +227,7 @@ function hasValidatedValue(value: unknown): value is Readonly<{ valid: true; val
 }
 function invalidBinding(message: string): never {
   throw new InvalidApplicationBindingsError(RuntimeDiagnosticCode.INVALID_APPLICATION_BINDINGS, message);
+}
+function invalidGuardResult(message: string): never {
+  throw new InvalidGuardResultError(`${RuntimeDiagnosticCode.GUARD_RESULT_INVALID}: ${message}`);
 }

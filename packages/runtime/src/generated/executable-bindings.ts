@@ -32,7 +32,8 @@ export interface HandlerBinding<TController = unknown> {
   readonly parameterCount?: number;
   readonly invoke: unknown;
 }
-export type RuntimeGuard = (input: unknown, context: unknown) => boolean | Promise<boolean>;
+export type RuntimeGuardResult = boolean | Response;
+export type RuntimeGuard = (input: unknown, context: unknown) => RuntimeGuardResult | Promise<RuntimeGuardResult>;
 export type RuntimeMiddlewareNext = (input?: unknown) => unknown;
 export type RuntimeMiddleware = (input: unknown, context: unknown, next: RuntimeMiddlewareNext) => unknown;
 export type RuntimeValidator = (input: unknown) => unknown;

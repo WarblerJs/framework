@@ -4,6 +4,7 @@ import { Console } from "@warbler/console";
 import { createBunRouteHandler, createNotFoundFallback, type BunRouteHandlerOptions } from "../src/native";
 import { RouteFlag } from "../src/compiled";
 import { getViewRequestScope } from "../src/view";
+import { redirect } from "../src";
 
 function baseOptions(handler: BunRouteHandlerOptions["handler"]): BunRouteHandlerOptions {
   return {
@@ -104,6 +105,15 @@ describe("native request pipeline", () => {
     });
     const response = await handler(REQUEST(), Object.create(null));
     expect(await response.json()).toEqual({ scoped: false });
+  });
+
+  test("redirect responses remain native responses and receive security headers", async () => {
+    const handler = createBunRouteHandler(baseOptions(() => redirect("/login")));
+    const response = await handler(REQUEST(), Object.create(null));
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(await response.text()).toBe("");
   });
 
   describe("unified exception boundary", () => {

@@ -422,10 +422,14 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       const guarded = guardPipeline.execute(pipelineValue, context);
       if (isThenable(guarded)) return guarded.then((allowed) => {
         if (profiler !== undefined && http) profiler.record("guardMiddleware", performance.now() - guardStart);
-        return allowed ? handlerTerminal(pipelineValue, context) : http ? forbidden() : undefined;
+        if (allowed === true) return handlerTerminal(pipelineValue, context);
+        if (allowed === false) return http ? forbidden() : undefined;
+        return allowed;
       });
       if (profiler !== undefined && http) profiler.record("guardMiddleware", performance.now() - guardStart);
-      return guarded ? handlerTerminal(pipelineValue, context) : http ? forbidden() : undefined;
+      if (guarded === true) return handlerTerminal(pipelineValue, context);
+      if (guarded === false) return http ? forbidden() : undefined;
+      return guarded;
     };
     const terminal = createMiddlewarePipeline(this.#indexes!.middleware, middlewareIds, guardedTerminal);
     const core = (input: unknown): unknown => {
