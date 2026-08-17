@@ -9,8 +9,13 @@ import { valiateUserID } from "../validators/valiate_user_id.validator";
 import { userPermissionGuard } from "../guards/user-permission.guard";
 import { postUserValidatore } from "../validators/post_user.validator";
 import { Email } from "@warbler/email";
+import { auditMiddleware, authMiddleware } from "../../../../shared/middlewares/scope.middleware";
 
-@Controller()
+@Controller({
+  middleware: [
+    authMiddleware,
+  ],
+})
 export class UserController {
   readonly #createUser = inject(CreateUserUseCase);
   readonly #findUser = inject(FindUserUseCase);
@@ -64,5 +69,29 @@ export class UserController {
     })
 
     return JsonRes({  })
+  }
+
+  @Get("/middleware/inherited")
+  middlewareInherited(request: AppRequest) {
+    return JsonRes({
+      requestId: request.context.requestId,
+      tenant: request.context.tenant,
+      user: request.context.user,
+      audit: request.context.audit,
+    });
+  }
+
+  @Get("/middleware/all", {
+    middleware: [
+      auditMiddleware,
+    ],
+  })
+  middlewareAll(request: AppRequest) {
+    return JsonRes({
+      requestId: request.context.requestId,
+      tenant: request.context.tenant,
+      user: request.context.user,
+      audit: request.context.audit,
+    });
   }
 }

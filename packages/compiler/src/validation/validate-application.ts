@@ -79,6 +79,7 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
       }
       controllers.push(Object.freeze({
         ...copyLocation(controller), name: controller.name, kind: controller.kind, prefix: controller.prefix,
+        middleware: controller.middleware,
         providerNames: controller.providerNames,
         providers: Object.freeze(controllerProviders), dependencies: controller.dependencies, routes: controller.routes, socketEvents: controller.socketEvents,
       }));
@@ -108,6 +109,7 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
     validateSocketEvents(controllers, diagnostics);
     result.push(Object.freeze({
       ...copyLocation(graph), name: graph.name, prefix: normalizePath(graph.prefix), transport: graph.transport,
+      middleware: graph.middleware,
       controllers: Object.freeze(controllers), providers: Object.freeze(providers),
     }));
   }
@@ -127,6 +129,7 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
   return Object.freeze({
     version: 1,
     projectRoot,
+    middleware: analysis.middleware,
     graphs: Object.freeze(result),
     rootProviders: Object.freeze([...rootProviders.values()]),
     events: Object.freeze([...analysis.events.values()]),

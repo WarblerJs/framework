@@ -24,8 +24,10 @@ function normalizeControllerOptions(options: string | ControllerOptions): Contro
   const prefix = typeof options === "string" ? options : options.prefix ?? "";
   const normalized = normalizePath(prefix);
   const providers = typeof options === "string" ? [] : options.providers ?? [];
+  const middleware = typeof options === "string" ? [] : options.middleware ?? [];
   return Object.freeze({
     prefix: normalized === "/" ? "" : normalized,
     providers: Object.freeze([...providers]),
+    middleware: Object.freeze([...middleware]),
   });
 }

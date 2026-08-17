@@ -47,6 +47,10 @@ class LocalController {
   show(): Response { return new Response(this.local instanceof LocalService ? "local" : "invalid"); }
 }
 
+function isThenable(value: unknown): value is Promise<unknown> {
+  return typeof value === "object" && value !== null && "then" in value && typeof value.then === "function";
+}
+
 function application(events: string[], valid = true): GeneratedApplicationBindings {
   return Object.freeze({
     application: Object.freeze({
@@ -126,7 +130,7 @@ describe("startRuntime generated binding consumption", () => {
     expect(events.slice(0, 4)).toEqual(["provider:root", "provider:graph", "controller", "transport:start"]);
     expect(configLoads).toBe(1);
     expect(await (await routes["/users"]!.GET!(new Request("http://localhost/users"))).text()).toBe("GET:true");
-    expect(events.slice(-2)).toEqual(["guard", "middleware"]);
+    expect(events.slice(-2)).toEqual(["middleware", "guard"]);
     await runtime.stop();
     await runtime.stop();
     expect(events.slice(-4)).toEqual(["transport:stop", "dispose:controller", "dispose:graph", "dispose:root"]);
@@ -162,6 +166,106 @@ describe("startRuntime generated binding consumption", () => {
     const response = await routes["/users"]!.GET!(new Request("http://localhost/users"));
     expect(response.status).toBe(200);
     expect(events).toContain("middleware:inject");
+    await runtime.stop();
+  });
+
+  test("executes compiled middleware ranges before guards and preserves next semantics", async () => {
+    const events: string[] = [];
+    const base = application(events);
+    let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
+    const runtime = await startRuntime({
+      application: Object.freeze({
+        ...base,
+        application: Object.freeze({
+          ...base.application,
+          routeTable: Object.freeze([
+            Object.freeze({ ...base.application.routeTable[0]!, middlewareCount: 5 }),
+            Object.freeze({
+              id: 1, controllerId: 0, handlerId: 0, validatorId: -1,
+              guardStart: 1, guardCount: 1, middlewareStart: 5, middlewareCount: 1,
+            }),
+          ]),
+          routeGuards: Object.freeze([0, 0]),
+          routeMiddleware: Object.freeze([0, 1, 2, 1, 3, 4]),
+        }),
+        middleware: Object.freeze([
+          Object.freeze({
+            id: 0,
+            execute: (input: unknown, context: { set: (key: string, value: unknown) => void }, next: (value?: unknown) => unknown) => {
+              events.push("global:before");
+              context.set("requestId", "req-1");
+              const result = next(input);
+              if (isThenable(result)) return result.then((value) => { events.push("global:after"); return value; });
+              events.push("global:after");
+              return result;
+            },
+          }),
+          Object.freeze({
+            id: 1,
+            execute: (input: unknown, _context: unknown, next: (value?: unknown) => unknown) => {
+              events.push("shared");
+              return next(input);
+            },
+          }),
+          Object.freeze({
+            id: 2,
+            execute: (input: unknown, context: { set: (key: string, value: unknown) => void }, next: (value?: unknown) => unknown) => {
+              events.push("graph");
+              context.set("tenant", "acme");
+              return next(input);
+            },
+          }),
+          Object.freeze({
+            id: 3,
+            execute: (input: unknown, context: { set: (key: string, value: unknown) => void }, next: (value?: unknown) => unknown) => {
+              events.push("route");
+              context.set("audit", "yes");
+              return next(input);
+            },
+          }),
+          Object.freeze({
+            id: 4,
+            execute: () => {
+              events.push("short");
+              return new Response("short", { status: 202 });
+            },
+          }),
+        ]),
+        guards: Object.freeze([
+          Object.freeze({
+            id: 0,
+            execute: (_input: unknown, context: { get: (key: string) => unknown }) => {
+              events.push(`guard:${context.get("requestId")}:${context.get("tenant")}:${context.get("audit")}`);
+              return true;
+            },
+          }),
+        ]),
+        http: Object.freeze({
+          routes: Object.freeze([Object.freeze({ id: 0 }), Object.freeze({ id: 1 })]),
+          createRoutes: (execute: HttpRouteExecutor) => Object.freeze({
+            "/all": Object.freeze({ GET: (request: Request) => execute(0, request) }),
+            "/short": Object.freeze({ GET: (request: Request) => execute(1, request) }),
+          }),
+        }),
+      }),
+      runtimeConfig: runtimeConfig(true),
+      transportLaunchers: [{ kind: "http", start(input) { routes = (input.bindings as { readonly routes: typeof routes }).routes; return Object.freeze({}); } }],
+    });
+    expect(await (await routes["/all"]!.GET!(new Request("http://localhost/all"))).text()).toBe("GET:true");
+    expect(events.slice(-7)).toEqual([
+      "global:before",
+      "shared",
+      "graph",
+      "shared",
+      "route",
+      "guard:req-1:acme:yes",
+      "global:after",
+    ]);
+    events.length = 0;
+    const short = await routes["/short"]!.GET!(new Request("http://localhost/short"));
+    expect(short.status).toBe(202);
+    expect(await short.text()).toBe("short");
+    expect(events).toEqual(["short"]);
     await runtime.stop();
   });
 

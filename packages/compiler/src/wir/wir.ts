@@ -37,6 +37,7 @@ export interface ControllerWIR extends SourceLocationWIR {
   readonly name: string;
   readonly kind: "http" | "websocket";
   readonly prefix: string;
+  readonly middleware: readonly string[];
   readonly providerNames: readonly string[];
   readonly providers: readonly ProviderWIR[];
   readonly dependencies: readonly string[];
@@ -70,6 +71,7 @@ export interface GraphWIR extends SourceLocationWIR {
   readonly name: string;
   readonly prefix: string;
   readonly transport: string;
+  readonly middleware: readonly string[];
   readonly controllers: readonly ControllerWIR[];
   readonly providers: readonly ProviderWIR[];
 }
@@ -99,6 +101,7 @@ export interface EventInterceptorWIR extends SourceLocationWIR {
 export interface ApplicationWIR {
   readonly version: 1;
   readonly projectRoot: string;
+  readonly middleware: readonly string[];
   readonly graphs: readonly GraphWIR[];
   readonly rootProviders: readonly ProviderWIR[];
   readonly events: readonly EventWIR[];
