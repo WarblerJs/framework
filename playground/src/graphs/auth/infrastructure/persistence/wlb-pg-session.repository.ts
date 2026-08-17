@@ -7,7 +7,7 @@ import {
 } from "../../domain/ports/session.repository.port";
 
 @Repository({
-    provide: SessionRepositoryPort,
+    provide: 'root',
 })
 export class WlbPgSessionRepository extends SessionRepositoryPort {
     override createSession(data: CreateSessionData): Promise<SessionEntity> {
