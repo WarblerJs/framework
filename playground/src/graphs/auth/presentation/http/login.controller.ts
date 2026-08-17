@@ -2,6 +2,8 @@ import { inject } from "@warbler/core";
 import { Controller, Get, JsonRes, Post, view, type AppRequest } from "@warbler/http";
 import { LoginUseCase } from "../../application/use-case/login.use-case";
 import { loginValidators } from "../validators/login.validator";
+import { sessionMiddleware } from "src/shared/middlewares/auth.middleware";
+import { env } from "@warbler/config";
 
 @Controller({
     prefix: "/login",
@@ -12,8 +14,11 @@ import { loginValidators } from "../validators/login.validator";
 export class LoginController {
     readonly #login = inject(LoginUseCase);
 
-    @Get("/")
-    index() {
+    @Get("/",{
+        middleware: [ sessionMiddleware ]
+    })
+    index(request: AppRequest) {
+        console.log('App request:ö ', request.context )
         return view("auth.login.index");
     }
 
@@ -32,7 +37,7 @@ export class LoginController {
             right: (login) => {
                 request.cookies.set("session", login.sessionId, {
                     httpOnly: true,
-                    secure: true,
+                    secure: env('APP_ENV') === 'production' ? true : false,
                     sameSite: "lax",
                     path: "/",
                 });

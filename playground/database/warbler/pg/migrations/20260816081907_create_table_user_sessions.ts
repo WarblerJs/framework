@@ -1,8 +1,8 @@
-import type { PgMigration } from "@warbler/database";
 import {
   OnDeleteAction,
   PgDefault,
   PgTypes,
+  type PgMigration
 } from "@warbler/database";
 
 export const up: PgMigration = async (pgm) => {
