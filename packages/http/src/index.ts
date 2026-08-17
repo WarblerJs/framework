@@ -2,7 +2,7 @@ export { Controller } from "./controller";
 export { Delete, Get, Head, Options, Patch, Post, Put, Sse } from "./route";
 export {
   prepareHttpValidationInput, RequestContextFrozenError,
-  type AppRequest, type Guard, type Middleware, type MiddlewareNext,
+  type AppRequest, type Guard, type GuardResult, type Middleware, type MiddlewareNext,
   type RequestContextHandle, type WarblerRequestContext,
 } from "./request";
 export {
@@ -16,6 +16,10 @@ export {
   JsonRes,
   PdfRes,
   RedirectRes,
+  redirect,
+  redirectTo,
+  type RedirectStatus,
+  type RouteParameter,
   SseRes,
   TextRes,
 } from "./response";

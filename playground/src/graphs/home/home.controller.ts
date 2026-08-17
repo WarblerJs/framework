@@ -8,11 +8,10 @@ export default class HomeController {
   readonly #home = inject(HomeService);
   readonly #sockets = inject(SocketPublisher);
 
-  @Get("/")
+  @Get("/", { name: "home" })
   index(): Response { 
     return JsonRes(this.#home.status());
   }
-
 
   @Get("/health")
   async health(): Promise<Response> {

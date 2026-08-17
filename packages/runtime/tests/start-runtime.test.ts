@@ -439,6 +439,9 @@ describe("binding validation and Guard execution", () => {
     expect(sync).not.toBeInstanceOf(Promise);
     expect(calls).toEqual([0, 1]);
     expect(await executeGuardRange([{ id: 0, execute: async () => true }], [0], {}, undefined)).toBe(true);
+    const response = new Response("stop", { status: 401 });
+    expect(executeGuardRange([{ id: 0, execute: () => response }, { id: 1, execute: () => { calls.push(9); return true; } }], [0, 1], {}, undefined)).toBe(response);
+    expect(calls).toEqual([0, 1]);
     expect(() => executeGuardRange([{ id: 0, execute: () => "yes" }], [0], {}, undefined)).toThrow(InvalidGuardResultError);
   });
 
@@ -466,6 +469,75 @@ describe("binding validation and Guard execution", () => {
     expect(different.execute({}, undefined)).toBe(false);
     expect(calls).toEqual(["auth", "admin"]);
     expect(() => linkGuardPipeline(Object.freeze([Object.freeze({ id: 0, execute: () => "yes" })]), Object.freeze([0]), createGuardPipelineRegistry()).execute({}, undefined)).toThrow(InvalidGuardResultError);
+  });
+
+  test("guard Response results short-circuit without running later guards or the handler", async () => {
+    const events: string[] = [];
+    const base = application(events);
+    let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
+    const app = Object.freeze({
+      ...base,
+      application: Object.freeze({
+        ...base.application,
+        routeTable: Object.freeze([
+          Object.freeze({ ...base.application.routeTable[0]!, guardCount: 3, middlewareCount: 0 }),
+          Object.freeze({
+            id: 1, controllerId: 0, handlerId: 0, validatorId: -1,
+            guardStart: 3, guardCount: 1, middlewareStart: 0, middlewareCount: 0,
+          }),
+          Object.freeze({
+            id: 2, controllerId: 0, handlerId: 0, validatorId: -1,
+            guardStart: 4, guardCount: 1, middlewareStart: 0, middlewareCount: 0,
+          }),
+        ]),
+        routeGuards: Object.freeze([0, 1, 2, 3, 4]),
+        routeMiddleware: Object.freeze([]),
+      }),
+      guards: Object.freeze([
+        Object.freeze({ id: 0, execute: () => { events.push("guard:true"); return true; } }),
+        Object.freeze({ id: 1, execute: () => { events.push("guard:response"); return new Response("redirect", { status: 302, headers: { location: "/" } }); } }),
+        Object.freeze({ id: 2, execute: () => { events.push("guard:late"); return true; } }),
+        Object.freeze({ id: 3, execute: async () => { events.push("guard:async-response"); return Response.json({ error: "Unauthorized" }, { status: 401 }); } }),
+        Object.freeze({ id: 4, execute: () => { events.push("guard:false"); return false; } }),
+      ]),
+      handlers: Object.freeze([
+        Object.freeze({
+          ...base.handlers[0]!,
+          invoke: (controller: UsersController, request: Request) => {
+            events.push("handler");
+            return controller.list(request);
+          },
+        }),
+      ]),
+      http: Object.freeze({
+        routes: Object.freeze([Object.freeze({ id: 0 }), Object.freeze({ id: 1 }), Object.freeze({ id: 2 })]),
+        createRoutes: (execute: HttpRouteExecutor) => Object.freeze({
+          "/response": Object.freeze({ GET: (request: Request) => execute(0, request) }),
+          "/async-response": Object.freeze({ GET: (request: Request) => execute(1, request) }),
+          "/false": Object.freeze({ GET: (request: Request) => execute(2, request) }),
+        }),
+      }),
+    });
+    const runtime = await startRuntime({
+      application: app,
+      runtimeConfig: runtimeConfig(true),
+      transportLaunchers: [{ kind: "http", start(input) { routes = (input.bindings as { readonly routes: typeof routes }).routes; return Object.freeze({}); } }],
+    });
+    events.length = 0;
+    const redirect = await routes["/response"]!.GET!(new Request("http://localhost/response"));
+    expect(redirect.status).toBe(302);
+    expect(redirect.headers.get("location")).toBe("/");
+    expect(events).toEqual(["guard:true", "guard:response"]);
+    events.length = 0;
+    const unauthorized = await routes["/async-response"]!.GET!(new Request("http://localhost/async-response"));
+    expect(unauthorized.status).toBe(401);
+    expect(await unauthorized.json()).toEqual({ error: "Unauthorized" });
+    expect(events).toEqual(["guard:async-response"]);
+    events.length = 0;
+    const forbiddenResponse = await routes["/false"]!.GET!(new Request("http://localhost/false"));
+    expect(forbiddenResponse.status).toBe(403);
+    expect(events).toEqual(["guard:false"]);
+    await runtime.stop();
   });
 });
 

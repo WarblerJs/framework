@@ -6,7 +6,7 @@ Normal routes are emitted directly into `Bun.serve({ routes, fetch })`. Bun perf
 
 Controllers use `Controller` with `Get`, `Post`, `Put`, `Patch`, `Delete`, `Options`, `Head`, or `Sse`. Decorators store immutable compiler metadata and never execute middleware, guards, validation, or policies.
 
-Response helpers return native `Response` values. `FileRes`, `DownloadRes`, `PdfRes`, `ImageRes`, and `ArchiveRes` accept `Bun.file()` or another Blob without buffering it. `HtmlStreamRes` and `SseRes` use pull-based streams and propagate cancellation.
+Response helpers return native `Response` values. `redirect(location, status?)` creates an empty redirect response for an explicit URL or path. `redirectTo(name, params?, status?)` resolves a named route through the same startup-built table as `route()` and returns a redirect response. `FileRes`, `DownloadRes`, `PdfRes`, `ImageRes`, and `ArchiveRes` accept `Bun.file()` or another Blob without buffering it. `HtmlStreamRes` and `SseRes` use pull-based streams and propagate cancellation.
 
 Configuration normalization converts byte limits to safe positive integers, clamps Bun idle timeout to its supported ceiling, applies documented defaults only to omitted values, and deeply freezes the result. Invalid explicit values fail with typed errors.
 
@@ -74,6 +74,50 @@ return view("home", {
 Both access styles — the automatic `csrfField`/`csrfToken` built-ins and explicit `csrf()` — read the same request-scoped, memoized token. Within one request, `csrf().token === csrfToken` and `csrfField` embeds that same token, always. The token is minted once (lazily, on first access) per request via a synchronous HMAC signature (`node:crypto`) over a fresh random value, and reused for every subsequent access in that request — it is never regenerated mid-request and never shared across concurrent requests (each request gets its own ambient scope, propagated via `AsyncLocalStorage`, mirroring `@warbler/core`'s dependency-injection request scope).
 
 `view()`/`csrf()` may be called from anywhere that runs inside an active HTTP request — controller methods, guards, middleware, and validator `onValidationError` callbacks — without needing an `AppRequest` parameter. Calling either outside of a request throws a clear `ServerStateError`.
+
+### Redirects and guards
+
+Use `redirect()` for explicit locations and `redirectTo()` for precompiled named routes:
+
+```ts
+import { Controller, Get, redirect, redirectTo, type Guard } from "@warbler/http";
+
+const authGuard: Guard = (_request, context) =>
+  context.get("auth") === undefined ? redirectTo("login") : true;
+
+const guestGuard: Guard = (_request, context) =>
+  context.get("auth") === undefined ? true : redirectTo("home");
+
+@Controller()
+export class HomeController {
+  @Get("/", { name: "home" })
+  index() {
+    return new Response("Home");
+  }
+
+  @Get("/login", { name: "login", guards: [guestGuard] })
+  login() {
+    return new Response("Login");
+  }
+
+  @Get("/protected", { guards: [authGuard] })
+  protected() {
+    return new Response("Protected");
+  }
+
+  @Get("/legacy")
+  legacy() {
+    return redirect("/login", 301);
+  }
+
+  @Get("/users/:id", { name: "users.show" })
+  show() {
+    return redirectTo("users.show", [5], 303);
+  }
+}
+```
+
+Guards return `boolean | Response`, or a promise of either. `true` continues to the handler, `false` keeps the existing `403 Forbidden` behavior, and a `Response` short-circuits the guard chain and handler while still unwinding any middleware that wrapped the route.
 
 ### View rendering errors
 

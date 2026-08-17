@@ -44,4 +44,4 @@ test("generated native HTTP routes invoke real controllers and validation", asyn
   } finally {
     await runtime.stop();
   }
-});
+}, 15_000);

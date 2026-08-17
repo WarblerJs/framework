@@ -4,6 +4,7 @@ import { LoginUseCase } from "../../application/use-case/login.use-case";
 import { loginValidators } from "../validators/login.validator";
 import { sessionMiddleware } from "src/shared/middlewares/auth.middleware";
 import { env } from "@warbler/config";
+import { authGuard, guestGuard } from "src/shared/guards/auth.guard";
 
 @Controller({
     prefix: "/login",
@@ -14,12 +15,23 @@ import { env } from "@warbler/config";
 export class LoginController {
     readonly #login = inject(LoginUseCase);
 
-    @Get("/",{
-        middleware: [ sessionMiddleware ]
+    @Get("/", {
+        name: "login",
+        middleware: [ sessionMiddleware ],
+        guards: [ guestGuard ],
     })
     index(request: AppRequest) {
  
         return view("auth.login.index");
+    }
+
+    @Get("/protected", {
+        name: "protected",
+        middleware: [ sessionMiddleware ],
+        guards: [ authGuard ],
+    })
+    protected() {
+        return JsonRes({ ok: true, page: "protected" });
     }
 
     @Post("/", {

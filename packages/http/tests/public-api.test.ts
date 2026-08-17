@@ -8,7 +8,7 @@ describe("public API", () => {
       "Head", "HtmlRes", "HtmlStreamRes", "ImageRes", "JsonRes", "Options", "Patch", "PdfRes",
       "Post", "Put", "RESERVED_VIEW_BUILTIN_NAMES", "RedirectRes", "RequestContextFrozenError",
       "Sse", "SseRes", "TextRes",
-      "createHttpRuntimeLauncher", "csrf", "prepareHttpValidationInput", "view",
+      "createHttpRuntimeLauncher", "csrf", "prepareHttpValidationInput", "redirect", "redirectTo", "view",
     ]);
   });
 });

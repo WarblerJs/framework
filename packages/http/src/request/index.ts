@@ -1,5 +1,5 @@
 export type { AnyAppRequest, AnyRequestValidator, AppRequest } from "./app-request";
-export type { Guard } from "./guard";
+export type { Guard, GuardResult } from "./guard";
 export type { Middleware, MiddlewareNext } from "./middleware";
 export {
   RequestContextFrozenError, RequestContextStore, type RequestContextHandle,

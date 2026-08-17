@@ -14,6 +14,7 @@ import {
   createRouteResolver,
   decodeNamedRouteRows,
 } from "../view/builtin-resolvers";
+import { configureNamedRouteRedirectResolver, redirect } from "../response";
 
 interface TransportLoggingConfig {
   readonly requests?: boolean;
@@ -55,9 +56,11 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
       const securityHeaders = createSecurityHeaderTemplate(config.security);
       const strings = input.bindings.strings ?? [];
       const routeNameTable = buildNamedRouteTable(decodeNamedRouteRows(input.bindings.routeRecords ?? [], strings));
+      const resolveRoute = createRouteResolver(routeNameTable);
+      configureNamedRouteRedirectResolver((name, params, status) => redirect(resolveRoute(name, params), status));
       const builtins = Object.freeze({
         asset: createAssetResolver(config.static),
-        route: createRouteResolver(routeNameTable),
+        route: resolveRoute,
       });
       for (const [path, methods] of Object.entries(input.bindings.routes)) {
         if (typeof methods !== "object" || methods === null || methods instanceof Response || methods instanceof Blob) {
