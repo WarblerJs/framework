@@ -26,15 +26,20 @@ describe("compiler foundation", () => {
   test("discovers Graphs, controllers, providers, routes, sockets, aliases, and dependencies", async () => {
     const root = await project(`
       import { Graph as G, Service as S, Repository, ProviderScope as PS, inject, Transport } from "@warbler/core";
+      import { createApp } from "@warbler/core";
       import { Controller, Get, Post } from "@warbler/http";
       import { SocketController, Subscribe, OnOpen } from "@warbler/websocket";
 
+      const globalMiddleware = (_request: unknown, _context: unknown, next: () => unknown) => next();
+      const graphMiddleware = (_request: unknown, _context: unknown, next: () => unknown) => next();
+      const controllerMiddleware = (_request: unknown, _context: unknown, next: () => unknown) => next();
+      const routeMiddleware = (_request: unknown, _context: unknown, next: () => unknown) => next();
       @Repository() class UsersRepository {}
       @S() class UsersService { readonly repository = inject(UsersRepository); }
       @S({ provide: PS.ROOT }) class LoggerService {}
 
-      @Controller("/users") class UsersController {
-        @Get("/") list() {}
+      @Controller({ prefix: "/users", middleware: [controllerMiddleware] }) class UsersController {
+        @Get("/", { middleware: [routeMiddleware] }) list() {}
         @Post("/") create() {}
       }
       @SocketController() class UsersSocket {
@@ -46,8 +51,10 @@ describe("compiler foundation", () => {
         transport: Transport.HTTP,
         controllers: [UsersController, UsersSocket],
         providers: [UsersRepository, UsersService, LoggerService],
+        middleware: [graphMiddleware],
       })
       class UsersGraph {}
+      export default createApp({ graphs: [UsersGraph], middleware: [globalMiddleware] });
     `);
 
     const context = await compileProject(root);
@@ -57,12 +64,16 @@ describe("compiler foundation", () => {
     const wir = context.applicationWIR!;
     expect(Object.isFrozen(wir)).toBe(true);
     expect(wir.graphs).toHaveLength(1);
+    expect(wir.middleware).toEqual(["globalMiddleware"]);
     expect(wir.rootProviders.map((provider) => provider.name)).toEqual(["LoggerService"]);
     const graph = wir.graphs[0]!;
     expect(graph.name).toBe("UsersGraph");
     expect(graph.transport).toBe("http");
+    expect(graph.middleware).toEqual(["graphMiddleware"]);
     expect(graph.controllers.map((controller) => controller.kind)).toEqual(["http", "websocket"]);
+    expect(graph.controllers[0]!.middleware).toEqual(["controllerMiddleware"]);
     expect(graph.controllers[0]!.routes.map((route) => `${route.method} ${route.path}`)).toEqual(["GET /", "POST /"]);
+    expect(graph.controllers[0]!.routes[0]!.middleware).toEqual(["routeMiddleware"]);
     expect(graph.controllers[1]!.socketEvents.map((event) => event.event)).toEqual(["open", "user.changed"]);
     expect(graph.providers.find((provider) => provider.name === "UsersService")?.dependencies).toEqual(["UsersRepository"]);
     expect(wir.graphs.some((item) => item.name === "IgnoredGraph")).toBe(false);

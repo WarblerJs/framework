@@ -17,7 +17,9 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
   ].sort((left, right) => compare(left.key, right.key));
   const routeRows = wir.graphs.flatMap((graph) => graph.controllers.flatMap((controller) => controller.routes.map((route) => ({
     key: `${graph.name}:${route.method}:${joinPath(graph.prefix, controller.prefix, route.path)}:${controller.name}.${route.handler}`,
-    graph: graph.name, controller: controller.name, path: joinPath(graph.prefix, controller.prefix, route.path), route,
+    graph: graph.name, controller: controller.name, path: joinPath(graph.prefix, controller.prefix, route.path),
+    middleware: Object.freeze([...wir.middleware, ...graph.middleware, ...controller.middleware, ...route.middleware]),
+    route,
   })))).sort((left, right) => compare(left.key, right.key));
   const socketRows = wir.graphs.flatMap((graph) => graph.controllers.flatMap((controller) => controller.socketEvents.map((event) => ({
     key: `${graph.name}:${controller.name}:${event.kind}:${event.event}:${event.handler}`, graph: graph.name, controller: controller.name, event,
@@ -33,7 +35,7 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
     ...socketRows.map((row) => `${row.graph}:${row.controller}.${row.event.handler}`),
   ]);
   const validatorNames = uniqueSorted([...routeRows.map((row) => row.route.validator), ...socketRows.map((row) => row.event.validator)].filter(isString));
-  const middlewareNames = uniqueSorted([...routeRows.flatMap((row) => row.route.middleware), ...socketRows.flatMap((row) => row.event.middleware)]);
+  const middlewareNames = uniqueSorted([...routeRows.flatMap((row) => row.middleware), ...socketRows.flatMap((row) => row.event.middleware)]);
   const guardNames = uniqueSorted([...routeRows.flatMap((row) => row.route.guards), ...socketRows.flatMap((row) => row.event.guards)]);
   const handlerIds = idMap(handlerNames);
   const validatorIds = idMap(validatorNames);
@@ -71,7 +73,7 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
   const routeMiddleware: number[] = [];
   const routeGuards: number[] = [];
   const routes: RouteTableEntry[] = routeRows.map((row, id) => {
-    const middlewareStart = appendIds(routeMiddleware, row.route.middleware, middlewareIds);
+    const middlewareStart = appendAllIds(routeMiddleware, row.middleware, middlewareIds);
     const guardStart = appendIds(routeGuards, row.route.guards, guardIds);
     return Object.freeze({
       id, methodId: stringIds.get(row.route.method)!, pathId: stringIds.get(row.path)!,
@@ -80,13 +82,13 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
       validatorId: row.route.validator === undefined ? -1 : validatorIds.get(row.route.validator)!,
       nameId: row.route.name === undefined ? -1 : stringIds.get(row.route.name)!,
       middlewareStart, middlewareCount: routeMiddleware.length - middlewareStart,
-      guardStart, guardCount: routeGuards.length - guardStart, flags: routeFlags(row.route),
+      guardStart, guardCount: routeGuards.length - guardStart, flags: routeFlags(row.route, row.middleware.length),
     });
   });
   const socketMiddleware: number[] = [];
   const socketGuards: number[] = [];
   const socketEvents: SocketTableEntry[] = socketRows.map((row, id) => {
-    const middlewareStart = appendIds(socketMiddleware, row.event.middleware, middlewareIds);
+    const middlewareStart = appendAllIds(socketMiddleware, row.event.middleware, middlewareIds);
     const guardStart = appendIds(socketGuards, row.event.guards, guardIds);
     return Object.freeze({
       id, eventId: stringIds.get(row.event.event)!, controllerId: controllerIds.get(`${row.graph}:${row.controller}`)!,
@@ -136,11 +138,11 @@ export function optimizeWIR(wir: ApplicationWIR): OptimizedApplication {
   });
 }
 
-function routeFlags(route: RouteWIR): number {
+function routeFlags(route: RouteWIR, middlewareCount: number): number {
   const method = RouteFlag[route.method as keyof typeof RouteFlag] ?? 0;
   return method |
     (route.validator === undefined ? 0 : RouteFlag.VALIDATION) |
-    (route.middleware.length === 0 ? 0 : RouteFlag.MIDDLEWARE) |
+    (middlewareCount === 0 ? 0 : RouteFlag.MIDDLEWARE) |
     (route.guards.length === 0 ? 0 : RouteFlag.GUARD) |
     (route.csrf ? RouteFlag.CSRF : 0) |
     (route.stream === undefined ? 0 : RouteFlag.STREAMING) |
@@ -162,6 +164,11 @@ function socketFlags(event: SocketEventWIR): number {
 function appendIds(target: number[], names: readonly string[], ids: ReadonlyMap<string, number>): number {
   const start = target.length;
   for (const name of unique(names)) target.push(ids.get(name)!);
+  return start;
+}
+function appendAllIds(target: number[], names: readonly string[], ids: ReadonlyMap<string, number>): number {
+  const start = target.length;
+  for (const name of names) target.push(ids.get(name)!);
   return start;
 }
 function appendProviderDependencies(

@@ -32,12 +32,12 @@ async function phase2Project(): Promise<string> {
     import { Graph, Service, ProviderScope, inject } from "@warbler/core";
     import { Controller, Get, Post } from "@warbler/http";
     import { SocketController, Subscribe, OnOpen } from "@warbler/websocket";
-    import { v } from "@warbler/validators";
-    export const ValidateMessage = { rules: { value: v.string("invalid_string") } };
-    export const ValidateRequest = { rules: { value: v.string("invalid_string") } };
-    export class AuthGuard {}
+    import { defineValidator, v } from "@warbler/validators";
+    export const ValidateMessage: any = defineValidator({ bodyRules: { value: v.string("invalid_string") } });
+    export const ValidateRequest: any = defineValidator({ bodyRules: { value: v.string("invalid_string") } });
+    export const AuthGuard = (_request: any, _context: any) => true;
     export const SocketAuthGuard = () => true;
-    export class AuditMiddleware {}
+    export const AuditMiddleware = (_request: any, _context: any, next: any) => next();
 
     @Service({ provide: ProviderScope.ROOT }) export class Logger {}
     @Service() export default class UsersService { readonly logger = inject(Logger); }
@@ -97,6 +97,43 @@ describe("Phase 2 optimization", () => {
     expect(socket.flags & SocketFlag.RATE_LIMIT).not.toBe(0);
     const loggerId = optimized.providers.find((provider) => optimized.strings[provider.nameId] === "Logger")!.id;
     expect(optimized.providerDependencies).toEqual([loggerId]);
+  }, 15_000);
+
+  test("flattens HTTP middleware scopes once in effective route order", async () => {
+    const root = await phase2Project();
+    const sourcePath = join(root, "src", "application.ts");
+    const source = await Bun.file(sourcePath).text();
+    await Bun.write(sourcePath, source
+      .replace("import { Graph, Service, ProviderScope, inject } from \"@warbler/core\";", "import { createApp, Graph, Service, ProviderScope, inject } from \"@warbler/core\";")
+      .replace("export const AuditMiddleware = (_request: any, _context: any, next: any) => next();", `export const AuditMiddleware = (_request: any, _context: any, next: any) => next();
+    export const GlobalMiddleware = (_request: any, _context: any, next: any) => next();
+    export const GraphMiddleware = (_request: any, _context: any, next: any) => next();
+    export const ControllerMiddleware = (_request: any, _context: any, next: any) => next();
+    export const SharedMiddleware = (_request: any, _context: any, next: any) => next();`)
+      .replace("@Controller(\"/users\") export class UsersController", "@Controller({ prefix: \"/users\", middleware: [ControllerMiddleware, SharedMiddleware] }) export class UsersController")
+      .replace("providers: [Logger, UsersService] })", "providers: [Logger, UsersService], middleware: [GraphMiddleware] })")
+      .replace("export class UsersGraph {}", "export class UsersGraph {}\n    export const app = createApp({ graphs: [UsersGraph], middleware: [GlobalMiddleware, SharedMiddleware] });"));
+    const optimized = (await compileProject(root)).generatedApplication!.optimized;
+    const name = (id: number): string => optimized.strings[optimized.middlewares[id]!.nameId]!;
+    const routeName = (route: typeof optimized.routes[number]): string => optimized.strings[route.methodId]!;
+    const get = optimized.routes.find((route) => routeName(route) === "GET")!;
+    expect(optimized.routeMiddleware.slice(get.middlewareStart, get.middlewareStart + get.middlewareCount).map(name)).toEqual([
+      "GlobalMiddleware",
+      "SharedMiddleware",
+      "GraphMiddleware",
+      "ControllerMiddleware",
+      "SharedMiddleware",
+      "AuditMiddleware",
+    ]);
+    const post = optimized.routes.find((route) => routeName(route) === "POST")!;
+    expect(optimized.routeMiddleware.slice(post.middlewareStart, post.middlewareStart + post.middlewareCount).map(name)).toEqual([
+      "GlobalMiddleware",
+      "SharedMiddleware",
+      "GraphMiddleware",
+      "ControllerMiddleware",
+      "SharedMiddleware",
+    ]);
+    expect(optimized.socketMiddleware).toEqual([]);
   }, 15_000);
 
   test("keeps existing IDs consistent when a deterministically later route is added", async () => {

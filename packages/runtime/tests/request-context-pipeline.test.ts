@@ -62,9 +62,8 @@ function application(setValue: unknown, factory: "sync" | "async" = "sync"): Gen
     guards: Object.freeze([
       Object.freeze({
         id: 0,
-        execute: (_request: unknown, context: { set: (key: string, value: unknown) => void }) => {
-          if (factory === "async") context.set("user", async () => { await Bun.sleep(1); return setValue; });
-          else context.set("user", setValue);
+        execute: (_request: unknown, context: { get: (key: string) => unknown }) => {
+          context.get("user");
           return true;
         },
       }),
@@ -72,8 +71,9 @@ function application(setValue: unknown, factory: "sync" | "async" = "sync"): Gen
     middleware: Object.freeze([
       Object.freeze({
         id: 0,
-        execute: (request: unknown, context: { get: (key: string) => unknown }, next: (value?: unknown) => unknown) => {
-          context.get("user"); // reads back what the guard set — proves middleware can build on prior pipeline state
+        execute: (request: unknown, context: { set: (key: string, value: unknown) => void }, next: (value?: unknown) => unknown) => {
+          if (factory === "async") context.set("user", async () => { await Bun.sleep(1); return setValue; });
+          else context.set("user", setValue);
           return next(request);
         },
       }),

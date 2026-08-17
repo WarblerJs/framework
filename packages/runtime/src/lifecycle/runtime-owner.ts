@@ -399,7 +399,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     // still call `.set(...)` right up until this terminal step, so it's settled here —
     // right before the handler runs — rather than eagerly. `settle()` keeps its own
     // synchronous fast path when nothing async was set, matching `runValidated`'s.
-    const terminal = createMiddlewarePipeline(this.#indexes!.middleware, middlewareIds, (pipelineValue, context) => {
+    const handlerTerminal = (pipelineValue: unknown, context: unknown): unknown => {
       if (!http) return this.invokeHandler(handlerId, socketInputs(pipelineValue, socketEvent));
       if (profiler !== undefined) {
         const settleStart = performance.now();
@@ -416,7 +416,18 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       const settled = (context as RequestContextStore).settle();
       if (isThenable(settled)) return settled.then(() => this.invokeHandler(handlerId, [pipelineValue]));
       return this.invokeHandler(handlerId, [pipelineValue]);
-    });
+    };
+    const guardedTerminal = (pipelineValue: unknown, context: unknown): unknown => {
+      const guardStart = profiler !== undefined && http ? performance.now() : 0;
+      const guarded = guardPipeline.execute(pipelineValue, context);
+      if (isThenable(guarded)) return guarded.then((allowed) => {
+        if (profiler !== undefined && http) profiler.record("guardMiddleware", performance.now() - guardStart);
+        return allowed ? handlerTerminal(pipelineValue, context) : http ? forbidden() : undefined;
+      });
+      if (profiler !== undefined && http) profiler.record("guardMiddleware", performance.now() - guardStart);
+      return guarded ? handlerTerminal(pipelineValue, context) : http ? forbidden() : undefined;
+    };
+    const terminal = createMiddlewarePipeline(this.#indexes!.middleware, middlewareIds, guardedTerminal);
     const core = (input: unknown): unknown => {
       const validationInput = http ? input : socketValidationInput(input, socketEvent);
       const validator = this.#indexes!.validators[validatorId];
@@ -424,16 +435,9 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
         const requestContextStart = profiler !== undefined && http ? performance.now() : 0;
         const requestContext = new RequestContextStore();
         const pipelineValue = http ? buildAppRequest(validationInput, validated, requestContext, requestRequirements) : socketValidatedEnvelope(input, validated);
-        const guardContext = http ? requestContext : socketConnectionContext(pipelineValue);
+        const pipelineContext = http ? requestContext : socketConnectionContext(pipelineValue);
         if (profiler !== undefined && http) profiler.record("requestContext", performance.now() - requestContextStart);
-        const guardStart = profiler !== undefined && http ? performance.now() : 0;
-        const guarded = guardPipeline.execute(pipelineValue, guardContext);
-        if (isThenable(guarded)) return guarded.then((allowed) => {
-          if (profiler !== undefined && http) profiler.record("guardMiddleware", performance.now() - guardStart);
-          return allowed ? terminal(pipelineValue, guardContext) : http ? forbidden() : undefined;
-        });
-        if (profiler !== undefined && http) profiler.record("guardMiddleware", performance.now() - guardStart);
-        return guarded ? terminal(pipelineValue, guardContext) : http ? forbidden() : undefined;
+        return terminal(pipelineValue, pipelineContext);
     }, (outcome) => http ? invalidHttpValidation(validator, outcome.errors, validationInput, requestRequirements) : socketValidationFailure(input, outcome.errors), profiler !== undefined && http ? profiler : undefined);
     };
     // Route/socket pipelines run with the owning Graph as the ambient DI resolver so guards,

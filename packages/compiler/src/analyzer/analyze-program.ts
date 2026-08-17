@@ -30,10 +30,12 @@ const PROVIDERS: ReadonlyMap<string, ProviderWIR["kind"]> = new Map([
 /** Graph declaration before ownership validation. */
 export interface AnalyzedGraph extends SourceLocationWIR {
   readonly name: string; readonly prefix: string; readonly transport: string;
+  readonly middleware: readonly string[];
   readonly controllerNames: readonly string[]; readonly providerNames: readonly string[];
 }
 /** Complete single-pass analysis output. */
 export interface AnalysisResult {
+  readonly middleware: readonly string[];
   readonly graphs: readonly AnalyzedGraph[];
   readonly controllers: ReadonlyMap<string, ControllerWIR>;
   readonly providers: ReadonlyMap<string, ProviderWIR>;
@@ -52,6 +54,7 @@ export interface FrameworkProviderReference extends SourceLocationWIR {
 /** Traverses every application SourceFile once and records all Phase 1 declarations. */
 export function analyzeProgram(context: CompilerContext): AnalysisResult {
   const graphs: AnalyzedGraph[] = [];
+  const middleware: string[] = [];
   const controllers = new Map<string, ControllerWIR>();
   const providers = new Map<string, ProviderWIR>();
   const frameworkProviders = new Map<string, FrameworkProviderReference>();
@@ -61,6 +64,7 @@ export function analyzeProgram(context: CompilerContext): AnalysisResult {
 
   for (const sourceFile of context.sourceFiles) {
     const aliases = collectAliases(sourceFile);
+    middleware.push(...collectApplicationMiddleware(sourceFile, aliases));
     for (const reference of collectFrameworkProviders(sourceFile)) frameworkProviders.set(reference.local, reference);
     collectEventDeclarations(sourceFile, aliases, context.typeChecker, events, eventListeners, eventInterceptors, context.diagnostics);
     const visit = (node: ts.Node): void => {
@@ -73,6 +77,7 @@ export function analyzeProgram(context: CompilerContext): AnalysisResult {
     visit(sourceFile);
   }
   return Object.freeze({
+    middleware: Object.freeze(middleware),
     graphs: Object.freeze(graphs),
     controllers,
     providers,
@@ -161,6 +166,7 @@ function analyzeClass(
     const result: ControllerWIR = Object.freeze({
       ...location(node, source), name, kind,
       prefix: kind === "http" ? controllerPrefix(controllerDecorator.call) : "",
+      middleware: Object.freeze(kind === "http" ? objectReferenceArray(controllerOptions, "middleware") : []),
       providerNames: Object.freeze(kind === "http" ? controllerProviderElementNames(controllerOptions, name, aliases, providers, source, diagnostics) : []),
       providers: Object.freeze([]),
       dependencies: Object.freeze([...dependencies]),
@@ -204,6 +210,7 @@ function analyzeGraph(
     ...location(node, source), name,
     prefix: objectString(object, "prefix", ""),
     transport: objectTransport(object),
+    middleware: Object.freeze(objectReferenceArray(object, "middleware")),
     controllerNames: Object.freeze(objectNames(object, "controllers")),
     providerNames: Object.freeze(providerElementNames(object, name, aliases, providers, source, diagnostics)),
   });
@@ -298,6 +305,18 @@ function analyzeProviderRegistration(
   }
   diagnostic(diagnostics, DiagnosticCode.INVALID_PROVIDER_SCOPE, `Provider(...) in "${ownerName}" must declare useClass, useValue, useFactory, or useExisting.`, call, source, [ownerName]);
   return undefined;
+}
+
+function collectApplicationMiddleware(source: ts.SourceFile, aliases: ReadonlyMap<string, string>): readonly string[] {
+  const middleware: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && (aliases.get(node.expression.text) ?? node.expression.text) === "createApp") {
+      middleware.push(...objectReferenceArray(objectArgument(node, 0), "middleware"));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return middleware;
 }
 
 /** Captures an expression's verbatim source text plus the free identifiers it references, skipping bound parameter/variable names and property keys. */

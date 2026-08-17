@@ -8,6 +8,7 @@ export interface GraphOptions {
   readonly transport?: TransportType;
   readonly controllers?: readonly Constructor[];
   readonly providers?: readonly Provider[]; 
+  readonly middleware?: readonly unknown[];
 }
 
 /** Normalized graph metadata used by the compiler and runtime. */
@@ -16,4 +17,5 @@ export interface GraphMetadata {
   readonly transport: TransportType;
   readonly controllers: readonly Constructor[];
   readonly providers: readonly Provider[]; 
+  readonly middleware: readonly unknown[];
 }

@@ -10,7 +10,16 @@ describe("Graph", () => {
       transport: Transport.HTTP,
       controllers: [],
       providers: [],
+      middleware: [],
     });
+  });
+
+  test("stores immutable graph middleware", () => {
+    const middleware = () => undefined;
+    @Graph({ middleware: [middleware] })
+    class AuthGraph {}
+    expect(getGraphMetadata(AuthGraph)?.middleware).toEqual([middleware]);
+    expect(Object.isFrozen(getGraphMetadata(AuthGraph)?.middleware)).toBe(true);
   });
 
   test("supports websocket graphs", () => {

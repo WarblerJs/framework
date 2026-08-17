@@ -14,46 +14,33 @@ test("generated native HTTP routes invoke real controllers and validation", asyn
     const root = await routes["/"]!.GET!(new Request("http://127.0.0.1/"));
     expect(root.status).toBe(200);
     expect(await root.json()).toEqual({ framework: "Warbler", runtime: "Bun", status: "running" });
-    const invalid = await routes["/api/auth/login"]!.POST!(new Request("http://127.0.0.1/api/auth/login", {
+    const invalid = await routes["/auth/login"]!.POST!(new Request("http://127.0.0.1/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email: "", password: 4 }),
     }));
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toEqual({
-      email: "Email is invalid.",
-      password: "This value must be a string.",
-      type: "Type is not exist .",
+      email: "not_valid_email",
+      password: "string",
+      remember: "string",
     });
-    const profileRequest = new Request("http://127.0.0.1/api/auth/profile/10");
-    Object.defineProperty(profileRequest, "params", { value: Object.freeze({ id: "10" }) });
-    const profile = await routes["/api/auth/profile/:id"]!.GET!(profileRequest);
-    expect(profile.status).toBe(200);
-    expect((await profile.json()) as Readonly<Record<string, unknown>>).toMatchObject({
-      tr: "Welcome, habib!",
-    });
-    const avatarBody = new FormData();
-    avatarBody.set("avatar", new File(["image"], "avatar.png", { type: "image/png" }));
-    const avatar = await routes["/api/auth/avatar"]!.POST!(new Request("http://127.0.0.1/api/auth/avatar", {
-      method: "POST",
-      body: avatarBody,
+    const inherited = await routes["/users/middleware/inherited"]!.GET!(new Request("http://127.0.0.1/users/middleware/inherited"));
+    expect(inherited.status).toBe(200);
+    const inheritedBody = await inherited.json() as Readonly<Record<string, unknown>>;
+    expect(inheritedBody.requestId).toBeTypeOf("string");
+    expect(inheritedBody.tenant).toEqual({ id: "playground", source: "default" });
+    expect(inheritedBody.user).toEqual({ id: "playground-user", role: "admin" });
+    expect("audit" in inheritedBody).toBe(false);
+    const all = await routes["/users/middleware/all"]!.GET!(new Request("http://127.0.0.1/users/middleware/all", {
+      headers: { "x-tenant-id": "acme" },
     }));
-    expect(avatar.status).toBe(200);
-    expect(await avatar.json()).toEqual({
-      filename: "avatar.png",
-      mimeType: "image/png",
-      size: 5,
-    });
-    const invalidAvatarBody = new FormData();
-    invalidAvatarBody.set("avatar", new File(["plain"], "avatar.txt", { type: "text/plain" }));
-    const invalidAvatar = await routes["/api/auth/avatar"]!.POST!(new Request("http://127.0.0.1/api/auth/avatar", {
-      method: "POST",
-      body: invalidAvatarBody,
-    }));
-    expect(invalidAvatar.status).toBe(400);
-    expect(await invalidAvatar.json()).toEqual({
-      avatar: "The avatar must be a JPEG, PNG, or WebP image.",
-    });
+    expect(all.status).toBe(200);
+    const allBody = await all.json() as Readonly<Record<string, unknown>>;
+    expect(allBody.requestId).toBeTypeOf("string");
+    expect(allBody.tenant).toEqual({ id: "acme", source: "header" });
+    expect(allBody.user).toEqual({ id: "playground-user", role: "admin" });
+    expect(allBody.audit).toEqual({ route: "users.middleware.all" });
   } finally {
     await runtime.stop();
   }

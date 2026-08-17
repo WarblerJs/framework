@@ -82,6 +82,7 @@ export class Compiler {
       context.applicationWIR = Object.freeze({
         version: 1,
         projectRoot: config.projectRoot,
+        middleware: Object.freeze([]),
         graphs: Object.freeze([]),
         rootProviders: Object.freeze([]),
         events: Object.freeze([]),
@@ -104,6 +105,7 @@ export async function compileApplication(projectRoot: string = process.cwd()): P
   return context.applicationWIR ?? Object.freeze({
     version: 1,
     projectRoot: context.config.projectRoot,
+    middleware: Object.freeze([]),
     graphs: Object.freeze([]),
     rootProviders: Object.freeze([]),
     events: Object.freeze([]),

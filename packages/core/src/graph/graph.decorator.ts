@@ -18,6 +18,7 @@ export function Graph(options: GraphOptions = {}) {
       transport: options.transport ?? Transport.HTTP,
       controllers: Object.freeze([...(options.controllers ?? [])]),
       providers: Object.freeze([...(options.providers ?? [])]), 
+      middleware: Object.freeze([...(options.middleware ?? [])]),
     });
 
     defineMetadata(target, MetadataKeys.GRAPH, metadata);
