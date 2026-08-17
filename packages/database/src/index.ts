@@ -9,7 +9,13 @@ export {
   DatabaseCompileError,
   DatabaseConfigError,
   DatabaseError,
+  MigrationDefinitionError,
+  MigrationFileNotFoundError,
   MigrationChecksumError,
+  MigrationHistoryError,
+  MigrationLockError,
+  MigrationRollbackExecutionError,
+  MigrationRollbackStepError,
   MigrationScaffoldError,
   SeedError,
   isDatabaseError,
@@ -58,6 +64,8 @@ export {
 export { createPgMigrationContext } from "./migrations/create-pg-migration-context";
 export { runMigrations } from "./migrations/run-migrations";
 export type { ExecutedMigration, MigrationRunResult, RunMigrationsOptions } from "./migrations/run-migrations";
+export { rollbackMigrations } from "./migrations/rollback-migrations";
+export type { MigrationRollbackResult, RolledBackMigration, RollbackMigrationsOptions } from "./migrations/rollback-migrations";
 export { scaffoldMigration } from "./migrations/scaffold-migration";
 export type { ScaffoldedMigration } from "./migrations/scaffold-migration";
 export { resetDatabase } from "./migrations/reset-database";

@@ -1,4 +1,5 @@
 import type { SQL } from "bun";
+import { mkdir, rm } from "node:fs/promises";
 import { createCompiledDatabaseArtifact, type CompiledDatabaseArtifact } from "../artifact";
 import { generateClientBarrelSource, generateClientSource } from "../generator/generate-client";
 import { generateModelMirrorSource } from "../generator/generate-model-mirror";
@@ -16,6 +17,11 @@ export interface DatabaseGenerationResult {
   readonly artifact: CompiledDatabaseArtifact;
 }
 
+async function resetGeneratedDirectory(path: string): Promise<void> {
+  await rm(path, { recursive: true, force: true });
+  await mkdir(path, { recursive: true });
+}
+
 /** Introspects the live database and writes schema.sql/metadata.json/runtime/client/models into `config.migrations.generated`. */
 export async function generateFromDatabase(sql: SQL, options: GenerateFromDatabaseOptions): Promise<DatabaseGenerationResult> {
   const { projectRoot, config } = options;
@@ -26,6 +32,9 @@ export async function generateFromDatabase(sql: SQL, options: GenerateFromDataba
   const artifact = createCompiledDatabaseArtifact({ tables });
 
   const generatedRoot = `${projectRoot}/${config.migrations.generated}`;
+  await resetGeneratedDirectory(`${generatedRoot}/client`);
+  await resetGeneratedDirectory(`${generatedRoot}/models`);
+  await mkdir(`${generatedRoot}/runtime`, { recursive: true });
   await Bun.write(`${generatedRoot}/schema.sql`, generateSchemaSql(tables));
   await Bun.write(`${generatedRoot}/metadata.json`, `${JSON.stringify(tables, null, 2)}\n`);
   await Bun.write(`${generatedRoot}/runtime/pg-client.ts`, generateRuntimeClientSource(config));

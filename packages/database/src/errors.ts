@@ -50,6 +50,69 @@ export class MigrationChecksumError extends DatabaseError {
   }
 }
 
+/** Error thrown when migration history cannot be read or updated safely. */
+export class MigrationHistoryError extends DatabaseError {
+  public constructor(
+    public readonly operation: "read" | "delete",
+    detail: string,
+    cause?: unknown,
+  ) {
+    super(`Failed to ${operation} migration history: ${detail}`, "DB2004", { cause });
+    this.name = "MigrationHistoryError";
+  }
+}
+
+/** Error thrown when a migration recorded in the database no longer exists locally. */
+export class MigrationFileNotFoundError extends DatabaseError {
+  public constructor(
+    public readonly migrationName: string,
+    public readonly path: string,
+  ) {
+    super(`Migration "${migrationName}" is recorded in history but ${path} was not found.`, "DB2005");
+    this.name = "MigrationFileNotFoundError";
+  }
+}
+
+/** Error thrown when a migration module does not satisfy the expected up/down contract. */
+export class MigrationDefinitionError extends DatabaseError {
+  public constructor(
+    public readonly migrationName: string,
+    detail: string,
+    cause?: unknown,
+  ) {
+    super(`Migration "${migrationName}" is invalid: ${detail}`, "DB2006", { cause });
+    this.name = "MigrationDefinitionError";
+  }
+}
+
+/** Error thrown when a migration down operation fails during rollback. */
+export class MigrationRollbackExecutionError extends DatabaseError {
+  public constructor(public readonly migrationName: string, cause?: unknown) {
+    super(`Rollback failed while executing "${migrationName}".`, "DB2007", { cause });
+    this.name = "MigrationRollbackExecutionError";
+  }
+}
+
+/** Error thrown when a rollback step count is invalid. */
+export class MigrationRollbackStepError extends DatabaseError {
+  public constructor(detail: string) {
+    super(`Invalid rollback step: ${detail}`, "DB2008");
+    this.name = "MigrationRollbackStepError";
+  }
+}
+
+/** Error thrown when the PostgreSQL migration advisory lock cannot be acquired or released. */
+export class MigrationLockError extends DatabaseError {
+  public constructor(
+    public readonly operation: string,
+    public readonly phase: "acquire" | "release",
+    cause?: unknown,
+  ) {
+    super(`Failed to ${phase} migration lock for ${operation}.`, "DB2009", { cause });
+    this.name = "MigrationLockError";
+  }
+}
+
 /** Error thrown when a seed file doesn't export a valid `seed` function, or a seed name is invalid. */
 export class SeedError extends DatabaseError {
   public constructor(public readonly seedName: string, detail: string) {

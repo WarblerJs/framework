@@ -14,3 +14,5 @@ warbler db:pg migration alter:enum
 warbler db:pg migration raw:custom
 
 warbler db:pg migration -> run all migrations 
+warbler db:pg rollback -> rollback latest migration
+warbler db:pg rollback --step=3 -> rollback latest 3 migrations in reverse order

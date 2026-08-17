@@ -58,8 +58,11 @@
     --font-weight-semibold: 600;
     --font-weight-bold: 700;
     --tracking-tight: -0.025em;
+    --radius-sm: 4px;
     --radius-md: 6px;
     --radius-lg: 10px;
+    --radius-3xl: 42px;
+    --aspect-video: 16 / 9;
     --default-transition-duration: 150ms;
     --default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
     --default-font-family: var(--font-sans);

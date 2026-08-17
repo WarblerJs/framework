@@ -28,8 +28,11 @@ export { cleanCommand } from "./clean/clean-command";
 export { databaseGenerateCommand, type DatabaseGenerateResult } from "./db/generate-command";
 export {
   migrationRunCommand,
+  migrationRollbackCommand,
   migrationScaffoldCommand,
   type MigrationRunCommandResult,
+  type MigrationRollbackCommandOptions,
+  type MigrationRollbackCommandResult,
   type MigrationScaffoldCommandResult,
 } from "./db/migration-command";
 export { resetCommand, type ResetCommandOptions, type ResetCommandResult } from "./db/reset-command";

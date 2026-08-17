@@ -5,26 +5,29 @@ import { runMigrations } from "../src/migrations/run-migrations";
 
 interface FakeSql {
   readonly sql: SQL;
-  readonly executedMigrations: readonly { name: string; checksum: string; batch: number }[];
+  readonly executedMigrations: readonly { id: number; name: string; checksum: string; batch: number }[];
   readonly ddlLog: readonly string[];
 }
 
 function createFakeSql(tableName: string): FakeSql {
-  const executedMigrations: { name: string; checksum: string; batch: number }[] = [];
+  const executedMigrations: { id: number; name: string; checksum: string; batch: number }[] = [];
   const ddlLog: string[] = [];
   const quotedTable = `"${tableName}"`;
+  let nextId = 1;
 
   const unsafe = async (query: string, values?: readonly unknown[]): Promise<unknown[]> => {
     const trimmed = query.trim();
+    if (trimmed === "SELECT pg_advisory_lock($1, $2)") return [];
+    if (trimmed === "SELECT pg_advisory_unlock($1, $2) AS unlocked") return [{ unlocked: true }];
     if (trimmed.startsWith(`CREATE TABLE IF NOT EXISTS ${quotedTable}`)) return [];
-    if (trimmed.startsWith(`SELECT name, checksum, batch FROM ${quotedTable}`)) return [...executedMigrations];
+    if (trimmed.startsWith(`SELECT id, name, checksum, batch FROM ${quotedTable}`)) return [...executedMigrations];
     if (trimmed.startsWith("SELECT max(batch)")) {
       if (executedMigrations.length === 0) return [{ max: null }];
       return [{ max: Math.max(...executedMigrations.map((row) => row.batch)) }];
     }
     if (trimmed.startsWith(`INSERT INTO ${quotedTable}`)) {
       const [name, checksum, batch] = values as [string, string, number, number];
-      executedMigrations.push({ name, checksum, batch });
+      executedMigrations.push({ id: nextId++, name, checksum, batch });
       return [];
     }
     ddlLog.push(trimmed);
@@ -35,6 +38,7 @@ function createFakeSql(tableName: string): FakeSql {
   const sql = {
     unsafe,
     begin: async (fn: (transaction: TransactionSQL) => Promise<void>) => fn(tx),
+    reserve: async () => ({ unsafe, begin: async (fn: (transaction: TransactionSQL) => Promise<void>) => fn(tx), release() {} }),
   } as unknown as SQL;
 
   return { sql, executedMigrations, ddlLog };

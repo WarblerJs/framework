@@ -142,6 +142,43 @@ via `migrations.table`) and skipped; if a previously-run migration's file has si
 run aborts before touching the database — migrations are immutable once executed, write a new one
 instead of editing an old one.
 
+**Roll back the latest applied migration**:
+
+```sh
+warbler db:pg rollback
+```
+
+```
+20260806090000_add_column_user_role (batch 1, 9ms)
+```
+
+Rollback uses the database migration history as the source of truth, not filenames on disk. It
+selects the newest applied migration, loads that exact local file, verifies the file still matches
+the recorded checksum, runs its `down` function in a transaction, and removes the history row only
+after `down` succeeds. If there is nothing applied, the command exits cleanly:
+
+```
+Nothing to rollback.
+```
+
+To roll back more than one migration, pass a positive integer step count:
+
+```sh
+warbler db:pg rollback --step=3
+```
+
+Multiple rollbacks run newest first, one transaction per migration. If fewer migrations exist than
+requested, Warbler rolls back the available migrations and stops cleanly. If a rollback fails, the
+current migration's transaction is rolled back and its history row remains applied; any earlier
+rollback steps that already committed remain reverted. Missing migration files, changed checksums,
+and missing/invalid `down` exports fail before modifying migration history.
+
+After a rollback changes the live schema, refresh generated client files explicitly:
+
+```sh
+warbler db:pg generate
+```
+
 ## Generating
 
 Connects to the live database, introspects it via PostgreSQL's system catalogs, and writes
@@ -157,6 +194,8 @@ Compiled 2 table(s): roles, users
 
 Table names are singularized into model/client names automatically (`users` → `User` /
 `WlbPg.user`); for irregular words, add an entry to `migrations.modelNames` in the config above.
+Generation rewrites the generated client/model snapshot from the current live schema and removes
+stale generated files for tables that no longer exist.
 
 ## Using the generated client
 
@@ -189,6 +228,6 @@ await pg.begin(async (tx) => {
 
 ## Not yet implemented
 
-Table partitioning (`create:partition`), a rollback/`down` CLI command, seeders, triggers, views,
-generated/computed columns, `insertMany`/`updateMany`/`deleteMany`/`upsert`/`exists`/`aggregate`/
-`paginate` client methods, and multi-column `where` filters beyond a single unique key.
+Table partitioning (`create:partition`), triggers, views, generated/computed columns,
+`insertMany`/`updateMany`/`deleteMany`/`upsert`/`exists`/`aggregate`/`paginate` client methods, and
+multi-column `where` filters beyond a single unique key.

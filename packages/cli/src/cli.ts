@@ -1,5 +1,6 @@
 import type { DevelopmentRuntimeLauncher } from "./dev/dev-session";
 import { Console } from "@warbler/console";
+import { isDatabaseError } from "@warbler/database";
 import type { DevSession } from "./dev/dev-session";
 import type { DevelopmentEvent, DevelopmentReporter } from "./dev/dev-session";
 import { devCommand } from "./dev/dev-command";
@@ -8,7 +9,7 @@ import { buildCommand } from "./build/build-command";
 import { cleanCommand } from "./clean/clean-command";
 import { cliDiagnostic } from "./diagnostics";
 import { databaseGenerateCommand } from "./db/generate-command";
-import { migrationRunCommand, migrationScaffoldCommand } from "./db/migration-command";
+import { migrationRollbackCommand, migrationRunCommand, migrationScaffoldCommand } from "./db/migration-command";
 import { resetCommand } from "./db/reset-command";
 import { seedRunCommand, seedScaffoldCommand } from "./db/seed-command";
 import { doctorCommand } from "./doctor/doctor-command";
@@ -67,9 +68,12 @@ export async function runCLI(argv: readonly string[], services: CLIServices = {}
     return await execute(context, commandOutput, services);
   } catch (cause) {
     const known = cause instanceof CLIError;
+    const database = isDatabaseError(cause);
 
     const diagnostic = known
       ? cliDiagnostic({ code: cause.code, severity: "error", message: cause.message, ...(cause.suggestion === undefined ? {} : { suggestion: cause.suggestion }) })
+      : database
+        ? cliDiagnostic({ code: cause.code, severity: "error", message: cause.message })
       : cliDiagnostic({ code: "CLI9000", severity: "error", message: "Unexpected CLI failure." });
     writeDiagnostic(output, format, diagnostic, verbose && cause instanceof Error ? cause.stack : undefined);
     return known ? cause.exitCode : ExitCode.FAILURE;
@@ -197,6 +201,15 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
         writeResult(output, context.format, { command: "db:pg", status: "success", action: "migration", file: scaffold.path }, `Generated ${scaffold.path}`);
         return ExitCode.SUCCESS;
       }
+      if (action === "rollback") {
+        assertArgs(context, 1);
+        const result = await migrationRollbackCommand(layout, { step: parseRollbackStep(stringFlag(context.flags.step)) });
+        const message = result.rolledBack.length === 0
+          ? "Nothing to rollback."
+          : result.rolledBack.map((migration) => `${migration.name} (batch ${migration.batch}, ${migration.executionMs}ms)`).join("\n");
+        writeResult(output, context.format, { command: "db:pg", status: "success", action: "rollback", rolledBack: result.rolledBack }, message);
+        return ExitCode.SUCCESS;
+      }
       if (action === "reset") {
         assertArgs(context, 1);
         if (context.flags.force !== true) {
@@ -226,7 +239,7 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
         writeResult(output, context.format, { command: "db:pg", status: "success", action: "seed", file: scaffold.path }, `Generated ${scaffold.path}`);
         return ExitCode.SUCCESS;
       }
-      throw new CLIError("CLI3002", `Unknown db:pg action: ${action ?? ""}`, ExitCode.INVALID_ARGUMENTS, "Run warbler db:pg generate, migration, reset, or seed.");
+      throw new CLIError("CLI3002", `Unknown db:pg action: ${action ?? ""}`, ExitCode.INVALID_ARGUMENTS, "Run warbler db:pg generate, migration, rollback, reset, or seed.");
     }
     default: throw new CLIError("CLI1001", `Unsupported command: ${context.command}`, ExitCode.INVALID_ARGUMENTS);
   }
@@ -252,6 +265,13 @@ function assertArgs(context: CLIContext, count: number | readonly [min: number, 
   if (context.args.length !== count) throw new CLIError("CLI1009", `${context.command} expects ${count} positional argument(s).`, ExitCode.INVALID_ARGUMENTS);
 }
 function stringFlag(value: string | boolean | undefined): string | undefined { return typeof value === "string" ? value : undefined; }
+function parseRollbackStep(value: string | undefined): number {
+  if (value === undefined) return 1;
+  if (!/^[1-9]\d*$/u.test(value)) throw new CLIError("CLI3004", "Rollback step must be a positive safe integer.", ExitCode.INVALID_ARGUMENTS);
+  const step = Number(value);
+  if (!Number.isSafeInteger(step)) throw new CLIError("CLI3004", "Rollback step must be a positive safe integer.", ExitCode.INVALID_ARGUMENTS);
+  return step;
+}
 function validateCommandFlags(context: CLIContext): void {
   const common = ["json", "verbose", "quiet", "help", "no-color"];
   const commandFlags: Readonly<Record<CLIContext["command"], readonly string[]>> = {
@@ -262,7 +282,7 @@ function validateCommandFlags(context: CLIContext): void {
     inspect: [...common, "project"],
     new: [...common, "dry-run"],
     generate: [...common, "project", "dry-run", "force"],
-    "db:pg": [...common, "project", "force", "seed"],
+    "db:pg": [...common, "project", "force", "seed", "step"],
     clean: [...common, "project", "dry-run"],
     version: common,
     help: common,
@@ -289,6 +309,7 @@ Usage:
   warbler new <name>
   warbler generate <kind> <name>
   warbler db:pg migration [<kind>:<name>]
+  warbler db:pg rollback [--step 3]
   warbler db:pg generate
   warbler db:pg reset --force [--seed]
   warbler db:pg seed [<name>]

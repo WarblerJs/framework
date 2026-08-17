@@ -1,4 +1,4 @@
-import { createPgConnection, runMigrations, scaffoldMigration, type ExecutedMigration } from "@warbler/database";
+import { createPgConnection, rollbackMigrations, runMigrations, scaffoldMigration, type ExecutedMigration, type RolledBackMigration } from "@warbler/database";
 import { atomicWrite } from "../filesystem";
 import type { ProjectLayout } from "../project";
 import { requireDatabaseConfig } from "./shared";
@@ -9,6 +9,14 @@ export interface MigrationRunCommandResult {
 
 export interface MigrationScaffoldCommandResult {
   readonly path: string;
+}
+
+export interface MigrationRollbackCommandOptions {
+  readonly step: number;
+}
+
+export interface MigrationRollbackCommandResult {
+  readonly rolledBack: readonly RolledBackMigration[];
 }
 
 /** `warbler db:pg migration`: runs every pending migration against the live database. */
@@ -22,6 +30,23 @@ export async function migrationRunCommand(layout: ProjectLayout): Promise<Migrat
       table: config.migrations.table,
     });
     return Object.freeze({ executed: result.executed });
+  } finally {
+    await sql.close();
+  }
+}
+
+/** `warbler db:pg rollback`: rolls back the most recently applied migration(s). */
+export async function migrationRollbackCommand(layout: ProjectLayout, options: MigrationRollbackCommandOptions): Promise<MigrationRollbackCommandResult> {
+  const config = await requireDatabaseConfig(layout);
+  const sql = createPgConnection(config.connection, config.log === true);
+  try {
+    const result = await rollbackMigrations(sql, {
+      projectRoot: layout.root,
+      path: config.migrations.path,
+      table: config.migrations.table,
+      step: options.step,
+    });
+    return Object.freeze({ rolledBack: result.rolledBack });
   } finally {
     await sql.close();
   }

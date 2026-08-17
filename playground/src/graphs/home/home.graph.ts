@@ -4,7 +4,7 @@ import ApplicationLogger from "./application-logger";
 import HomeService from "./home.service";
 
 @Graph({
-  prefix: "/",
+  prefix: "/test",
   controllers: [HomeController],
   providers: [ApplicationLogger, HomeService],
 })

@@ -174,7 +174,7 @@ describe("database", () => {
 `,
     );
 
-  // Note: `db:pg generate`, `db:pg migration` (run), `db:pg reset`, and `db:pg seed` (run) all require
+  // Note: `db:pg generate`, `db:pg migration` (run), `db:pg rollback`, `db:pg reset`, and `db:pg seed` (run) all require
   // a reachable Postgres connection, which is not available in this environment — only the
   // config-validation and pure-scaffolding paths (which never connect) are covered here. Run the rest
   // against a real database before relying on them.
@@ -191,6 +191,25 @@ describe("database", () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
     const capture = captureOutput();
     const code = await runCLI(["db:pg", "migration", "--project", project.root], { output: capture.output });
+    expect(code).toBe(ExitCode.INVALID_PROJECT);
+    expect(capture.errors.join("\n")).toContain("CLI3001");
+  });
+
+  test("db:pg rollback validates step before connecting", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    const invalidSteps = ["0", "-1", "1.5", "NaN", "abc"];
+    for (const step of invalidSteps) {
+      const capture = captureOutput();
+      const code = await runCLI(["db:pg", "rollback", `--step=${step}`, "--project", project.root], { output: capture.output });
+      expect(code).toBe(ExitCode.INVALID_ARGUMENTS);
+      expect(capture.errors.join("\n")).toContain("CLI3004");
+    }
+  });
+
+  test("db:pg rollback defaults to one step and requires database config", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    const capture = captureOutput();
+    const code = await runCLI(["db:pg", "rollback", "--project", project.root], { output: capture.output });
     expect(code).toBe(ExitCode.INVALID_PROJECT);
     expect(capture.errors.join("\n")).toContain("CLI3001");
   });
