@@ -9,6 +9,8 @@ export {
   DatabaseCompileError,
   DatabaseConfigError,
   DatabaseError,
+  DatabaseQueryError,
+  DatabaseRecordNotFoundError,
   MigrationDefinitionError,
   MigrationFileNotFoundError,
   MigrationChecksumError,
@@ -25,6 +27,26 @@ export { createCompiledDatabaseArtifact } from "./artifact";
 export type { CompiledDatabaseArtifact, CompiledDatabaseArtifactInput } from "./artifact";
 
 export { createPgConnection } from "./runtime/create-connection";
+export {
+  executeCount,
+  executeFindFirst,
+  executeFindFirstOrThrow,
+  executeFindMany,
+  executeFindUnique,
+  executeFindUniqueOrThrow,
+} from "./runtime/read-query";
+export type {
+  ComparableFilter,
+  CountQueryArgs,
+  EqualityFilter,
+  ReadQueryArgs,
+  RuntimeColumn,
+  RuntimeModel,
+  RuntimeReadSchema,
+  RuntimeRelation,
+  SortDirection,
+  StringFilter,
+} from "./runtime/read-query";
 export { withQueryLogging } from "./runtime/query-logger";
 export type { QueryLogEntry, QueryLogger } from "./runtime/query-logger";
 

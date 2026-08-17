@@ -202,18 +202,103 @@ stale generated files for tables that no longer exist.
 ```ts
 import { WlbPg } from "../../database/warbler/pg/generated/client";
 
-const user = await WlbPg.user.findUnique({ email: "ada@example.com" }); // exactly one key
-const page = await WlbPg.user.findMany({ limit: 20, offset: 0 });
+const user = await WlbPg.user.findUnique({
+  where: { email: "ada@example.com" }, // exactly one primary-key or unique field
+});
+
+const active = await WlbPg.user.findFirst({
+  where: {
+    email: { endsWith: "@example.com" },
+    isActive: true,
+  },
+  orderBy: { createdAt: "desc" },
+});
+
+const page = await WlbPg.user.findMany({
+  where: { isActive: true },
+  orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+  take: 20,
+  skip: 0,
+});
+
 const created = await WlbPg.user.insert({ email: "ada@example.com" });
 await WlbPg.user.update({ id: created.id }, { email: "ada2@example.com" });
 await WlbPg.user.delete({ id: created.id });
 const total = await WlbPg.user.count();
 ```
 
-Each table gets `findUnique`, `findFirst`, `findMany`, `insert`, `update`, `delete`, `count` —
-`findUnique`/`findFirst` (with a `where`)/`update`/`delete`/`count` (with a `where`) accept exactly
-one column that's a primary key or unique in the live schema. Row/insert/update/where types are
-inferred from the introspected table; there is nothing to hand-write.
+Each table gets `findUnique`, `findUniqueOrThrow`, `findFirst`, `findFirstOrThrow`, `findMany`,
+`insert`, `update`, `updateMany`, `delete`, and `count`. Read methods use query objects:
+
+```ts
+await WlbPg.userSession.findFirst({
+  where: {
+    sessionHash,
+    revokedAt: null,
+    expiresAt: { gt: new Date() },
+  },
+  orderBy: { createdAt: "desc" },
+});
+```
+
+The old ambiguous `findFirst({ email })` / `findUnique({ id })` style is replaced by
+`findFirst({ where: { email } })` and `findUnique({ where: { id } })`.
+
+`findUnique` accepts only a single primary-key or unique scalar selector from the live schema.
+`findUniqueOrThrow` and `findFirstOrThrow` return a non-null row or throw a Warbler database
+record-not-found error.
+
+`where` supports direct equality, `null`/`not: null`, `equals`, `not`, `gt`, `gte`, `lt`, `lte`,
+`in`, `notIn`, and string-only `contains`, `startsWith`, and `endsWith`. Logical filters are
+available through `AND`, `OR`, and `NOT`. Explicit `undefined` in filters is rejected so a missing
+value cannot silently broaden a query.
+
+Use `select` to fetch only requested scalar fields:
+
+```ts
+const event = await WlbPg.eventRegistry.findFirst({
+  where: { identifier: code, expiresAt: { gt: new Date() } },
+  select: { id: true },
+});
+```
+
+Use `include` or nested relation `select` for foreign-key relations discovered during
+`warbler db:pg generate`:
+
+```ts
+const user = await WlbPg.user.findUnique({
+  where: { id: userId },
+  include: {
+    sessions: {
+      where: { revokedAt: null },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    },
+  },
+});
+```
+
+Relation filters compile to PostgreSQL relation predicates such as `EXISTS`:
+
+```ts
+await WlbPg.user.findFirst({
+  where: {
+    sessions: {
+      some: { revokedAt: null },
+    },
+  },
+});
+```
+
+Nested to-many reads are compiled into PostgreSQL subqueries/JSON aggregation rather than N+1
+application queries. Runtime reads do not introspect `information_schema` or `pg_catalog`; relation
+metadata is generated once from PostgreSQL foreign keys.
+
+Read pagination uses `take`, `skip`, and unique `cursor` selectors. Invalid `take`/`skip` values
+such as `NaN`, fractions, negative numbers, and unsafe integers are rejected.
+
+Row/insert/update/where/select/include types are inferred from the introspected table; there is
+nothing to hand-write.
 
 The live connection lives in `generated/runtime/pg-client.ts` (built via the exported
 `createPgConnection` helper). Import it directly for a raw query or transaction:

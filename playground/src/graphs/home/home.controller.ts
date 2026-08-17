@@ -2,6 +2,7 @@ import { inject } from "@warbler/core";
 import { ArchiveRes, Controller, Get, ImageRes, JsonRes, PdfRes, Post, Sse, SseRes, TextRes, csrf, view } from "@warbler/http";
 import { SocketPublisher } from "@warbler/websocket";
 import HomeService from "./home.service";
+import { WlbPg } from "@pg/client";
 
 @Controller()
 export default class HomeController {
@@ -9,8 +10,27 @@ export default class HomeController {
   readonly #sockets = inject(SocketPublisher);
 
   @Get("/", { name: "home" })
-  index(): Response { 
-    return JsonRes(this.#home.status());
+  async index(): Promise<Response> {
+    // user id 3e44a1cf-162b-45b4-a7ca-8d178c835a39
+    const session = await WlbPg.user.findFirst({
+      where: {
+        email: "bellib6@gmail.com",
+        // sessions: {
+          
+        // }
+      },
+      include: {
+        sessions: {
+          where: {
+            id: '8feec072-298a-42af-a9c2-f92f5aef6108',
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
+    return JsonRes({ s: this.#home.status(), session });
   }
 
   @Get("/health")

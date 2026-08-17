@@ -39,7 +39,7 @@ export async function generateFromDatabase(sql: SQL, options: GenerateFromDataba
   await Bun.write(`${generatedRoot}/metadata.json`, `${JSON.stringify(tables, null, 2)}\n`);
   await Bun.write(`${generatedRoot}/runtime/pg-client.ts`, generateRuntimeClientSource(config));
   for (const table of tables) {
-    await Bun.write(`${generatedRoot}/client/${table.clientKey}.ts`, generateClientSource(table));
+    await Bun.write(`${generatedRoot}/client/${table.clientKey}.ts`, generateClientSource(table, tables));
     await Bun.write(`${generatedRoot}/models/${table.modelName}.ts`, generateModelMirrorSource(table));
   }
   await Bun.write(`${generatedRoot}/client/index.ts`, generateClientBarrelSource(tables));
