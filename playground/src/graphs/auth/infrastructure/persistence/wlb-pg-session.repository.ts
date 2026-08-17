@@ -24,20 +24,27 @@ export class WlbPgSessionRepository extends SessionRepositoryPort {
         sessionHash: string,
     ): Promise<SessionEntity | null> {
         const session = await WlbPg.userSession.findFirst({
-            sessionHash,
+            where: { 
+                sessionHash, 
+                revokedAt: null ,
+                expiresAt: {
+                 gt: new Date()
+                }
+            },
         });
+        console.log('session',session)
     
         if (!session) {
             return null;
         }
     
-        if (session.revokedAt !== null) {
-            return null;
-        }
+        // if (session.revokedAt !== null) {
+        //     return null;
+        // }
     
-        if (session.expiresAt <= new Date()) {
-            return null;
-        }
+        // if (session.expiresAt <= new Date()) {
+        //     return null;
+        // }
     
         return session;
     }

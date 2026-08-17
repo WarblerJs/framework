@@ -30,6 +30,22 @@ export class DatabaseConfigError extends DatabaseError {
   }
 }
 
+/** Error thrown when a requested record is required but no row matched the query. */
+export class DatabaseRecordNotFoundError extends DatabaseError {
+  public constructor(public readonly modelName: string, operation: string) {
+    super(`${modelName}.${operation} did not find a matching record.`, "DB3001");
+    this.name = "DatabaseRecordNotFoundError";
+  }
+}
+
+/** Error thrown when a generated client query receives an invalid query object. */
+export class DatabaseQueryError extends DatabaseError {
+  public constructor(public readonly modelName: string, detail: string) {
+    super(`Invalid ${modelName} query: ${detail}`, "DB3002");
+    this.name = "DatabaseQueryError";
+  }
+}
+
 /** Error thrown when a migration kind/name argument cannot be scaffolded. */
 export class MigrationScaffoldError extends DatabaseError {
   public constructor(detail: string) {

@@ -16,19 +16,19 @@ export class WlbPgUserRepository extends UserRepositoryPort {
   }
 
   findById(id: string): Promise<User | null> {
-    return WlbPg.user.findUnique({ id });
+    return WlbPg.user.findUnique({ where: { id } });
   }
 
   findByEmail(email: string): Promise<User | null> {
-    return WlbPg.user.findUnique({ email });
+    return WlbPg.user.findUnique({ where: { email } });
   }
 
   findMany(
     options: FindManyUsersOptions = {},
   ): Promise<readonly User[]> {
     return WlbPg.user.findMany({
-      limit: options.limit ?? 100,
-      offset: options.offset ?? 0,
+      take: options.limit ?? 100,
+      skip: options.offset ?? 0,
     });
   }
 }

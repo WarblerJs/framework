@@ -9,7 +9,7 @@ import { AuthRepositoryPort, type CreateUserData } from "../../domain/ports/auth
 })
 export class WlbPgAuthRepository extends AuthRepositoryPort {
     override findUserByEmail(email: string): Promise<UserEntity | null> {
-        return WlbPg.user.findFirst({ email });
+        return WlbPg.user.findFirst({ where: { email } });
     }
 
     override async createUser(data: CreateUserData): Promise<UserEntity> {
