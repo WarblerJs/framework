@@ -47,6 +47,18 @@ export type {
   SortDirection,
   StringFilter,
 } from "./runtime/read-query";
+export {
+  executeCreate,
+  executeCreateMany,
+  executeCreateManyAndReturn,
+  executeDelete,
+  executeDeleteMany,
+  executeUpdate,
+  executeUpdateMany,
+  executeUpdateManyAndReturn,
+  executeUpsert,
+} from "./runtime/write-query";
+export type { MutationCountResult, WriteQueryArgs } from "./runtime/write-query";
 export { withQueryLogging } from "./runtime/query-logger";
 export type { QueryLogEntry, QueryLogger } from "./runtime/query-logger";
 

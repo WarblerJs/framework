@@ -145,8 +145,17 @@ function insertInterface(typeName: string, insertable: readonly ColumnMetadata[]
   return [`export interface ${typeName} {`, ...insertable.map((column) => `  ${column.fieldName}${isOptionalForInsert(column) ? "?" : ""}: ${tsType(column)};`), "}"].join("\n");
 }
 
+function updateValueType(column: ColumnMetadata): string {
+  const value = tsType(column);
+  const set = `{ readonly set: ${value}; }`;
+  if (NUMBER_TYPES.has(column.pgType) || STRING_NUMBER_TYPES.has(column.pgType)) {
+    return `${value} | ${set} | { readonly increment: ${value}; } | { readonly decrement: ${value}; } | { readonly multiply: ${value}; } | { readonly divide: ${value}; }`;
+  }
+  return `${value} | ${set}`;
+}
+
 function updateInterface(typeName: string, updatable: readonly ColumnMetadata[]): string {
-  return [`export interface ${typeName} {`, ...updatable.map((column) => `  ${column.fieldName}?: ${tsType(column)};`), "}"].join("\n");
+  return [`export interface ${typeName} {`, ...updatable.map((column) => `  ${column.fieldName}?: ${updateValueType(column)};`), "}"].join("\n");
 }
 
 function valueAliases(columns: readonly ColumnMetadata[]): string {
@@ -236,67 +245,49 @@ function runtimeSchemaSource(allTables: readonly TableMetadata[]): string {
   ].join("\n");
 }
 
-function selectList(table: TableMetadata): string {
-  return table.columns.map((column) => `"${column.columnName}" AS "${column.fieldName}"`).join(", ");
-}
-
-function uniqueBranch(column: ColumnMetadata, build: (accessor: string) => string): string {
-  return [`    case "${column.fieldName}": {`, `      ${build(`input.${column.fieldName} as ${tsType(column)}`)}`, "    }"].join("\n");
-}
-
-function mutationBodies(table: TableMetadata, rowType: string, uniqueColumns: readonly ColumnMetadata[], insertable: readonly ColumnMetadata[], updatable: readonly ColumnMetadata[]): readonly string[] {
-  const columns = selectList(table);
-  const tableIdentifier = `"${table.tableName}"`;
-  const insertAssignments = insertable.map((column) => {
-    const assign = `columns["${column.columnName}"] = data.${column.fieldName};`;
-    return isOptionalForInsert(column) ? `  if (data.${column.fieldName} !== undefined) ${assign}` : `  ${assign}`;
-  }).join("\n");
-  const updateAssignments = updatable.map((column) => `  if (data.${column.fieldName} !== undefined) columns["${column.columnName}"] = data.${column.fieldName};`).join("\n");
-  const updateManyPredicates = table.columns.map((column) => {
-    const accessor = `where.${column.fieldName}`;
-    return column.nullable
-      ? [`  if (${accessor} !== undefined) {`, `    const next = ${accessor} === null`, `      ? pg\`"${column.columnName}" IS NULL\``, `      : pg\`"${column.columnName}" = \${${accessor} as ${tsType(column)}}\`;`, "    predicate = hasWhere ? pg`${predicate} AND ${next}` : next;", "    hasWhere = true;", "  }"].join("\n")
-      : [`  if (${accessor} !== undefined) {`, `    const next = pg\`"${column.columnName}" = \${${accessor} as ${tsType(column)}}\`;`, "    predicate = hasWhere ? pg`${predicate} AND ${next}` : next;", "    hasWhere = true;", "  }"].join("\n");
-  }).join("\n");
-
+function mutationBodies(table: TableMetadata, rowType: string): readonly string[] {
   return [
-    `export async function insert(data: ${table.modelName}InsertInput): Promise<${rowType}> {
-  const columns: Record<string, unknown> = {};
-${insertAssignments}
-  const [row] = await pg\`INSERT INTO ${tableIdentifier} \${pg(columns)} RETURNING ${columns}\`;
-  return row as ${rowType};
+    `export function create<S extends ${table.modelName}Select>(args: { readonly data: ${table.modelName}CreateInput; readonly select: S }): Promise<${table.modelName}SelectPayload<S>>;
+export function create(args: { readonly data: ${table.modelName}CreateInput }): Promise<${rowType}>;
+export function create(args: { readonly data: ${table.modelName}CreateInput; readonly select?: ${table.modelName}Select }): Promise<unknown> {
+  return executeCreate(pg, READ_SCHEMA, MODEL, args);
 }`,
-    `export async function update(where: ${table.modelName}UniqueWhere, data: ${table.modelName}UpdateInput): Promise<${rowType} | null> {
-  const columns: Record<string, unknown> = {};
-${updateAssignments}
-  if (Object.keys(columns).length === 0) return findUnique({ where });
-  const input = where as Record<string, unknown>;
-  const key = Object.keys(input)[0];
-  switch (key) {
-${uniqueColumns.map((column) => uniqueBranch(column, (accessor) => `const [row] = await pg\`UPDATE ${tableIdentifier} SET \${pg(columns)} WHERE "${column.columnName}" = \${${accessor}} RETURNING ${columns}\`;\n      return (row as ${rowType} | undefined) ?? null;`)).join("\n")}
-    default:
-      throw new Error("update requires exactly one of: ${uniqueColumns.map((c) => c.fieldName).join(", ")}");
-  }
+    `export function insert(data: ${table.modelName}CreateInput): Promise<${rowType}> {
+  return create({ data });
 }`,
-    `export async function updateMany(where: ${table.modelName}Where, data: ${table.modelName}UpdateManyInput): Promise<number> {
-  const columns: Record<string, unknown> = {};
-${updateAssignments}
-  if (Object.keys(columns).length === 0) throw new Error("updateMany requires at least one field to update");
-  let predicate = pg\`\`;
-  let hasWhere = false;
-${updateManyPredicates}
-  if (!hasWhere) throw new Error("updateMany requires at least one where condition");
-  const [row] = await pg\`WITH updated AS (UPDATE ${tableIdentifier} SET \${pg(columns)} WHERE \${predicate} RETURNING 1) SELECT count(*)::int AS "count" FROM updated\`;
-  return (row as { count: number }).count;
+    `export function createMany(args: { readonly data: readonly ${table.modelName}CreateInput[]; readonly skipDuplicates?: boolean }): Promise<MutationCountResult> {
+  return executeCreateMany(pg, READ_SCHEMA, MODEL, args);
 }`,
-    `export async function deleteOne(where: ${table.modelName}UniqueWhere): Promise<${rowType} | null> {
-  const input = where as Record<string, unknown>;
-  const key = Object.keys(input)[0];
-  switch (key) {
-${uniqueColumns.map((column) => uniqueBranch(column, (accessor) => `const [row] = await pg\`DELETE FROM ${tableIdentifier} WHERE "${column.columnName}" = \${${accessor}} RETURNING ${columns}\`;\n      return (row as ${rowType} | undefined) ?? null;`)).join("\n")}
-    default:
-      throw new Error("delete requires exactly one of: ${uniqueColumns.map((c) => c.fieldName).join(", ")}");
-  }
+    `export function createManyAndReturn<S extends ${table.modelName}Select>(args: { readonly data: readonly ${table.modelName}CreateInput[]; readonly skipDuplicates?: boolean; readonly select: S }): Promise<readonly ${table.modelName}SelectPayload<S>[]>;
+export function createManyAndReturn(args: { readonly data: readonly ${table.modelName}CreateInput[]; readonly skipDuplicates?: boolean }): Promise<readonly ${rowType}[]>;
+export function createManyAndReturn(args: { readonly data: readonly ${table.modelName}CreateInput[]; readonly skipDuplicates?: boolean; readonly select?: ${table.modelName}Select }): Promise<unknown> {
+  return executeCreateManyAndReturn(pg, READ_SCHEMA, MODEL, args);
+}`,
+    `export function update<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}UniqueWhere; readonly data: ${table.modelName}UpdateInput; readonly select: S }): Promise<${table.modelName}SelectPayload<S>>;
+export function update(args: { readonly where: ${table.modelName}UniqueWhere; readonly data: ${table.modelName}UpdateInput }): Promise<${rowType}>;
+export function update(args: { readonly where: ${table.modelName}UniqueWhere; readonly data: ${table.modelName}UpdateInput; readonly select?: ${table.modelName}Select }): Promise<unknown> {
+  return executeUpdate(pg, READ_SCHEMA, MODEL, args);
+}`,
+    `export function updateMany(args: { readonly where: ${table.modelName}Where; readonly data: ${table.modelName}UpdateManyInput }): Promise<MutationCountResult> {
+  return executeUpdateMany(pg, READ_SCHEMA, MODEL, args);
+}`,
+    `export function updateManyAndReturn<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}Where; readonly data: ${table.modelName}UpdateManyInput; readonly select: S }): Promise<readonly ${table.modelName}SelectPayload<S>[]>;
+export function updateManyAndReturn(args: { readonly where: ${table.modelName}Where; readonly data: ${table.modelName}UpdateManyInput }): Promise<readonly ${rowType}[]>;
+export function updateManyAndReturn(args: { readonly where: ${table.modelName}Where; readonly data: ${table.modelName}UpdateManyInput; readonly select?: ${table.modelName}Select }): Promise<unknown> {
+  return executeUpdateManyAndReturn(pg, READ_SCHEMA, MODEL, args);
+}`,
+    `export function upsert<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}UniqueWhere; readonly create: ${table.modelName}CreateInput; readonly update: ${table.modelName}UpdateInput; readonly select: S }): Promise<${table.modelName}SelectPayload<S>>;
+export function upsert(args: { readonly where: ${table.modelName}UniqueWhere; readonly create: ${table.modelName}CreateInput; readonly update: ${table.modelName}UpdateInput }): Promise<${rowType}>;
+export function upsert(args: { readonly where: ${table.modelName}UniqueWhere; readonly create: ${table.modelName}CreateInput; readonly update: ${table.modelName}UpdateInput; readonly select?: ${table.modelName}Select }): Promise<unknown> {
+  return executeUpsert(pg, READ_SCHEMA, MODEL, args);
+}`,
+    `export function deleteOne<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}UniqueWhere; readonly select: S }): Promise<${table.modelName}SelectPayload<S>>;
+export function deleteOne(args: { readonly where: ${table.modelName}UniqueWhere }): Promise<${rowType}>;
+export function deleteOne(args: { readonly where: ${table.modelName}UniqueWhere; readonly select?: ${table.modelName}Select }): Promise<unknown> {
+  return executeDelete(pg, READ_SCHEMA, MODEL, args);
+}`,
+    `export function deleteMany(args: { readonly where: ${table.modelName}Where }): Promise<MutationCountResult> {
+  return executeDeleteMany(pg, READ_SCHEMA, MODEL, args);
 }`,
   ];
 }
@@ -320,8 +311,8 @@ export function generateClientSource(table: TableMetadata, allTables: readonly T
 
   return [
     "/* Generated by @warbler/database. Do not edit by hand. */",
-    'import { executeCount, executeFindFirst, executeFindFirstOrThrow, executeFindMany, executeFindUnique, executeFindUniqueOrThrow } from "@warbler/database";',
-    'import type { ComparableFilter, EqualityFilter, RuntimeReadSchema, SortDirection, StringFilter } from "@warbler/database";',
+    'import { executeCount, executeCreate, executeCreateMany, executeCreateManyAndReturn, executeDelete, executeDeleteMany, executeFindFirst, executeFindFirstOrThrow, executeFindMany, executeFindUnique, executeFindUniqueOrThrow, executeUpdate, executeUpdateMany, executeUpdateManyAndReturn, executeUpsert } from "@warbler/database";',
+    'import type { ComparableFilter, EqualityFilter, MutationCountResult, RuntimeReadSchema, SortDirection, StringFilter } from "@warbler/database";',
     'import { pg } from "../runtime/pg-client";',
     ...relationImports(table, relations),
     "",
@@ -329,7 +320,7 @@ export function generateClientSource(table: TableMetadata, allTables: readonly T
     "",
     valueAliases(table.columns),
     "",
-    insertInterface(`${table.modelName}InsertInput`, insertable),
+    insertInterface(`${table.modelName}CreateInput`, insertable),
     "",
     updateInterface(`${table.modelName}UpdateInput`, updatable),
     "",
@@ -396,7 +387,7 @@ export function findMany(args?: ${table.modelName}FindManyArgs): Promise<unknown
   return executeFindMany(pg, READ_SCHEMA, MODEL, args);
 }`,
     "",
-    ...mutationBodies(table, rowType, uniqueColumns, insertable, updatable),
+    ...mutationBodies(table, rowType),
     "",
     `export async function count(args?: { readonly where?: ${table.modelName}Where }): Promise<number> {
   return executeCount(pg, READ_SCHEMA, MODEL, args);
@@ -416,10 +407,16 @@ export function generateClientBarrelSource(tables: readonly TableMetadata[]): st
     `    findFirst: ${entry.namespace}.findFirst,`,
     `    findFirstOrThrow: ${entry.namespace}.findFirstOrThrow,`,
     `    findMany: ${entry.namespace}.findMany,`,
+    `    create: ${entry.namespace}.create,`,
+    `    createMany: ${entry.namespace}.createMany,`,
+    `    createManyAndReturn: ${entry.namespace}.createManyAndReturn,`,
     `    insert: ${entry.namespace}.insert,`,
     `    update: ${entry.namespace}.update,`,
     `    updateMany: ${entry.namespace}.updateMany,`,
+    `    updateManyAndReturn: ${entry.namespace}.updateManyAndReturn,`,
+    `    upsert: ${entry.namespace}.upsert,`,
     `    delete: ${entry.namespace}.deleteOne,`,
+    `    deleteMany: ${entry.namespace}.deleteMany,`,
     `    count: ${entry.namespace}.count,`,
     "  },",
   ].join("\n"));
