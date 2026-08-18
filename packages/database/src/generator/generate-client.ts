@@ -245,50 +245,85 @@ function runtimeSchemaSource(allTables: readonly TableMetadata[]): string {
   ].join("\n");
 }
 
-function mutationBodies(table: TableMetadata, rowType: string): readonly string[] {
+function delegateInterface(table: TableMetadata, rowType: string): string {
+  return `export interface ${table.modelName}Delegate {
+  findUnique<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}UniqueWhere; readonly select: S; readonly include?: never }): Promise<${table.modelName}SelectPayload<S> | null>;
+  findUnique<I extends ${table.modelName}Include>(args: { readonly where: ${table.modelName}UniqueWhere; readonly select?: never; readonly include: I }): Promise<${table.modelName}IncludePayload<I> | null>;
+  findUnique(args: { readonly where: ${table.modelName}UniqueWhere }): Promise<${rowType} | null>;
+  findUniqueOrThrow<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}UniqueWhere; readonly select: S; readonly include?: never }): Promise<${table.modelName}SelectPayload<S>>;
+  findUniqueOrThrow<I extends ${table.modelName}Include>(args: { readonly where: ${table.modelName}UniqueWhere; readonly select?: never; readonly include: I }): Promise<${table.modelName}IncludePayload<I>>;
+  findUniqueOrThrow(args: { readonly where: ${table.modelName}UniqueWhere }): Promise<${rowType}>;
+  findFirst<S extends ${table.modelName}Select>(args: Omit<${table.modelName}FindFirstArgs<S, undefined>, "select" | "include"> & { readonly select: S; readonly include?: never }): Promise<${table.modelName}SelectPayload<S> | null>;
+  findFirst<I extends ${table.modelName}Include>(args: Omit<${table.modelName}FindFirstArgs<undefined, I>, "select" | "include"> & { readonly select?: never; readonly include: I }): Promise<${table.modelName}IncludePayload<I> | null>;
+  findFirst(args?: Omit<${table.modelName}FindFirstArgs, "select" | "include">): Promise<${rowType} | null>;
+  findFirstOrThrow<S extends ${table.modelName}Select>(args: Omit<${table.modelName}FindFirstArgs<S, undefined>, "select" | "include"> & { readonly select: S; readonly include?: never }): Promise<${table.modelName}SelectPayload<S>>;
+  findFirstOrThrow<I extends ${table.modelName}Include>(args: Omit<${table.modelName}FindFirstArgs<undefined, I>, "select" | "include"> & { readonly select?: never; readonly include: I }): Promise<${table.modelName}IncludePayload<I>>;
+  findFirstOrThrow(args?: Omit<${table.modelName}FindFirstArgs, "select" | "include">): Promise<${rowType}>;
+  findMany<S extends ${table.modelName}Select>(args: Omit<${table.modelName}FindManyArgs<S, undefined>, "select" | "include"> & { readonly select: S; readonly include?: never }): Promise<readonly ${table.modelName}SelectPayload<S>[]>;
+  findMany<I extends ${table.modelName}Include>(args: Omit<${table.modelName}FindManyArgs<undefined, I>, "select" | "include"> & { readonly select?: never; readonly include: I }): Promise<readonly ${table.modelName}IncludePayload<I>[]>;
+  findMany(args?: Omit<${table.modelName}FindManyArgs, "select" | "include">): Promise<readonly ${rowType}[]>;
+  create<S extends ${table.modelName}Select>(args: { readonly data: ${table.modelName}CreateInput; readonly select: S }): Promise<${table.modelName}SelectPayload<S>>;
+  create(args: { readonly data: ${table.modelName}CreateInput }): Promise<${rowType}>;
+  insert(data: ${table.modelName}CreateInput): Promise<${rowType}>;
+  createMany(args: { readonly data: readonly ${table.modelName}CreateInput[]; readonly skipDuplicates?: boolean }): Promise<MutationCountResult>;
+  createManyAndReturn<S extends ${table.modelName}Select>(args: { readonly data: readonly ${table.modelName}CreateInput[]; readonly skipDuplicates?: boolean; readonly select: S }): Promise<readonly ${table.modelName}SelectPayload<S>[]>;
+  createManyAndReturn(args: { readonly data: readonly ${table.modelName}CreateInput[]; readonly skipDuplicates?: boolean }): Promise<readonly ${rowType}[]>;
+  update<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}UniqueWhere; readonly data: ${table.modelName}UpdateInput; readonly select: S }): Promise<${table.modelName}SelectPayload<S>>;
+  update(args: { readonly where: ${table.modelName}UniqueWhere; readonly data: ${table.modelName}UpdateInput }): Promise<${rowType}>;
+  updateMany(args: { readonly where: ${table.modelName}Where; readonly data: ${table.modelName}UpdateManyInput }): Promise<MutationCountResult>;
+  updateManyAndReturn<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}Where; readonly data: ${table.modelName}UpdateManyInput; readonly select: S }): Promise<readonly ${table.modelName}SelectPayload<S>[]>;
+  updateManyAndReturn(args: { readonly where: ${table.modelName}Where; readonly data: ${table.modelName}UpdateManyInput }): Promise<readonly ${rowType}[]>;
+  upsert<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}UniqueWhere; readonly create: ${table.modelName}CreateInput; readonly update: ${table.modelName}UpdateInput; readonly select: S }): Promise<${table.modelName}SelectPayload<S>>;
+  upsert(args: { readonly where: ${table.modelName}UniqueWhere; readonly create: ${table.modelName}CreateInput; readonly update: ${table.modelName}UpdateInput }): Promise<${rowType}>;
+  delete<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}UniqueWhere; readonly select: S }): Promise<${table.modelName}SelectPayload<S>>;
+  delete(args: { readonly where: ${table.modelName}UniqueWhere }): Promise<${rowType}>;
+  deleteMany(args: { readonly where: ${table.modelName}Where }): Promise<MutationCountResult>;
+  count(args?: { readonly where?: ${table.modelName}Where }): Promise<number>;
+}`;
+}
+
+function delegateFactory(table: TableMetadata): string {
+  return `export function create${table.modelName}Delegate(database: SQL): ${table.modelName}Delegate {
+  return Object.freeze({
+    findUnique: (args: ${table.modelName}FindUniqueArgs) => executeFindUnique(database, READ_SCHEMA, MODEL, args),
+    findUniqueOrThrow: (args: ${table.modelName}FindUniqueArgs) => executeFindUniqueOrThrow(database, READ_SCHEMA, MODEL, args),
+    findFirst: (args?: ${table.modelName}FindFirstArgs) => executeFindFirst(database, READ_SCHEMA, MODEL, args),
+    findFirstOrThrow: (args?: ${table.modelName}FindFirstArgs) => executeFindFirstOrThrow(database, READ_SCHEMA, MODEL, args),
+    findMany: (args?: ${table.modelName}FindManyArgs) => executeFindMany(database, READ_SCHEMA, MODEL, args),
+    create: (args: { readonly data: ${table.modelName}CreateInput; readonly select?: ${table.modelName}Select }) => executeCreate(database, READ_SCHEMA, MODEL, args),
+    insert: (data: ${table.modelName}CreateInput) => executeCreate(database, READ_SCHEMA, MODEL, { data }),
+    createMany: (args: { readonly data: readonly ${table.modelName}CreateInput[]; readonly skipDuplicates?: boolean }) => executeCreateMany(database, READ_SCHEMA, MODEL, args),
+    createManyAndReturn: (args: { readonly data: readonly ${table.modelName}CreateInput[]; readonly skipDuplicates?: boolean; readonly select?: ${table.modelName}Select }) => executeCreateManyAndReturn(database, READ_SCHEMA, MODEL, args),
+    update: (args: { readonly where: ${table.modelName}UniqueWhere; readonly data: ${table.modelName}UpdateInput; readonly select?: ${table.modelName}Select }) => executeUpdate(database, READ_SCHEMA, MODEL, args),
+    updateMany: (args: { readonly where: ${table.modelName}Where; readonly data: ${table.modelName}UpdateManyInput }) => executeUpdateMany(database, READ_SCHEMA, MODEL, args),
+    updateManyAndReturn: (args: { readonly where: ${table.modelName}Where; readonly data: ${table.modelName}UpdateManyInput; readonly select?: ${table.modelName}Select }) => executeUpdateManyAndReturn(database, READ_SCHEMA, MODEL, args),
+    upsert: (args: { readonly where: ${table.modelName}UniqueWhere; readonly create: ${table.modelName}CreateInput; readonly update: ${table.modelName}UpdateInput; readonly select?: ${table.modelName}Select }) => executeUpsert(database, READ_SCHEMA, MODEL, args),
+    delete: (args: { readonly where: ${table.modelName}UniqueWhere; readonly select?: ${table.modelName}Select }) => executeDelete(database, READ_SCHEMA, MODEL, args),
+    deleteMany: (args: { readonly where: ${table.modelName}Where }) => executeDeleteMany(database, READ_SCHEMA, MODEL, args),
+    count: (args?: { readonly where?: ${table.modelName}Where }) => executeCount(database, READ_SCHEMA, MODEL, args),
+  }) as ${table.modelName}Delegate;
+}`;
+}
+
+function defaultExports(table: TableMetadata): readonly string[] {
   return [
-    `export function create<S extends ${table.modelName}Select>(args: { readonly data: ${table.modelName}CreateInput; readonly select: S }): Promise<${table.modelName}SelectPayload<S>>;
-export function create(args: { readonly data: ${table.modelName}CreateInput }): Promise<${rowType}>;
-export function create(args: { readonly data: ${table.modelName}CreateInput; readonly select?: ${table.modelName}Select }): Promise<unknown> {
-  return executeCreate(pg, READ_SCHEMA, MODEL, args);
-}`,
-    `export function insert(data: ${table.modelName}CreateInput): Promise<${rowType}> {
-  return create({ data });
-}`,
-    `export function createMany(args: { readonly data: readonly ${table.modelName}CreateInput[]; readonly skipDuplicates?: boolean }): Promise<MutationCountResult> {
-  return executeCreateMany(pg, READ_SCHEMA, MODEL, args);
-}`,
-    `export function createManyAndReturn<S extends ${table.modelName}Select>(args: { readonly data: readonly ${table.modelName}CreateInput[]; readonly skipDuplicates?: boolean; readonly select: S }): Promise<readonly ${table.modelName}SelectPayload<S>[]>;
-export function createManyAndReturn(args: { readonly data: readonly ${table.modelName}CreateInput[]; readonly skipDuplicates?: boolean }): Promise<readonly ${rowType}[]>;
-export function createManyAndReturn(args: { readonly data: readonly ${table.modelName}CreateInput[]; readonly skipDuplicates?: boolean; readonly select?: ${table.modelName}Select }): Promise<unknown> {
-  return executeCreateManyAndReturn(pg, READ_SCHEMA, MODEL, args);
-}`,
-    `export function update<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}UniqueWhere; readonly data: ${table.modelName}UpdateInput; readonly select: S }): Promise<${table.modelName}SelectPayload<S>>;
-export function update(args: { readonly where: ${table.modelName}UniqueWhere; readonly data: ${table.modelName}UpdateInput }): Promise<${rowType}>;
-export function update(args: { readonly where: ${table.modelName}UniqueWhere; readonly data: ${table.modelName}UpdateInput; readonly select?: ${table.modelName}Select }): Promise<unknown> {
-  return executeUpdate(pg, READ_SCHEMA, MODEL, args);
-}`,
-    `export function updateMany(args: { readonly where: ${table.modelName}Where; readonly data: ${table.modelName}UpdateManyInput }): Promise<MutationCountResult> {
-  return executeUpdateMany(pg, READ_SCHEMA, MODEL, args);
-}`,
-    `export function updateManyAndReturn<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}Where; readonly data: ${table.modelName}UpdateManyInput; readonly select: S }): Promise<readonly ${table.modelName}SelectPayload<S>[]>;
-export function updateManyAndReturn(args: { readonly where: ${table.modelName}Where; readonly data: ${table.modelName}UpdateManyInput }): Promise<readonly ${rowType}[]>;
-export function updateManyAndReturn(args: { readonly where: ${table.modelName}Where; readonly data: ${table.modelName}UpdateManyInput; readonly select?: ${table.modelName}Select }): Promise<unknown> {
-  return executeUpdateManyAndReturn(pg, READ_SCHEMA, MODEL, args);
-}`,
-    `export function upsert<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}UniqueWhere; readonly create: ${table.modelName}CreateInput; readonly update: ${table.modelName}UpdateInput; readonly select: S }): Promise<${table.modelName}SelectPayload<S>>;
-export function upsert(args: { readonly where: ${table.modelName}UniqueWhere; readonly create: ${table.modelName}CreateInput; readonly update: ${table.modelName}UpdateInput }): Promise<${rowType}>;
-export function upsert(args: { readonly where: ${table.modelName}UniqueWhere; readonly create: ${table.modelName}CreateInput; readonly update: ${table.modelName}UpdateInput; readonly select?: ${table.modelName}Select }): Promise<unknown> {
-  return executeUpsert(pg, READ_SCHEMA, MODEL, args);
-}`,
-    `export function deleteOne<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}UniqueWhere; readonly select: S }): Promise<${table.modelName}SelectPayload<S>>;
-export function deleteOne(args: { readonly where: ${table.modelName}UniqueWhere }): Promise<${rowType}>;
-export function deleteOne(args: { readonly where: ${table.modelName}UniqueWhere; readonly select?: ${table.modelName}Select }): Promise<unknown> {
-  return executeDelete(pg, READ_SCHEMA, MODEL, args);
-}`,
-    `export function deleteMany(args: { readonly where: ${table.modelName}Where }): Promise<MutationCountResult> {
-  return executeDeleteMany(pg, READ_SCHEMA, MODEL, args);
-}`,
+    `const DEFAULT_DELEGATE = create${table.modelName}Delegate(pg);`,
+    "export const findUnique = DEFAULT_DELEGATE.findUnique;",
+    "export const findUniqueOrThrow = DEFAULT_DELEGATE.findUniqueOrThrow;",
+    "export const findFirst = DEFAULT_DELEGATE.findFirst;",
+    "export const findFirstOrThrow = DEFAULT_DELEGATE.findFirstOrThrow;",
+    "export const findMany = DEFAULT_DELEGATE.findMany;",
+    "export const create = DEFAULT_DELEGATE.create;",
+    "export const insert = DEFAULT_DELEGATE.insert;",
+    "export const createMany = DEFAULT_DELEGATE.createMany;",
+    "export const createManyAndReturn = DEFAULT_DELEGATE.createManyAndReturn;",
+    "export const update = DEFAULT_DELEGATE.update;",
+    "export const updateMany = DEFAULT_DELEGATE.updateMany;",
+    "export const updateManyAndReturn = DEFAULT_DELEGATE.updateManyAndReturn;",
+    "export const upsert = DEFAULT_DELEGATE.upsert;",
+    "export const deleteOne = DEFAULT_DELEGATE.delete;",
+    "export const deleteMany = DEFAULT_DELEGATE.deleteMany;",
+    "export const count = DEFAULT_DELEGATE.count;",
   ];
 }
 
@@ -313,6 +348,7 @@ export function generateClientSource(table: TableMetadata, allTables: readonly T
     "/* Generated by @warbler/database. Do not edit by hand. */",
     'import { executeCount, executeCreate, executeCreateMany, executeCreateManyAndReturn, executeDelete, executeDeleteMany, executeFindFirst, executeFindFirstOrThrow, executeFindMany, executeFindUnique, executeFindUniqueOrThrow, executeUpdate, executeUpdateMany, executeUpdateManyAndReturn, executeUpsert } from "@warbler/database";',
     'import type { ComparableFilter, EqualityFilter, MutationCountResult, RuntimeReadSchema, SortDirection, StringFilter } from "@warbler/database";',
+    'import type { SQL } from "bun";',
     'import { pg } from "../runtime/pg-client";',
     ...relationImports(table, relations),
     "",
@@ -356,42 +392,11 @@ export function generateClientSource(table: TableMetadata, allTables: readonly T
     runtimeSchemaSource(allTables),
     `const MODEL = READ_SCHEMA.models[${JSON.stringify(table.modelName)}]!;`,
     "",
-    `export function findUnique<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}UniqueWhere; readonly select: S; readonly include?: never }): Promise<${table.modelName}SelectPayload<S> | null>;
-export function findUnique<I extends ${table.modelName}Include>(args: { readonly where: ${table.modelName}UniqueWhere; readonly select?: never; readonly include: I }): Promise<${table.modelName}IncludePayload<I> | null>;
-export function findUnique(args: { readonly where: ${table.modelName}UniqueWhere }): Promise<${rowType} | null>;
-export function findUnique(args: ${table.modelName}FindUniqueArgs): Promise<unknown> {
-  return executeFindUnique(pg, READ_SCHEMA, MODEL, args);
-}`,
-    `export function findUniqueOrThrow<S extends ${table.modelName}Select>(args: { readonly where: ${table.modelName}UniqueWhere; readonly select: S; readonly include?: never }): Promise<${table.modelName}SelectPayload<S>>;
-export function findUniqueOrThrow<I extends ${table.modelName}Include>(args: { readonly where: ${table.modelName}UniqueWhere; readonly select?: never; readonly include: I }): Promise<${table.modelName}IncludePayload<I>>;
-export function findUniqueOrThrow(args: { readonly where: ${table.modelName}UniqueWhere }): Promise<${rowType}>;
-export function findUniqueOrThrow(args: ${table.modelName}FindUniqueArgs): Promise<unknown> {
-  return executeFindUniqueOrThrow(pg, READ_SCHEMA, MODEL, args);
-}`,
-    `export function findFirst<S extends ${table.modelName}Select>(args: Omit<${table.modelName}FindFirstArgs<S, undefined>, "select" | "include"> & { readonly select: S; readonly include?: never }): Promise<${table.modelName}SelectPayload<S> | null>;
-export function findFirst<I extends ${table.modelName}Include>(args: Omit<${table.modelName}FindFirstArgs<undefined, I>, "select" | "include"> & { readonly select?: never; readonly include: I }): Promise<${table.modelName}IncludePayload<I> | null>;
-export function findFirst(args?: Omit<${table.modelName}FindFirstArgs, "select" | "include">): Promise<${rowType} | null>;
-export function findFirst(args?: ${table.modelName}FindFirstArgs): Promise<unknown> {
-  return executeFindFirst(pg, READ_SCHEMA, MODEL, args);
-}`,
-    `export function findFirstOrThrow<S extends ${table.modelName}Select>(args: Omit<${table.modelName}FindFirstArgs<S, undefined>, "select" | "include"> & { readonly select: S; readonly include?: never }): Promise<${table.modelName}SelectPayload<S>>;
-export function findFirstOrThrow<I extends ${table.modelName}Include>(args: Omit<${table.modelName}FindFirstArgs<undefined, I>, "select" | "include"> & { readonly select?: never; readonly include: I }): Promise<${table.modelName}IncludePayload<I>>;
-export function findFirstOrThrow(args?: Omit<${table.modelName}FindFirstArgs, "select" | "include">): Promise<${rowType}>;
-export function findFirstOrThrow(args?: ${table.modelName}FindFirstArgs): Promise<unknown> {
-  return executeFindFirstOrThrow(pg, READ_SCHEMA, MODEL, args);
-}`,
-    `export function findMany<S extends ${table.modelName}Select>(args: Omit<${table.modelName}FindManyArgs<S, undefined>, "select" | "include"> & { readonly select: S; readonly include?: never }): Promise<readonly ${table.modelName}SelectPayload<S>[]>;
-export function findMany<I extends ${table.modelName}Include>(args: Omit<${table.modelName}FindManyArgs<undefined, I>, "select" | "include"> & { readonly select?: never; readonly include: I }): Promise<readonly ${table.modelName}IncludePayload<I>[]>;
-export function findMany(args?: Omit<${table.modelName}FindManyArgs, "select" | "include">): Promise<readonly ${rowType}[]>;
-export function findMany(args?: ${table.modelName}FindManyArgs): Promise<unknown> {
-  return executeFindMany(pg, READ_SCHEMA, MODEL, args);
-}`,
+    delegateInterface(table, rowType),
     "",
-    ...mutationBodies(table, rowType),
+    delegateFactory(table),
     "",
-    `export async function count(args?: { readonly where?: ${table.modelName}Where }): Promise<number> {
-  return executeCount(pg, READ_SCHEMA, MODEL, args);
-}`,
+    ...defaultExports(table),
     "",
   ].join("\n");
 }
@@ -400,34 +405,45 @@ export function findMany(args?: ${table.modelName}FindManyArgs): Promise<unknown
 export function generateClientBarrelSource(tables: readonly TableMetadata[]): string {
   const modules = tableModules(tables);
   const imports = modules.map((entry) => `import * as ${entry.namespace} from "./${entry.fileName}";`);
-  const entries = modules.map((entry) => [
-    `  ${entry.clientKey}: {`,
-    `    findUnique: ${entry.namespace}.findUnique,`,
-    `    findUniqueOrThrow: ${entry.namespace}.findUniqueOrThrow,`,
-    `    findFirst: ${entry.namespace}.findFirst,`,
-    `    findFirstOrThrow: ${entry.namespace}.findFirstOrThrow,`,
-    `    findMany: ${entry.namespace}.findMany,`,
-    `    create: ${entry.namespace}.create,`,
-    `    createMany: ${entry.namespace}.createMany,`,
-    `    createManyAndReturn: ${entry.namespace}.createManyAndReturn,`,
-    `    insert: ${entry.namespace}.insert,`,
-    `    update: ${entry.namespace}.update,`,
-    `    updateMany: ${entry.namespace}.updateMany,`,
-    `    updateManyAndReturn: ${entry.namespace}.updateManyAndReturn,`,
-    `    upsert: ${entry.namespace}.upsert,`,
-    `    delete: ${entry.namespace}.deleteOne,`,
-    `    deleteMany: ${entry.namespace}.deleteMany,`,
-    `    count: ${entry.namespace}.count,`,
-    "  },",
-  ].join("\n"));
+  const delegateFields = modules.map((entry) => `  readonly ${entry.clientKey}: ${entry.namespace}.${entry.modelName}Delegate;`);
+  const entries = modules.map((entry) => `    ${entry.clientKey}: ${entry.namespace}.create${entry.modelName}Delegate(database),`);
   const typeExports = modules.map((entry) => `export type * as ${pascalCase(entry.modelName)}Client from "./${entry.fileName}";`);
   return [
     "/* Generated by @warbler/database. Do not edit by hand. */",
+    'import { executeTransaction } from "@warbler/database";',
+    'import type { TransactionOptions } from "@warbler/database";',
+    'import type { SQL } from "bun";',
+    'import { pg } from "../runtime/pg-client";',
     ...imports,
     "",
-    "export const WlbPg = {",
+    "interface WlbPgDelegates {",
+    ...delegateFields,
+    "}",
+    "",
+    "export type WlbPgTransactionClient = Readonly<WlbPgDelegates>;",
+    "export type WlbPgClient = Readonly<WlbPgDelegates & {",
+    "  readonly transaction: typeof transaction;",
+    "}>;",
+    "",
+    "function createClient(database: SQL): WlbPgTransactionClient {",
+    "  return Object.freeze({",
     ...entries,
-    "};",
+    "  });",
+    "}",
+    "",
+    "const CLIENT = createClient(pg);",
+    "",
+    "export function transaction<Result>(",
+    "  callback: (tx: WlbPgTransactionClient) => Result | Promise<Result>,",
+    "  options?: TransactionOptions,",
+    "): Promise<Awaited<Result>> {",
+    "  return executeTransaction(pg, (tx) => callback(createClient(tx)), options);",
+    "}",
+    "",
+    "export const WlbPg: WlbPgClient = Object.freeze({",
+    "  ...CLIENT,",
+    "  transaction,",
+    "});",
     "",
     ...typeExports,
     "",

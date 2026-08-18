@@ -46,6 +46,18 @@ export class DatabaseQueryError extends DatabaseError {
   }
 }
 
+/** Error thrown when a generated transaction is misused or receives invalid options. */
+export class DatabaseTransactionError extends DatabaseError {
+  public constructor(
+    public readonly reason: "invalid-options" | "completed-client" | "unsupported",
+    detail: string,
+    cause?: unknown,
+  ) {
+    super(`Invalid database transaction: ${detail}`, "DB3003", { cause });
+    this.name = "DatabaseTransactionError";
+  }
+}
+
 /** Error thrown when a migration kind/name argument cannot be scaffolded. */
 export class MigrationScaffoldError extends DatabaseError {
   public constructor(detail: string) {

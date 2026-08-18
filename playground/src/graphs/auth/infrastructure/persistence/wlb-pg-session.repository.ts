@@ -32,7 +32,7 @@ export class WlbPgSessionRepository extends SessionRepositoryPort {
                 }
             },
         });
-        console.log('session',session)
+ 
     
         if (!session) {
             return null;

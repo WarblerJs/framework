@@ -240,7 +240,7 @@ const total = await WlbPg.user.count();
 Each table gets `findUnique`, `findUniqueOrThrow`, `findFirst`, `findFirstOrThrow`, `findMany`,
 `count`, `create`, `createMany`, `createManyAndReturn`, `insert` (compatibility alias for
 `create({ data })`), `update`, `updateMany`, `updateManyAndReturn`, `upsert`, `delete`, and
-`deleteMany`. Read and write methods use query objects:
+`deleteMany`. `WlbPg` also exposes `transaction`. Read and write methods use query objects:
 
 ```ts
 await WlbPg.userSession.findFirst({
@@ -345,8 +345,39 @@ const user = await WlbPg.user.upsert({
 data is rejected, unknown fields fail fast, `createMany` is batched into one multi-row insert, and
 numeric columns support atomic `increment`, `decrement`, `multiply`, and `divide` operators.
 
+Transactions are callback-based and use Bun SQL's transaction connection for every `tx.*` query:
+
+```ts
+const result = await WlbPg.transaction(async (tx) => {
+  const user = await tx.user.create({
+    data: { email: "ada@example.com", passwordHash: hash, isActive: true },
+  });
+
+  const session = await tx.userSession.create({
+    data: { userId: user.id, sessionHash, expiresAt },
+  });
+
+  return { user, session };
+}, {
+  isolationLevel: "serializable",
+  readOnly: false,
+  timeout: 5_000,
+});
+```
+
+The callback result type is preserved. A transaction client exposes model delegates only; it does
+not expose `tx.transaction`, so nested transactions are not part of the typed API. If a transaction
+client escapes its callback and is used later, Warbler throws a database transaction error instead
+of routing the query through the normal pool. `timeout` is implemented with transaction-local
+PostgreSQL `SET LOCAL statement_timeout`, and `isolationLevel`/`readOnly` are translated from
+trusted typed values into Bun/PostgreSQL transaction options.
+
+Keep transactional operations sequential unless you have verified Bun/PostgreSQL behavior for your
+exact workload. A single transaction uses one connection, so `Promise.all` inside a transaction is
+not a throughput shortcut.
+
 The live connection lives in `generated/runtime/pg-client.ts` (built via the exported
-`createPgConnection` helper). Import it directly for a raw query or transaction:
+`createPgConnection` helper). Import it directly for a raw query or lower-level transaction:
 
 ```ts
 import { pg } from "../../database/warbler/pg/generated/runtime/pg-client";

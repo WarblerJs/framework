@@ -22,6 +22,13 @@ function formatTaggedQuery(strings: TemplateStringsArray, values: readonly unkno
   return Object.freeze({ text, params: Object.freeze(values) });
 }
 
+function wrapContextCall<T extends SQL | TransactionSQL>(target: T, value: Function, log: QueryLogger, args: unknown[]): unknown {
+  const callback = args.at(-1);
+  if (typeof callback !== "function") return value.apply(target, args);
+  const wrapped = (tx: TransactionSQL) => callback(withQueryLogging(tx, log));
+  return value.apply(target, [...args.slice(0, -1), wrapped]);
+}
+
 /** Wraps a Bun `SQL`/`TransactionSQL` instance so every executed query — tagged-template calls, `.unsafe()`, and queries run inside `.begin()` — is reported to `log` before it runs. Does not intercept `sql(value)` fragment-helper calls, which build a parameter fragment rather than executing anything. */
 export function withQueryLogging<T extends SQL | TransactionSQL>(sql: T, log: QueryLogger = defaultLogger): T {
   return new Proxy(sql, {
@@ -40,9 +47,8 @@ export function withQueryLogging<T extends SQL | TransactionSQL>(sql: T, log: Qu
           return (value as (q: string, p?: readonly unknown[]) => unknown).apply(target, [query, params]);
         };
       }
-      if (prop === "begin") {
-        return (fn: (tx: TransactionSQL) => unknown) =>
-          (value as (callback: (tx: TransactionSQL) => unknown) => unknown).call(target, (tx) => fn(withQueryLogging(tx, log)));
+      if (prop === "begin" || prop === "transaction" || prop === "savepoint") {
+        return (...args: unknown[]) => wrapContextCall(target, value, log, args);
       }
       return value.bind(target);
     },

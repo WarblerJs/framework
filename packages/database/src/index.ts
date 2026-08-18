@@ -11,6 +11,7 @@ export {
   DatabaseError,
   DatabaseQueryError,
   DatabaseRecordNotFoundError,
+  DatabaseTransactionError,
   MigrationDefinitionError,
   MigrationFileNotFoundError,
   MigrationChecksumError,
@@ -61,6 +62,8 @@ export {
 export type { MutationCountResult, WriteQueryArgs } from "./runtime/write-query";
 export { withQueryLogging } from "./runtime/query-logger";
 export type { QueryLogEntry, QueryLogger } from "./runtime/query-logger";
+export { executeTransaction } from "./runtime/transaction-query";
+export type { TransactionIsolationLevel, TransactionOptions } from "./runtime/transaction-query";
 
 export { introspectDatabase } from "./introspection/introspect-database";
 export type { IntrospectDatabaseOptions } from "./introspection/introspect-database";

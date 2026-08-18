@@ -4,6 +4,7 @@ import { SocketPublisher } from "@warbler/websocket";
 import HomeService from "./home.service";
 import { WlbPg } from "@pg/client";
 import { password } from "bun";
+import { random, hash } from "@warbler/crypto";
 
 @Controller()
 export default class HomeController {
@@ -12,28 +13,33 @@ export default class HomeController {
 
   @Get("/", { name: "home" })
   async index(): Promise<Response> {
-    // user id 3e44a1cf-162b-45b4-a7ca-8d178c835a39
-    const session = await WlbPg.user.deleteMany({
-      where: {
-        isActive: true
-      }
+
+
+    const pass = await password.hash('password')
+    const expiresAt = new Date(Date.now() +  ( 1000 * 60 * 60 * 24 * 30 ));
+
+    const sessionId = random.base64url(32);
+    const sessionHash = hash.sha256(sessionId);
+
+    const result = await WlbPg.transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: { email: "ada33dp09ii@example.com", passwordHash: pass, isActive: true },
+      });
+
+      const session = await tx.userSession.create({
+        data: { userId: user.id, sessionHash, expiresAt },
+      });
+
+      return { user, session };
+    }, {
+      isolationLevel: "serializable",
+      readOnly: false,
+      timeout: 5_000,
     });
-    return JsonRes({ s: this.#home.status(), session });
+
+    return JsonRes({ s: this.#home.status(), result });
   }
-  private generateRandomEmail() {
-    const chars = 'abcdefghijklmnopqrstuvwxyz1234567890';
-    let username = '';
-    
-    // Generate an 8-character random username
-    for (let i = 0; i < 8; i++) {
-      username += chars[Math.floor(Math.random() * chars.length)];
-    }
-    
-    const domains = ['gmail.com', 'yahoo.com', 'outlook.com', 'example.com'];
-    const randomDomain = domains[Math.floor(Math.random() * domains.length)];
-    
-    return `${username}@${randomDomain}`;
-  }
+
 
   @Get("/health")
   async health(): Promise<Response> {

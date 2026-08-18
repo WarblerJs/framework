@@ -8,7 +8,7 @@ function createFakeSql(): SQL {
   }
   Object.assign(fn, {
     unsafe: async (query: string, params?: readonly unknown[]) => [{ query, params }],
-    begin: async (callback: (tx: TransactionSQL) => unknown) => callback(fn as unknown as TransactionSQL),
+    begin: async (...args: unknown[]) => (args.at(-1) as (tx: TransactionSQL) => unknown)(fn as unknown as TransactionSQL),
   });
   return fn as unknown as SQL;
 }
@@ -45,6 +45,17 @@ describe("withQueryLogging", () => {
       { text: "SELECT 2", params: [] },
       { text: "SELECT 3", params: [] },
     ]);
+  });
+
+  test("logs queries run inside option-bearing .begin()", async () => {
+    const entries: QueryLogEntry[] = [];
+    const sql = withQueryLogging(createFakeSql(), (entry) => entries.push(entry));
+
+    await sql.begin("isolation level serializable read only", async (tx) => {
+      await tx.unsafe("SELECT 4");
+    });
+
+    expect(entries).toEqual([{ text: "SELECT 4", params: [] }]);
   });
 
   test("does not log sql(value) fragment-helper calls", async () => {
