@@ -61,8 +61,11 @@ describe("generateFromDatabase", () => {
     expect(await Bun.file(`${generated}/models/Session.ts`).exists()).toBe(false);
     const index = await Bun.file(`${generated}/client/index.ts`).text();
     expect(index).toContain('import * as userClient from "./user";');
-    expect(index).toContain("export type WlbPgTransactionClient = Readonly<WlbPgDelegates>;");
+    expect(index).toContain("interface WlbPgDelegates<Database extends SQL>");
+    expect(index).toContain("readonly db: Database;");
+    expect(index).toContain("export type WlbPgTransactionClient = Readonly<WlbPgDelegates<TransactionSQL>>;");
     expect(index).toContain("readonly transaction: typeof transaction;");
+    expect(index).toContain("db: database,");
     expect(index).toContain("return executeTransaction(pg, (tx) => callback(createClient(tx)), options);");
     expect(index).not.toContain("session");
 
