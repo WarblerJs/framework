@@ -12,23 +12,24 @@ export default class HomeController {
   @Get("/", { name: "home" })
   async index(): Promise<Response> {
     // user id 3e44a1cf-162b-45b4-a7ca-8d178c835a39
-    const session = await WlbPg.user.findFirst({
+    const session = await WlbPg.user.findMany({
       where: {
         email: "bellib6@gmail.com",
-        // sessions: {
-          
-        // }
-      },
-      include: {
-        sessions: {
-          where: {
-            id: '8feec072-298a-42af-a9c2-f92f5aef6108',
-            revokedAt: null,
-            expiresAt: { gt: new Date() },
-          },
-          orderBy: { createdAt: "desc" },
-        },
-      },
+      }
+      // include: {
+      //   sessions: {
+      //     select: {
+      //       id: true,
+      //       sessionHash: true
+      //     },
+      //     where: {
+      //       id: '8feec072-298a-42af-a9c2-f92f5aef6108',
+      //       revokedAt: null,
+      //       expiresAt: { gt: new Date() },
+      //     },
+      //     orderBy: { createdAt: "desc" },
+      //   },
+      // },
     });
     return JsonRes({ s: this.#home.status(), session });
   }
