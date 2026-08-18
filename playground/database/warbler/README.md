@@ -221,14 +221,26 @@ const page = await WlbPg.user.findMany({
   skip: 0,
 });
 
-const created = await WlbPg.user.insert({ email: "ada@example.com" });
-await WlbPg.user.update({ id: created.id }, { email: "ada2@example.com" });
-await WlbPg.user.delete({ id: created.id });
+const created = await WlbPg.user.create({
+  data: { email: "ada@example.com", passwordHash: hash, isActive: true },
+});
+
+await WlbPg.user.update({
+  where: { id: created.id },
+  data: { email: "ada2@example.com" },
+});
+
+await WlbPg.user.delete({
+  where: { id: created.id },
+});
+
 const total = await WlbPg.user.count();
 ```
 
 Each table gets `findUnique`, `findUniqueOrThrow`, `findFirst`, `findFirstOrThrow`, `findMany`,
-`insert`, `update`, `updateMany`, `delete`, and `count`. Read methods use query objects:
+`count`, `create`, `createMany`, `createManyAndReturn`, `insert` (compatibility alias for
+`create({ data })`), `update`, `updateMany`, `updateManyAndReturn`, `upsert`, `delete`, and
+`deleteMany`. Read and write methods use query objects:
 
 ```ts
 await WlbPg.userSession.findFirst({
@@ -300,6 +312,39 @@ such as `NaN`, fractions, negative numbers, and unsafe integers are rejected.
 Row/insert/update/where/select/include types are inferred from the introspected table; there is
 nothing to hand-write.
 
+Mutation methods use PostgreSQL-native writes with parameterized values and `RETURNING`:
+
+```ts
+await WlbPg.userSession.createMany({
+  data: [
+    { userId, sessionHash: firstHash, expiresAt },
+    { userId, sessionHash: secondHash, expiresAt },
+  ],
+  skipDuplicates: true,
+});
+
+const revoked = await WlbPg.userSession.updateMany({
+  where: { userId, revokedAt: null },
+  data: { revokedAt: new Date() },
+});
+
+const latest = await WlbPg.userSession.updateManyAndReturn({
+  where: { userId, revokedAt: null },
+  data: { lastUsedAt: new Date() },
+  select: { id: true, lastUsedAt: true },
+});
+
+const user = await WlbPg.user.upsert({
+  where: { email: "ada@example.com" },
+  create: { email: "ada@example.com", passwordHash: hash, isActive: true },
+  update: { isActive: true },
+});
+```
+
+`updateMany` and `deleteMany` require a non-empty `where` object. Explicit `undefined` in mutation
+data is rejected, unknown fields fail fast, `createMany` is batched into one multi-row insert, and
+numeric columns support atomic `increment`, `decrement`, `multiply`, and `divide` operators.
+
 The live connection lives in `generated/runtime/pg-client.ts` (built via the exported
 `createPgConnection` helper). Import it directly for a raw query or transaction:
 
@@ -314,5 +359,5 @@ await pg.begin(async (tx) => {
 ## Not yet implemented
 
 Table partitioning (`create:partition`), triggers, views, generated/computed columns,
-`insertMany`/`updateMany`/`deleteMany`/`upsert`/`exists`/`aggregate`/`paginate` client methods, and
-multi-column `where` filters beyond a single unique key.
+nested relation writes, `exists`/`aggregate`/`paginate` client methods, and multi-column unique
+selectors.

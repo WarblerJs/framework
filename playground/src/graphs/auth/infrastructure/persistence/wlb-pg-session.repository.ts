@@ -50,16 +50,16 @@ export class WlbPgSessionRepository extends SessionRepositoryPort {
     }
 
     override async revokeByHash(sessionHash: string): Promise<void> {
-        await WlbPg.userSession.updateMany(
-            { sessionHash, revokedAt: null },
-            { revokedAt: new Date() },
-        );
+        await WlbPg.userSession.updateMany({
+            where: { sessionHash, revokedAt: null },
+            data: { revokedAt: new Date() },
+        });
     }
 
     override async revokeAllForUser(userId: string): Promise<void> {
-        await WlbPg.userSession.updateMany(
-            { userId, revokedAt: null },
-            { revokedAt: new Date() },
-        );
+        await WlbPg.userSession.updateMany({
+            where: { userId, revokedAt: null },
+            data: { revokedAt: new Date() },
+        });
     }
 }

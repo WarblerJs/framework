@@ -67,7 +67,7 @@ export interface CountQueryArgs {
   readonly where?: unknown;
 }
 
-interface CompileState {
+export interface CompileState {
   readonly schema: RuntimeReadSchema;
   readonly params: unknown[];
   nextAlias: number;
@@ -84,11 +84,11 @@ const DEFAULT_FIND_MANY_LIMIT = 100;
 const MAX_QUERY_DEPTH = 8;
 const MAX_TAKE = 1_000;
 
-function isObject(value: unknown): value is Readonly<Record<string, unknown>> {
+export function isPlainObject(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function columnByField(model: RuntimeModel, field: string): RuntimeColumn | undefined {
+export function columnByField(model: RuntimeModel, field: string): RuntimeColumn | undefined {
   return model.columns.find((column) => column.field === field);
 }
 
@@ -96,20 +96,20 @@ function columnByName(model: RuntimeModel, name: string): RuntimeColumn | undefi
   return model.columns.find((column) => column.column === name);
 }
 
-function relationByField(model: RuntimeModel, field: string): RuntimeRelation | undefined {
+export function relationByField(model: RuntimeModel, field: string): RuntimeRelation | undefined {
   return model.relations.find((relation) => relation.field === field);
 }
 
-function q(name: string): string {
+export function q(name: string): string {
   return quoteIdentifier(name);
 }
 
-function param(state: CompileState, value: unknown): string {
+export function param(state: CompileState, value: unknown): string {
   state.params.push(value);
   return `$${state.params.length}`;
 }
 
-function rejectUndefined(model: RuntimeModel, field: string): never {
+export function rejectUndefined(model: RuntimeModel, field: string): never {
   throw new DatabaseQueryError(model.name, `Field "${field}" was explicitly set to undefined.`);
 }
 
@@ -168,7 +168,7 @@ function compileOperatorFilter(state: CompileState, model: RuntimeModel, alias: 
         parts.push(compileScalarComparison(state, model, alias, column, value));
         break;
       case "not":
-        parts.push(`NOT (${isObject(value) ? compileOperatorFilter(state, model, alias, column, value, depth + 1) : compileScalarComparison(state, model, alias, column, value)})`);
+        parts.push(`NOT (${isPlainObject(value) ? compileOperatorFilter(state, model, alias, column, value, depth + 1) : compileScalarComparison(state, model, alias, column, value)})`);
         break;
       case "in":
       case "notIn": {
@@ -208,7 +208,7 @@ function compileOperatorFilter(state: CompileState, model: RuntimeModel, alias: 
 }
 
 function compileRelationFilter(state: CompileState, model: RuntimeModel, alias: string, relation: RuntimeRelation, value: unknown, depth: number): string {
-  if (!isObject(value)) throw new DatabaseQueryError(model.name, `Relation "${relation.field}" filter must be an object.`);
+  if (!isPlainObject(value)) throw new DatabaseQueryError(model.name, `Relation "${relation.field}" filter must be an object.`);
   const target = state.schema.models[relation.target];
   if (target === undefined) throw new DatabaseQueryError(model.name, `Relation "${relation.field}" target is unavailable.`);
   const relationAlias = `wq${state.nextAlias++}`;
@@ -248,10 +248,10 @@ function normalizeLogical(value: unknown): readonly unknown[] {
   return Array.isArray(value) ? value : [value];
 }
 
-function compileWhere(state: CompileState, model: RuntimeModel, alias: string, where: unknown, depth: number): string {
+export function compileWhere(state: CompileState, model: RuntimeModel, alias: string, where: unknown, depth: number): string {
   assertDepth(model, depth, state);
   if (where === undefined) return "";
-  if (!isObject(where)) throw new DatabaseQueryError(model.name, "`where` must be an object.");
+  if (!isPlainObject(where)) throw new DatabaseQueryError(model.name, "`where` must be an object.");
   const parts: string[] = [];
   for (const [field, value] of Object.entries(where)) {
     if (value === undefined) rejectUndefined(model, field);
@@ -267,7 +267,7 @@ function compileWhere(state: CompileState, model: RuntimeModel, alias: string, w
     }
     const column = columnByField(model, field);
     if (column !== undefined) {
-      parts.push(isObject(value) ? compileOperatorFilter(state, model, alias, column, value, depth + 1) : compileScalarComparison(state, model, alias, column, value));
+      parts.push(isPlainObject(value) ? compileOperatorFilter(state, model, alias, column, value, depth + 1) : compileScalarComparison(state, model, alias, column, value));
       continue;
     }
     const relation = relationByField(model, field);
@@ -285,7 +285,7 @@ function compileOrderBy(state: CompileState, model: RuntimeModel, alias: string,
   const entries = Array.isArray(orderBy) ? orderBy : [orderBy];
   const parts: string[] = [];
   for (const entry of entries) {
-    if (!isObject(entry)) throw new DatabaseQueryError(model.name, "`orderBy` entries must be objects.");
+    if (!isPlainObject(entry)) throw new DatabaseQueryError(model.name, "`orderBy` entries must be objects.");
     for (const [field, direction] of Object.entries(entry)) {
       const column = columnByField(model, field);
       if (column === undefined) throw new DatabaseQueryError(model.name, `Unknown orderBy field "${field}".`);
@@ -298,7 +298,7 @@ function compileOrderBy(state: CompileState, model: RuntimeModel, alias: string,
 
 function compileCursor(state: CompileState, model: RuntimeModel, alias: string, cursor: unknown, orderBy: unknown): string {
   if (cursor === undefined) return "";
-  if (!isObject(cursor)) throw new DatabaseQueryError(model.name, "`cursor` must be a unique selector object.");
+  if (!isPlainObject(cursor)) throw new DatabaseQueryError(model.name, "`cursor` must be a unique selector object.");
   const keys = Object.keys(cursor);
   if (keys.length !== 1) throw new DatabaseQueryError(model.name, "`cursor` must contain exactly one unique field.");
   const field = keys[0]!;
@@ -306,11 +306,11 @@ function compileCursor(state: CompileState, model: RuntimeModel, alias: string, 
   if (column === undefined || (!column.primaryKey && !column.unique)) throw new DatabaseQueryError(model.name, `Cursor field "${field}" is not unique.`);
   const value = cursor[field];
   if (value === undefined) rejectUndefined(model, `cursor.${field}`);
-  const direction = isObject(orderBy) && orderBy[field] === "desc" ? "<" : ">";
+  const direction = isPlainObject(orderBy) && orderBy[field] === "desc" ? "<" : ">";
   return `${q(alias)}.${q(column.column)} ${direction} ${param(state, value)}`;
 }
 
-function scalarSelection(model: RuntimeModel, alias: string, fields: readonly string[] | undefined): string[] {
+export function scalarSelection(model: RuntimeModel, alias: string, fields: readonly string[] | undefined): string[] {
   const selected = fields === undefined ? model.columns : fields.map((field) => {
     const column = columnByField(model, field);
     if (column === undefined) throw new DatabaseQueryError(model.name, `Unknown select field "${field}".`);
@@ -327,7 +327,7 @@ function compileSelection(state: CompileState, model: RuntimeModel, alias: strin
   const relationParts: string[] = [];
 
   if (select !== undefined) {
-    if (!isObject(select)) throw new DatabaseQueryError(model.name, "`select` must be an object.");
+    if (!isPlainObject(select)) throw new DatabaseQueryError(model.name, "`select` must be an object.");
     for (const [field, value] of Object.entries(select)) {
       if (value === undefined) rejectUndefined(model, `select.${field}`);
       const column = columnByField(model, field);
@@ -344,7 +344,7 @@ function compileSelection(state: CompileState, model: RuntimeModel, alias: strin
   } else {
     selectFields.push(...model.columns.map((column) => column.field));
     if (include !== undefined) {
-      if (!isObject(include)) throw new DatabaseQueryError(model.name, "`include` must be an object.");
+      if (!isPlainObject(include)) throw new DatabaseQueryError(model.name, "`include` must be an object.");
       for (const [field, value] of Object.entries(include)) {
         if (value === undefined) rejectUndefined(model, `include.${field}`);
         if (value === false) continue;
@@ -362,7 +362,7 @@ function compileSelection(state: CompileState, model: RuntimeModel, alias: strin
 
 function compileRelationSelection(state: CompileState, model: RuntimeModel, alias: string, relation: RuntimeRelation, value: unknown, depth: number): string {
   assertDepth(model, depth, state);
-  if (!isObject(value)) throw new DatabaseQueryError(model.name, `Relation "${relation.field}" selection must be an object or true.`);
+  if (!isPlainObject(value)) throw new DatabaseQueryError(model.name, `Relation "${relation.field}" selection must be an object or true.`);
   const target = state.schema.models[relation.target];
   if (target === undefined) throw new DatabaseQueryError(model.name, `Relation "${relation.field}" target is unavailable.`);
   const relationAlias = `wq${state.nextAlias++}`;
@@ -408,7 +408,7 @@ function compileReadSql(schema: RuntimeReadSchema, model: RuntimeModel, args: Re
 }
 
 function assertUniqueWhere(model: RuntimeModel, args: ReadQueryArgs | undefined): void {
-  if (args === undefined || !isObject(args.where)) throw new DatabaseQueryError(model.name, "findUnique requires `where`.");
+  if (args === undefined || !isPlainObject(args.where)) throw new DatabaseQueryError(model.name, "findUnique requires `where`.");
   const keys = Object.keys(args.where);
   if (keys.length !== 1) throw new DatabaseQueryError(model.name, "findUnique `where` must contain exactly one unique field.");
   const column = columnByField(model, keys[0]!);
@@ -422,6 +422,28 @@ export async function executeFindUnique<Row>(sql: SQL, schema: RuntimeReadSchema
   const query = compileReadSql(schema, model, args, "unique");
   const rows = await sql.unsafe<Row[]>(query.sql, [...query.params]);
   return rows[0] ?? null;
+}
+
+export function createCompileState(schema: RuntimeReadSchema): CompileState {
+  return { schema, params: [], nextAlias: 1, maxDepth: MAX_QUERY_DEPTH, maxTake: MAX_TAKE };
+}
+
+export function compileWherePredicate(schema: RuntimeReadSchema, model: RuntimeModel, alias: string, where: unknown, requireNonEmpty: boolean): { readonly sql: string; readonly params: readonly unknown[] } {
+  const state = createCompileState(schema);
+  const predicate = compileWhere(state, model, alias, where, 0);
+  if (requireNonEmpty && predicate.length === 0) throw new DatabaseQueryError(model.name, "`where` must contain at least one predicate.");
+  return { sql: predicate, params: state.params };
+}
+
+export function assertUniqueSelector(model: RuntimeModel, where: unknown, operation: string): Readonly<Record<string, unknown>> {
+  if (!isPlainObject(where)) throw new DatabaseQueryError(model.name, `${operation} requires a unique \`where\` object.`);
+  const keys = Object.keys(where);
+  if (keys.length !== 1) throw new DatabaseQueryError(model.name, `${operation} \`where\` must contain exactly one unique field.`);
+  const key = keys[0]!;
+  const column = columnByField(model, key);
+  if (column === undefined || (!column.primaryKey && !column.unique)) throw new DatabaseQueryError(model.name, `Field "${key}" is not unique.`);
+  if (where[key] === undefined) rejectUndefined(model, `where.${key}`);
+  return where;
 }
 
 export async function executeFindUniqueOrThrow<Row>(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: ReadQueryArgs): Promise<Row> {
