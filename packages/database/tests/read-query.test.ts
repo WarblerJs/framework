@@ -5,6 +5,13 @@ import {
   executeAggregate,
   executeCount,
   executeExists,
+  executeExplainAggregate,
+  executeExplainCount,
+  executeExplainExists,
+  executeExplainFindFirst,
+  executeExplainFindMany,
+  executeExplainFindUnique,
+  executeExplainGroupBy,
   executeFindFirst,
   executeFindFirstOrThrow,
   executeFindMany,
@@ -387,6 +394,91 @@ describe("read query compiler", () => {
     expect(sql.queries[0]!.sql).toStartWith('SELECT DISTINCT ON ("wq0"."email")');
     expect(sql.queries[0]!.sql).toContain("json_agg(row_to_json");
     expect(sql.queries[0]!.sql).toContain('ORDER BY "wq0"."email" ASC, "wq0"."id" ASC LIMIT 2');
+  });
+
+  test("explain findMany wraps the exact compiled query and returns JSON plans by default", async () => {
+    const plan = [{ Plan: { "Node Type": "Seq Scan" } }];
+    const sql = createFakeSql([{ "QUERY PLAN": plan }]);
+    await expect(executeExplainFindMany(sql, schema, product, {
+      where: { isActive: true, price: { gte: "100" } },
+      orderBy: { price: "desc" },
+      take: 10,
+    })).resolves.toEqual({ format: "json", analyze: false, plan });
+
+    expect(sql.queries).toHaveLength(1);
+    expect(sql.queries[0]!.sql).toBe('EXPLAIN (FORMAT JSON) SELECT "wq0"."id" AS "id", "wq0"."price" AS "price", "wq0"."created_at" AS "createdAt", "wq0"."is_active" AS "isActive", "wq0"."category" AS "category", "wq0"."brand" AS "brand", "wq0"."status" AS "status", "wq0"."rating" AS "rating" FROM "products" AS "wq0" WHERE "wq0"."is_active" = $1 AND "wq0"."price" >= $2 ORDER BY "wq0"."price" DESC LIMIT 10');
+    expect(sql.queries[0]!.params).toEqual([true, "100"]);
+  });
+
+  test("explain supports analyze options and text plans without parsing PostgreSQL output", async () => {
+    const sql = createFakeSql([{ "QUERY PLAN": "Seq Scan on products" }, { "QUERY PLAN": "Planning Time: 0.1 ms" }]);
+    await expect(executeExplainFindFirst(sql, schema, product, {
+      where: { isActive: true },
+    }, {
+      analyze: true,
+      buffers: true,
+      verbose: true,
+      costs: false,
+      settings: true,
+      timing: false,
+      summary: true,
+      format: "text",
+    })).resolves.toEqual({
+      format: "text",
+      analyze: true,
+      plan: ["Seq Scan on products", "Planning Time: 0.1 ms"],
+    });
+
+    expect(sql.queries[0]!.sql).toContain("EXPLAIN (ANALYZE TRUE, BUFFERS TRUE, VERBOSE TRUE, COSTS FALSE, SETTINGS TRUE, TIMING FALSE, SUMMARY TRUE, FORMAT TEXT) SELECT");
+  });
+
+  test("explain preserves distinct fast path and DISTINCT ON representative path", async () => {
+    const fast = createFakeSql([{ "QUERY PLAN": [] }]);
+    await executeExplainFindMany(fast, schema, product, {
+      distinct: ["category", "brand"],
+      select: { category: true, brand: true },
+      orderBy: [{ category: "asc" }, { brand: "asc" }],
+      take: 100,
+    });
+
+    expect(fast.queries[0]!.sql).toContain('EXPLAIN (FORMAT JSON) SELECT DISTINCT "wq0"."category" AS "category", "wq0"."brand" AS "brand"');
+    expect(fast.queries[0]!.sql).not.toContain("DISTINCT ON");
+    expect(fast.queries[0]!.sql).not.toContain('"wq0"."id" ASC');
+
+    const representative = createFakeSql([{ "QUERY PLAN": [] }]);
+    await executeExplainFindMany(representative, schema, product, {
+      distinct: ["brand"],
+      orderBy: [{ brand: "asc" }, { price: "desc" }, { id: "asc" }],
+      take: 20,
+    });
+
+    expect(representative.queries[0]!.sql).toContain('EXPLAIN (FORMAT JSON) SELECT DISTINCT ON ("wq0"."brand")');
+    expect(representative.queries[0]!.sql).toContain('ORDER BY "wq0"."brand" ASC, "wq0"."price" DESC, "wq0"."id" ASC LIMIT 20');
+  });
+
+  test("explain reuses findUnique, count, exists, aggregate, and groupBy compilers", async () => {
+    const sql = createFakeSql([{ "QUERY PLAN": [] }]);
+    await executeExplainFindUnique(sql, schema, product, { where: { id: "p1" } });
+    await executeExplainCount(sql, schema, product, { where: { isActive: true } });
+    await executeExplainExists(sql, schema, product, { where: { brand: "Acme" } });
+    await executeExplainAggregate(sql, schema, product, { where: { isActive: true }, _count: true, _avg: { price: true } });
+    await executeExplainGroupBy(sql, schema, product, { by: ["category", "brand"], where: { isActive: true }, _count: true, orderBy: [{ category: "asc" }, { brand: "asc" }] });
+
+    expect(sql.queries.map((query) => query.sql)).toEqual([
+      'EXPLAIN (FORMAT JSON) SELECT "wq0"."id" AS "id", "wq0"."price" AS "price", "wq0"."created_at" AS "createdAt", "wq0"."is_active" AS "isActive", "wq0"."category" AS "category", "wq0"."brand" AS "brand", "wq0"."status" AS "status", "wq0"."rating" AS "rating" FROM "products" AS "wq0" WHERE "wq0"."id" = $1 LIMIT 1',
+      'EXPLAIN (FORMAT JSON) SELECT count(*)::int AS "count" FROM "products" AS "wq0" WHERE "wq0"."is_active" = $1',
+      'EXPLAIN (FORMAT JSON) SELECT EXISTS (SELECT 1 FROM "products" AS "wq0" WHERE "wq0"."brand" = $1) AS "exists"',
+      'EXPLAIN (FORMAT JSON) SELECT count(*)::int AS "__wlb_count_all", avg("wq0"."price") AS "__wlb_avg_price" FROM "products" AS "wq0" WHERE "wq0"."is_active" = $1',
+      'EXPLAIN (FORMAT JSON) SELECT "wq0"."category" AS "category", "wq0"."brand" AS "brand", count(*)::int AS "__wlb_count_all" FROM "products" AS "wq0" WHERE "wq0"."is_active" = $1 GROUP BY "wq0"."category", "wq0"."brand" ORDER BY "wq0"."category" ASC, "wq0"."brand" ASC',
+    ]);
+  });
+
+  test("explain rejects invalid diagnostic options", async () => {
+    await expect(executeExplainFindMany(createFakeSql(), schema, product, {}, { format: "xml" as "json" })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeExplainFindMany(createFakeSql(), schema, product, {}, { analyze: "yes" as unknown as boolean })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeExplainFindMany(createFakeSql(), schema, product, {}, { timing: true })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeExplainFindMany(createFakeSql(), schema, product, {}, { format: "json) SELECT pg_sleep(10); --" as "json" })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeExplainFindMany(createFakeSql(), schema, product, {}, { analyze: true, unknown: true } as unknown as { analyze: true })).rejects.toThrow(DatabaseQueryError);
   });
 
   test("count reuses the shared where compiler", async () => {

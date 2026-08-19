@@ -97,6 +97,23 @@ export interface GroupByQueryArgs extends AggregateQueryArgs {
   readonly skip?: unknown;
 }
 
+export interface PgExplainOptions {
+  readonly analyze?: boolean;
+  readonly buffers?: boolean;
+  readonly verbose?: boolean;
+  readonly costs?: boolean;
+  readonly settings?: boolean;
+  readonly timing?: boolean;
+  readonly summary?: boolean;
+  readonly format?: "json" | "text";
+}
+
+export interface PgExplainResult<TPlan = unknown> {
+  readonly format: "json" | "text";
+  readonly analyze: boolean;
+  readonly plan: TPlan;
+}
+
 export interface CompileState {
   readonly schema: RuntimeReadSchema;
   readonly params: unknown[];
@@ -114,6 +131,11 @@ interface Selection {
 interface OrderedColumn {
   readonly column: RuntimeColumn;
   readonly direction: SortDirection;
+}
+
+interface CompiledQuery {
+  readonly sql: string;
+  readonly params: readonly unknown[];
 }
 
 const DEFAULT_FIND_MANY_LIMIT = 100;
@@ -185,6 +207,59 @@ function parseAggregateTake(model: RuntimeModel, value: unknown): number | undef
   }
   if (value > MAX_TAKE) throw new DatabaseQueryError(model.name, `take must be less than or equal to ${MAX_TAKE}.`);
   return value;
+}
+
+function validateExplainBoolean(model: RuntimeModel, options: Readonly<Record<string, unknown>>, field: keyof PgExplainOptions): boolean | undefined {
+  const value = options[field];
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") throw new DatabaseQueryError(model.name, `Explain option "${field}" must be a boolean.`);
+  return value;
+}
+
+function compileExplainPrefix(model: RuntimeModel, options: PgExplainOptions | undefined): { readonly prefix: string; readonly format: "json" | "text"; readonly analyze: boolean } {
+  if (options !== undefined && !isPlainObject(options)) throw new DatabaseQueryError(model.name, "Explain options must be an object.");
+  const input = options ?? {};
+  for (const key of Object.keys(input)) {
+    if (key !== "analyze" && key !== "buffers" && key !== "verbose" && key !== "costs" && key !== "settings" && key !== "timing" && key !== "summary" && key !== "format") {
+      throw new DatabaseQueryError(model.name, `Unknown explain option "${key}".`);
+    }
+  }
+  const analyze = validateExplainBoolean(model, input, "analyze") === true;
+  const buffers = validateExplainBoolean(model, input, "buffers");
+  const verbose = validateExplainBoolean(model, input, "verbose");
+  const costs = validateExplainBoolean(model, input, "costs");
+  const settings = validateExplainBoolean(model, input, "settings");
+  const timing = validateExplainBoolean(model, input, "timing");
+  const summary = validateExplainBoolean(model, input, "summary");
+  const formatValue = input.format;
+  if (formatValue !== undefined && formatValue !== "json" && formatValue !== "text") throw new DatabaseQueryError(model.name, 'Explain option "format" must be "json" or "text".');
+  if (timing !== undefined && !analyze) throw new DatabaseQueryError(model.name, 'Explain option "timing" requires analyze: true.');
+  const format = formatValue ?? "json";
+  const parts: string[] = [];
+  if (analyze) parts.push("ANALYZE TRUE");
+  if (buffers !== undefined) parts.push(`BUFFERS ${buffers ? "TRUE" : "FALSE"}`);
+  if (verbose !== undefined) parts.push(`VERBOSE ${verbose ? "TRUE" : "FALSE"}`);
+  if (costs !== undefined) parts.push(`COSTS ${costs ? "TRUE" : "FALSE"}`);
+  if (settings !== undefined) parts.push(`SETTINGS ${settings ? "TRUE" : "FALSE"}`);
+  if (timing !== undefined) parts.push(`TIMING ${timing ? "TRUE" : "FALSE"}`);
+  if (summary !== undefined) parts.push(`SUMMARY ${summary ? "TRUE" : "FALSE"}`);
+  parts.push(`FORMAT ${format.toUpperCase()}`);
+  return { prefix: `EXPLAIN (${parts.join(", ")})`, format, analyze };
+}
+
+function extractExplainPlan(format: "json" | "text", rows: readonly Readonly<Record<string, unknown>>[]): unknown {
+  if (format === "json") return rows[0]?.["QUERY PLAN"] ?? null;
+  return rows.map((row) => row["QUERY PLAN"]).filter((line): line is string => typeof line === "string");
+}
+
+async function executeExplain(sql: SQL, model: RuntimeModel, query: CompiledQuery, options?: PgExplainOptions): Promise<PgExplainResult> {
+  const explain = compileExplainPrefix(model, options);
+  const rows = await sql.unsafe<Readonly<Record<string, unknown>>[]>(`${explain.prefix} ${query.sql}`, [...query.params]);
+  return Object.freeze({
+    format: explain.format,
+    analyze: explain.analyze,
+    plan: extractExplainPlan(explain.format, rows),
+  });
 }
 
 function compileScalarComparison(state: CompileState, model: RuntimeModel, alias: string, column: RuntimeColumn, value: unknown): string {
@@ -817,7 +892,7 @@ function compileGroupOrderBy(state: CompileState, model: RuntimeModel, alias: st
   return parts.length === 0 ? "" : `ORDER BY ${parts.join(", ")}`;
 }
 
-function compileReadSql(schema: RuntimeReadSchema, model: RuntimeModel, args: ReadQueryArgs | undefined, mode: "unique" | "first" | "many" | "count"): { readonly sql: string; readonly params: readonly unknown[] } {
+function compileReadSql(schema: RuntimeReadSchema, model: RuntimeModel, args: ReadQueryArgs | undefined, mode: "unique" | "first" | "many" | "count"): CompiledQuery {
   const query = args ?? {};
   assertNoSelectInclude(model, query);
   const state: CompileState = { schema, params: [], nextAlias: 1, maxDepth: MAX_QUERY_DEPTH, maxTake: MAX_TAKE };
@@ -850,7 +925,14 @@ function compileReadSql(schema: RuntimeReadSchema, model: RuntimeModel, args: Re
     };
   }
   return {
-    sql: `SELECT ${selection.sql} FROM ${q(model.table)} AS ${q(alias)} ${whereSql} ${defaultOrder} ${limitSql} ${offsetSql}`.trim(),
+    sql: [
+      `SELECT ${selection.sql}`,
+      `FROM ${q(model.table)} AS ${q(alias)}`,
+      whereSql,
+      defaultOrder,
+      limitSql,
+      offsetSql,
+    ].filter((part) => part.length > 0).join(" "),
     params: state.params,
   };
 }
@@ -917,7 +999,7 @@ export async function executeFindMany<Row>(sql: SQL, schema: RuntimeReadSchema, 
   return sql.unsafe<Row[]>(query.sql, [...query.params]);
 }
 
-function compileCountSelectionSql(schema: RuntimeReadSchema, model: RuntimeModel, args: CountQueryArgs): { readonly sql: string; readonly params: readonly unknown[] } {
+function compileCountSelectionSql(schema: RuntimeReadSchema, model: RuntimeModel, args: CountQueryArgs): CompiledQuery {
   const state = createCompileState(schema);
   const alias = "wq0";
   const where = compileWhere(state, model, alias, args.where, 0);
@@ -928,33 +1010,50 @@ function compileCountSelectionSql(schema: RuntimeReadSchema, model: RuntimeModel
   return { sql: `SELECT ${parts.join(", ")} FROM ${q(model.table)} AS ${q(alias)} ${whereSql}`.trim(), params: state.params };
 }
 
+function compileCountSql(schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs): CompiledQuery {
+  if (args?.select !== undefined) return compileCountSelectionSql(schema, model, args);
+  return compileReadSql(schema, model, args, "count");
+}
+
 export async function executeCount(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs & { readonly select?: undefined }): Promise<number>;
 export async function executeCount(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: CountQueryArgs & { readonly select: unknown }): Promise<Record<string, unknown>>;
 export async function executeCount(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs): Promise<number | Record<string, unknown>>;
 export async function executeCount(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs): Promise<number | Record<string, unknown>> {
   if (args?.select !== undefined) {
-    const query = compileCountSelectionSql(schema, model, args);
+    const query = compileCountSql(schema, model, args);
     const rows = await sql.unsafe<Record<string, unknown>[]>(query.sql, [...query.params]);
     return mapCountSelection(model, rows[0] ?? {}, args.select);
   }
-  const query = compileReadSql(schema, model, args, "count");
+  const query = compileCountSql(schema, model, args);
   const rows = await sql.unsafe<{ count: number }[]>(query.sql, [...query.params]);
   return rows[0]?.count ?? 0;
 }
 
-export async function executeExists(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs): Promise<boolean> {
+function compileExistsSql(schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs): CompiledQuery {
   const state = createCompileState(schema);
   const alias = "wq0";
   const where = compileWhere(state, model, alias, args?.where, 0);
   const whereSql = where.length === 0 ? "" : `WHERE ${where}`;
+  return {
+    sql: `SELECT EXISTS (${[
+      "SELECT 1",
+      `FROM ${q(model.table)} AS ${q(alias)}`,
+      whereSql,
+    ].filter((part) => part.length > 0).join(" ")}) AS "exists"`,
+    params: state.params,
+  };
+}
+
+export async function executeExists(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs): Promise<boolean> {
+  const query = compileExistsSql(schema, model, args);
   const rows = await sql.unsafe<{ exists: boolean }[]>(
-    `SELECT EXISTS (SELECT 1 FROM ${q(model.table)} AS ${q(alias)} ${whereSql}) AS "exists"`,
-    [...state.params],
+    query.sql,
+    [...query.params],
   );
   return rows[0]?.exists === true;
 }
 
-export async function executeAggregate(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: AggregateQueryArgs): Promise<Record<string, unknown>> {
+function compileAggregateSql(schema: RuntimeReadSchema, model: RuntimeModel, args: AggregateQueryArgs): CompiledQuery {
   if (!isPlainObject(args)) throw new DatabaseQueryError(model.name, "aggregate args must be an object.");
   for (const key of Object.keys(args)) {
     if (key !== "where" && key !== "_count" && key !== "_sum" && key !== "_avg" && key !== "_min" && key !== "_max") {
@@ -966,14 +1065,22 @@ export async function executeAggregate(sql: SQL, schema: RuntimeReadSchema, mode
   const selections = compileAggregateSelections(model, alias, args, false);
   const where = compileWhere(state, model, alias, args.where, 0);
   const whereSql = where.length === 0 ? "" : `WHERE ${where}`;
+  return {
+    sql: `SELECT ${selections.join(", ")} FROM ${q(model.table)} AS ${q(alias)} ${whereSql}`.trim(),
+    params: state.params,
+  };
+}
+
+export async function executeAggregate(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: AggregateQueryArgs): Promise<Record<string, unknown>> {
+  const query = compileAggregateSql(schema, model, args);
   const rows = await sql.unsafe<Record<string, unknown>[]>(
-    `SELECT ${selections.join(", ")} FROM ${q(model.table)} AS ${q(alias)} ${whereSql}`.trim(),
-    [...state.params],
+    query.sql,
+    [...query.params],
   );
   return mapAggregateResult(model, rows[0], args);
 }
 
-export async function executeGroupBy(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: GroupByQueryArgs): Promise<readonly Record<string, unknown>[]> {
+function compileGroupBySql(schema: RuntimeReadSchema, model: RuntimeModel, args: GroupByQueryArgs): CompiledQuery & { readonly groupColumns: readonly RuntimeColumn[] } {
   if (!isPlainObject(args)) throw new DatabaseQueryError(model.name, "groupBy args must be an object.");
   for (const key of Object.keys(args)) {
     if (key !== "by" && key !== "where" && key !== "having" && key !== "orderBy" && key !== "take" && key !== "skip" && key !== "_count" && key !== "_sum" && key !== "_avg" && key !== "_min" && key !== "_max") {
@@ -995,12 +1102,59 @@ export async function executeGroupBy(sql: SQL, schema: RuntimeReadSchema, model:
   const skip = parseSkip(model, args.skip);
   const limitSql = take === undefined ? "" : `LIMIT ${take}`;
   const offsetSql = skip === undefined ? "" : `OFFSET ${skip}`;
+  return {
+    sql: [
+      `SELECT ${[...groupSelections, ...aggregateSelections].join(", ")}`,
+      `FROM ${q(model.table)} AS ${q(alias)}`,
+      whereSql,
+      groupBy,
+      having,
+      orderBy,
+      limitSql,
+      offsetSql,
+    ].filter((part) => part.length > 0).join(" "),
+    params: state.params,
+    groupColumns,
+  };
+}
+
+export async function executeGroupBy(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: GroupByQueryArgs): Promise<readonly Record<string, unknown>[]> {
+  const query = compileGroupBySql(schema, model, args);
   const rows = await sql.unsafe<Record<string, unknown>[]>(
-    `SELECT ${[...groupSelections, ...aggregateSelections].join(", ")} FROM ${q(model.table)} AS ${q(alias)} ${whereSql} ${groupBy} ${having} ${orderBy} ${limitSql} ${offsetSql}`.trim(),
-    [...state.params],
+    query.sql,
+    [...query.params],
   );
   return rows.map((row) => Object.freeze({
-    ...Object.fromEntries(groupColumns.map((column) => [column.field, row[column.field]])),
+    ...Object.fromEntries(query.groupColumns.map((column) => [column.field, row[column.field]])),
     ...mapAggregateResult(model, row, args),
   }));
+}
+
+export async function executeExplainFindUnique(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: ReadQueryArgs, options?: PgExplainOptions): Promise<PgExplainResult> {
+  assertUniqueWhere(model, args);
+  return executeExplain(sql, model, compileReadSql(schema, model, args, "unique"), options);
+}
+
+export async function executeExplainFindFirst(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: ReadQueryArgs, options?: PgExplainOptions): Promise<PgExplainResult> {
+  return executeExplain(sql, model, compileReadSql(schema, model, args, "first"), options);
+}
+
+export async function executeExplainFindMany(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: ReadQueryArgs, options?: PgExplainOptions): Promise<PgExplainResult> {
+  return executeExplain(sql, model, compileReadSql(schema, model, args, "many"), options);
+}
+
+export async function executeExplainCount(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs, options?: PgExplainOptions): Promise<PgExplainResult> {
+  return executeExplain(sql, model, compileCountSql(schema, model, args), options);
+}
+
+export async function executeExplainExists(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs, options?: PgExplainOptions): Promise<PgExplainResult> {
+  return executeExplain(sql, model, compileExistsSql(schema, model, args), options);
+}
+
+export async function executeExplainAggregate(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: AggregateQueryArgs, options?: PgExplainOptions): Promise<PgExplainResult> {
+  return executeExplain(sql, model, compileAggregateSql(schema, model, args), options);
+}
+
+export async function executeExplainGroupBy(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: GroupByQueryArgs, options?: PgExplainOptions): Promise<PgExplainResult> {
+  return executeExplain(sql, model, compileGroupBySql(schema, model, args), options);
 }
