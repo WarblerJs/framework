@@ -32,6 +32,7 @@ describe("generateClientSource aggregation types", () => {
     expect(source).toContain("readonly total?: string;");
     expect(source).toContain("readonly tax?: number;");
     expect(source).toContain("readonly cursor?: OrderCursor;");
+    expect(source).toContain("readonly distinct?: readonly OrderScalarField[];");
     expect(source).toContain('primaryKeyFields: Object.freeze(["id"])');
     expect(source).toContain('field: "id", column: "id", kind: "string", pgType: "uuid"');
     expect(source).toContain('field: "total", column: "total", kind: "number", pgType: "numeric"');

@@ -72,6 +72,7 @@ export interface ReadQueryArgs {
   readonly take?: unknown;
   readonly skip?: unknown;
   readonly cursor?: unknown;
+  readonly distinct?: unknown;
 }
 
 export interface CountQueryArgs {
@@ -107,6 +108,7 @@ export interface CompileState {
 interface Selection {
   readonly sql: string;
   readonly hasRelation: boolean;
+  readonly scalarColumns: readonly RuntimeColumn[];
 }
 
 interface OrderedColumn {
@@ -358,13 +360,21 @@ function orderExpression(alias: string, column: RuntimeColumn): string {
 
 function compileOrderBy(state: CompileState, model: RuntimeModel, alias: string, orderBy: unknown): string {
   const ordered = normalizeOrderBy(model, orderBy);
-  const parts = ordered.map(({ column, direction }) => `${orderExpression(alias, column)} ${direction.toUpperCase()}`);
+  const parts = compileOrderedColumns(alias, ordered);
   return parts.length === 0 ? "" : `ORDER BY ${parts.join(", ")}`;
 }
 
 function compileDefaultOrderBy(model: RuntimeModel, alias: string): string {
   const { column, direction } = defaultOrderedColumn(model);
   return `ORDER BY ${orderExpression(alias, column)} ${direction.toUpperCase()}`;
+}
+
+function compileOrderedColumns(alias: string, ordered: readonly OrderedColumn[]): readonly string[] {
+  return ordered.map(({ column, direction }) => `${orderExpression(alias, column)} ${direction.toUpperCase()}`);
+}
+
+function compileColumnOrderedColumns(alias: string, ordered: readonly OrderedColumn[]): readonly string[] {
+  return ordered.map(({ column, direction }) => `${columnReference(alias, column)} ${direction.toUpperCase()}`);
 }
 
 function defaultOrderedColumn(model: RuntimeModel): OrderedColumn {
@@ -419,6 +429,104 @@ function compileCursor(state: CompileState, model: RuntimeModel, alias: string, 
   return `(${branches.join(" OR ")})`;
 }
 
+function normalizeDistinct(model: RuntimeModel, distinct: unknown): readonly RuntimeColumn[] {
+  if (distinct === undefined) return [];
+  if (!Array.isArray(distinct)) throw new DatabaseQueryError(model.name, "`distinct` must be a non-empty array of scalar field names.");
+  if (distinct.length === 0) throw new DatabaseQueryError(model.name, "`distinct` must contain at least one field.");
+  const columns: RuntimeColumn[] = [];
+  const seen = new Set<string>();
+  for (const field of distinct) {
+    if (typeof field !== "string") throw new DatabaseQueryError(model.name, "`distinct` entries must be scalar field names.");
+    if (seen.has(field)) throw new DatabaseQueryError(model.name, `Duplicate distinct field "${field}".`);
+    seen.add(field);
+    const column = columnByField(model, field);
+    if (column === undefined) {
+      if (relationByField(model, field) !== undefined) throw new DatabaseQueryError(model.name, `Relation field "${field}" cannot be used in \`distinct\`.`);
+      throw new DatabaseQueryError(model.name, `Unknown distinct field "${field}".`);
+    }
+    columns.push(column);
+  }
+  return columns;
+}
+
+function assertDistinctOrderCompatible(model: RuntimeModel, distinctColumns: readonly RuntimeColumn[], ordered: readonly OrderedColumn[]): void {
+  if (ordered.length === 0) return;
+  if (ordered.length < distinctColumns.length) {
+    throw new DatabaseQueryError(model.name, "`orderBy` must start with every `distinct` field in the same order.");
+  }
+  for (let index = 0; index < distinctColumns.length; index++) {
+    if (ordered[index]?.column.field !== distinctColumns[index]?.field) {
+      throw new DatabaseQueryError(model.name, "`orderBy` must start with every `distinct` field in the same order.");
+    }
+  }
+}
+
+function appendDeterministicDistinctTieBreakers(model: RuntimeModel, ordered: readonly OrderedColumn[]): readonly OrderedColumn[] {
+  const seen = new Set(ordered.map(({ column }) => column.field));
+  const extra: OrderedColumn[] = [];
+  for (const field of primaryKeyFields(model)) {
+    if (seen.has(field)) continue;
+    const column = columnByField(model, field);
+    if (column !== undefined) {
+      seen.add(field);
+      extra.push({ column, direction: "asc" });
+    }
+  }
+  if (extra.length === 0 && model.defaultOrderColumn !== "") {
+    const column = columnByName(model, model.defaultOrderColumn);
+    if (column !== undefined && !seen.has(column.field)) extra.push({ column, direction: "asc" });
+  }
+  return extra.length === 0 ? ordered : [...ordered, ...extra];
+}
+
+function distinctOrder(model: RuntimeModel, distinctColumns: readonly RuntimeColumn[], orderBy: unknown): readonly OrderedColumn[] {
+  const ordered = normalizeOrderBy(model, orderBy);
+  assertDistinctOrderCompatible(model, distinctColumns, ordered);
+  const base = ordered.length === 0 ? distinctColumns.map((column) => ({ column, direction: "asc" as const })) : ordered;
+  return appendDeterministicDistinctTieBreakers(model, base);
+}
+
+function sameColumnSet(left: readonly RuntimeColumn[], right: readonly RuntimeColumn[]): boolean {
+  if (left.length !== right.length) return false;
+  const fields = new Set(left.map((column) => column.field));
+  return right.every((column) => fields.has(column.field));
+}
+
+function canUsePlainDistinct(model: RuntimeModel, selection: Selection, distinctColumns: readonly RuntimeColumn[], orderBy: unknown): boolean {
+  if (selection.hasRelation) return false;
+  if (!sameColumnSet(selection.scalarColumns, distinctColumns)) return false;
+  const selectedFields = new Set(selection.scalarColumns.map((column) => column.field));
+  const ordered = normalizeOrderBy(model, orderBy);
+  return ordered.every(({ column }) => selectedFields.has(column.field));
+}
+
+function compilePlainDistinctSql(model: RuntimeModel, alias: string, selection: Selection, distinctColumns: readonly RuntimeColumn[], whereSql: string, orderBy: unknown): string {
+  const ordered = normalizeOrderBy(model, orderBy);
+  const finalOrder = ordered.length === 0 ? distinctColumns.map((column) => ({ column, direction: "asc" as const })) : ordered;
+  const orderBySql = compileColumnOrderedColumns(alias, finalOrder).join(", ");
+  return [
+    `SELECT DISTINCT ${selection.sql}`,
+    `FROM ${q(model.table)} AS ${q(alias)}`,
+    whereSql,
+    orderBySql.length === 0 ? "" : `ORDER BY ${orderBySql}`,
+  ].filter((part) => part.length > 0).join(" ");
+}
+
+function compileDistinctSql(model: RuntimeModel, alias: string, selection: Selection, distinctColumns: readonly RuntimeColumn[], whereSql: string, orderBy: unknown): string {
+  if (canUsePlainDistinct(model, selection, distinctColumns, orderBy)) {
+    return compilePlainDistinctSql(model, alias, selection, distinctColumns, whereSql, orderBy);
+  }
+  const distinctOn = distinctColumns.map((column) => orderExpression(alias, column)).join(", ");
+  const ordered = distinctOrder(model, distinctColumns, orderBy);
+  const orderBySql = compileOrderedColumns(alias, ordered).join(", ");
+  return [
+    `SELECT DISTINCT ON (${distinctOn}) ${selection.sql}`,
+    `FROM ${q(model.table)} AS ${q(alias)}`,
+    whereSql,
+    orderBySql.length === 0 ? "" : `ORDER BY ${orderBySql}`,
+  ].filter((part) => part.length > 0).join(" ");
+}
+
 export function scalarSelection(model: RuntimeModel, alias: string, fields: readonly string[] | undefined): string[] {
   const selected = fields === undefined ? model.columns : fields.map((field) => {
     const column = columnByField(model, field);
@@ -464,9 +572,10 @@ function compileSelection(state: CompileState, model: RuntimeModel, alias: strin
     }
   }
 
+  const scalarColumns = selectFields.map((field) => columnByField(model, field)!);
   const parts = [...scalarSelection(model, alias, selectFields), ...relationParts];
   if (parts.length === 0) throw new DatabaseQueryError(model.name, "At least one field must be selected.");
-  return { sql: parts.join(", "), hasRelation: relationParts.length > 0 };
+  return { sql: parts.join(", "), hasRelation: relationParts.length > 0, scalarColumns };
 }
 
 function compileRelationSelection(state: CompileState, model: RuntimeModel, alias: string, relation: RuntimeRelation, value: unknown, depth: number): string {
@@ -713,6 +822,9 @@ function compileReadSql(schema: RuntimeReadSchema, model: RuntimeModel, args: Re
   assertNoSelectInclude(model, query);
   const state: CompileState = { schema, params: [], nextAlias: 1, maxDepth: MAX_QUERY_DEPTH, maxTake: MAX_TAKE };
   const alias = "wq0";
+  const distinctColumns = normalizeDistinct(model, query.distinct);
+  if (distinctColumns.length > 0 && mode !== "many") throw new DatabaseQueryError(model.name, "`distinct` is only supported on findMany.");
+  if (distinctColumns.length > 0 && query.cursor !== undefined) throw new DatabaseQueryError(model.name, "`cursor` cannot be used with `distinct`.");
   if (query.cursor !== undefined && query.skip !== undefined) {
     const skipped = parseSkip(model, query.skip);
     if (skipped !== 0) throw new DatabaseQueryError(model.name, "`skip` cannot be greater than 0 when `cursor` is used.");
@@ -731,6 +843,12 @@ function compileReadSql(schema: RuntimeReadSchema, model: RuntimeModel, args: Re
   const skip = parseSkip(model, query.skip);
   const limitSql = take === undefined ? "" : `LIMIT ${take}`;
   const offsetSql = skip === undefined ? "" : `OFFSET ${skip}`;
+  if (distinctColumns.length > 0) {
+    return {
+      sql: `${compileDistinctSql(model, alias, selection, distinctColumns, whereSql, query.orderBy)} ${limitSql} ${offsetSql}`.trim(),
+      params: state.params,
+    };
+  }
   return {
     sql: `SELECT ${selection.sql} FROM ${q(model.table)} AS ${q(alias)} ${whereSql} ${defaultOrder} ${limitSql} ${offsetSql}`.trim(),
     params: state.params,

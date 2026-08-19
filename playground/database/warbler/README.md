@@ -411,6 +411,75 @@ values. If rows are inserted, deleted, or updated between page requests, later p
 those database changes. For large keyset scans, add matching indexes in migrations, for example
 `products(price, id)`.
 
+`findMany` also supports PostgreSQL-backed field distinct queries:
+
+```ts
+const brands = await WlbPg.product.findMany({
+  distinct: ["brand"],
+  select: { brand: true },
+  orderBy: { brand: "asc" },
+});
+```
+
+The distinct key is a scalar field tuple. For example, `distinct: ["category", "brand"]` returns at
+most one result for each category/brand pair:
+
+```ts
+const pairs = await WlbPg.product.findMany({
+  distinct: ["category", "brand"],
+  select: {
+    category: true,
+    brand: true,
+  },
+  orderBy: [
+    { category: "asc" },
+    { brand: "asc" },
+  ],
+});
+```
+
+When the selected scalar fields exactly match the distinct key, Warbler emits plain PostgreSQL
+`SELECT DISTINCT` without hidden tie-breakers:
+
+```ts
+const pairs = await WlbPg.product.findMany({
+  distinct: ["category", "brand"],
+  select: {
+    category: true,
+    brand: true,
+  },
+  orderBy: [
+    { category: "asc" },
+    { brand: "asc" },
+  ],
+});
+```
+
+For full rows or partial projections that include extra fields, Warbler uses PostgreSQL
+`DISTINCT ON (...)` so queries are field-based rather than accidentally deduplicating the complete
+selected row. In this representative-row path, `orderBy` must start with the distinct fields in the
+same order required by PostgreSQL. Additional order fields choose the representative row for each
+distinct key, and Warbler appends primary-key tie-breakers when needed so the chosen row is
+deterministic:
+
+```ts
+const highestPricedProductPerBrand = await WlbPg.product.findMany({
+  distinct: ["brand"],
+  orderBy: [
+    { brand: "asc" },
+    { price: "desc" },
+    { id: "asc" },
+  ],
+});
+```
+
+Filtering happens before distinct, while `take` and `skip` apply to the final distinct result.
+Empty or duplicate distinct lists are rejected, and relation names are not valid distinct fields.
+Nullable distinct fields follow PostgreSQL `DISTINCT ON` semantics. `cursor` with `distinct` is
+currently rejected because cursor pagination needs a separate contract over the final distinct row
+set. Indexes such as `products(brand)` or compound indexes matching common filter/order patterns can
+improve distinct query plans; Warbler does not create indexes automatically.
+
 Row/insert/update/where/select/include types are inferred from the introspected table; there is
 nothing to hand-write.
 
