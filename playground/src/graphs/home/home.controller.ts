@@ -1,5 +1,5 @@
 import { inject } from "@warbler/core";
-import { ArchiveRes, Controller, Get, ImageRes, JsonRes, PdfRes, Post, Sse, SseRes, TextRes, csrf, view } from "@warbler/http";
+import { ArchiveRes, Controller, Get, ImageRes, JsonRes, PdfRes, Post, Sse, SseRes, TextRes, csrf, view, type AppRequest } from "@warbler/http";
 import { SocketPublisher } from "@warbler/websocket";
 import HomeService from "./home.service";
 import { WlbPg } from "@pg/client";
@@ -12,75 +12,11 @@ export default class HomeController {
   readonly #sockets = inject(SocketPublisher);
 
   @Get("/", { name: "home" })
-  async index(): Promise<Response> {
+  async index(request:AppRequest): Promise<Response> {
 
-
-    const pass = await password.hash('password')
-    const expiresAt = new Date(Date.now() +  ( 1000 * 60 * 60 * 24 * 30 ));
-
-
-    // const result = await WlbPg.product.groupBy({
-    //   by: ["category", "brand"],
     
-    //   where: {
-    //     isActive: true,
-    //     price: {
-    //       gte: '100',
-    //     },
-    //   },
     
-    //   _count: true,
-    //   _sum: {
-    //     stock: true,
-    //     soldQuantity: true,
-    //   },
-    //   _avg: {
-    //     price: true,
-    //     rating: true,
-    //   },
-    // });
-
-    const result = await WlbPg.product.groupBy({
-      by: ["category", "brand", "status"],
-    
-      where: {
-        isActive: true,
-        price: {
-          gte: "100",
-          lte: "3000",
-        },
-      },
-    
-      _count: true,
-    
-      _sum: {
-        stock: true,
-        soldQuantity: true,
-      },
-    
-      _avg: {
-        price: true,
-        rating: true,
-      },
-    
-      _min: {
-        price: true,
-      },
-    
-      _max: {
-        price: true,
-      },
-    
-      orderBy: {
-        _sum: {
-          soldQuantity: "desc",
-        },
-      },
-    
-      take: 20,
-    });
-
-    return JsonRes({  result });
+    return JsonRes(  {products:true} );
   }
 
 

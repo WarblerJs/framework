@@ -338,8 +338,78 @@ Nested to-many reads are compiled into PostgreSQL subqueries/JSON aggregation ra
 application queries. Runtime reads do not introspect `information_schema` or `pg_catalog`; relation
 metadata is generated once from PostgreSQL foreign keys.
 
-Read pagination uses `take`, `skip`, and unique `cursor` selectors. Invalid `take`/`skip` values
-such as `NaN`, fractions, negative numbers, and unsafe integers are rejected.
+Read pagination uses `take`, `skip`, and keyset `cursor` boundaries on `findMany`. Invalid
+`take`/`skip` values such as `NaN`, fractions, negative numbers, and unsafe integers are rejected.
+Plain offset pagination still works with `skip` and `take`:
+
+```ts
+const page = await WlbPg.product.findMany({
+  orderBy: { id: "asc" },
+  skip: 100,
+  take: 50,
+});
+```
+
+Cursor pagination is strictly after the supplied boundary. For ascending fields Warbler emits `>`,
+and for descending fields it emits `<`:
+
+```ts
+const next = await WlbPg.product.findMany({
+  orderBy: { id: "asc" },
+  cursor: { id: lastProductId },
+  take: 50,
+});
+```
+
+For non-unique ordering, provide an explicit stable tie-breaker such as the primary key and include
+every ordered field in the cursor:
+
+```ts
+const nextByPrice = await WlbPg.product.findMany({
+  where: {
+    isActive: true,
+    price: { gte: "100" },
+  },
+  orderBy: [
+    { price: "asc" },
+    { id: "asc" },
+  ],
+  cursor: {
+    price: last.price,
+    id: last.id,
+  },
+  take: 50,
+});
+```
+
+Compound cursors use a lexicographic keyset predicate, so duplicate sort values are not skipped or
+repeated. Mixed directions are supported per field:
+
+```ts
+await WlbPg.product.findMany({
+  orderBy: [
+    { price: "desc" },
+    { createdAt: "asc" },
+    { id: "asc" },
+  ],
+  cursor: {
+    price: last.price,
+    createdAt: last.createdAt,
+    id: last.id,
+  },
+  take: 50,
+});
+```
+
+Cursor queries must include a primary-key or unique field in `orderBy`; Warbler does not add hidden
+tie-breakers or perform cursor-row lookup queries. Cursor fields are parameterized values, and SQL
+identifiers come from generated metadata. Nullable cursor-order fields are rejected for now because
+PostgreSQL `NULLS FIRST`/`NULLS LAST` semantics need an explicit public contract. `cursor` with
+`skip > 0` is rejected; use one strategy at a time. Backward pagination is not part of the current
+API. Timestamp cursor ordering uses millisecond precision to match the generated JavaScript `Date`
+values. If rows are inserted, deleted, or updated between page requests, later pages can reflect
+those database changes. For large keyset scans, add matching indexes in migrations, for example
+`products(price, id)`.
 
 Row/insert/update/where/select/include types are inferred from the introspected table; there is
 nothing to hand-write.

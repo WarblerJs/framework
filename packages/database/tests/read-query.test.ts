@@ -31,6 +31,7 @@ const schema: RuntimeReadSchema = Object.freeze({
       name: "User",
       table: "users",
       defaultOrderColumn: "id",
+      primaryKeyFields: Object.freeze(["id"]),
       columns: Object.freeze([
         Object.freeze({ field: "id", column: "id", kind: "string", nullable: false, unique: false, primaryKey: true }),
         Object.freeze({ field: "email", column: "email", kind: "string", nullable: false, unique: true, primaryKey: false }),
@@ -46,6 +47,7 @@ const schema: RuntimeReadSchema = Object.freeze({
       name: "Post",
       table: "posts",
       defaultOrderColumn: "id",
+      primaryKeyFields: Object.freeze(["id"]),
       columns: Object.freeze([
         Object.freeze({ field: "id", column: "id", kind: "string", nullable: false, unique: false, primaryKey: true }),
         Object.freeze({ field: "userId", column: "user_id", kind: "string", nullable: false, unique: false, primaryKey: false }),
@@ -57,11 +59,26 @@ const schema: RuntimeReadSchema = Object.freeze({
         Object.freeze({ field: "user", kind: "one", target: "User", localColumn: "user_id", foreignColumn: "id" }),
       ]),
     }),
+    Product: Object.freeze({
+      name: "Product",
+      table: "products",
+      defaultOrderColumn: "id",
+      primaryKeyFields: Object.freeze(["id"]),
+      columns: Object.freeze([
+        Object.freeze({ field: "id", column: "id", kind: "string", pgType: "uuid", nullable: false, unique: false, primaryKey: true }),
+        Object.freeze({ field: "price", column: "price", kind: "number", pgType: "numeric", nullable: false, unique: false, primaryKey: false }),
+        Object.freeze({ field: "createdAt", column: "created_at", kind: "date", pgType: "timestamp", nullable: false, unique: false, primaryKey: false }),
+        Object.freeze({ field: "isActive", column: "is_active", kind: "boolean", pgType: "boolean", nullable: false, unique: false, primaryKey: false }),
+        Object.freeze({ field: "category", column: "category", kind: "string", pgType: "varchar", nullable: false, unique: false, primaryKey: false }),
+      ]),
+      relations: Object.freeze([]),
+    }),
   }),
 });
 
 const user = schema.models.User!;
 const post = schema.models.Post!;
+const product = schema.models.Product!;
 
 describe("read query compiler", () => {
   test("findUnique uses query-object where and rejects non-unique or ambiguous selectors", async () => {
@@ -120,7 +137,7 @@ describe("read query compiler", () => {
       cursor: { id: "u1" },
       orderBy: [{ id: "asc" }],
       take: 10,
-      skip: 2,
+      skip: 0,
     });
 
     const query = sql.queries[0]!;
@@ -128,7 +145,149 @@ describe("read query compiler", () => {
     expect(query.sql).toContain("EXISTS (SELECT 1 FROM \"posts\"");
     expect(query.sql).toContain("json_agg(row_to_json");
     expect(query.sql).toContain('"wq0"."id" > $');
-    expect(query.sql).toContain("LIMIT 10 OFFSET 2");
+    expect(query.sql).toContain("LIMIT 10 OFFSET 0");
+  });
+
+  test("cursor preserves simple strict-after ASC behavior", async () => {
+    const sql = createFakeSql([]);
+    await executeFindMany(sql, schema, user, {
+      cursor: { id: "3" },
+      orderBy: { id: "asc" },
+      take: 3,
+    });
+
+    expect(sql.queries[0]!.sql).toBe('SELECT "wq0"."id" AS "id", "wq0"."email" AS "email", "wq0"."age" AS "age", "wq0"."active" AS "active", "wq0"."created_at" AS "createdAt" FROM "users" AS "wq0" WHERE ("wq0"."id" > $1) ORDER BY "wq0"."id" ASC LIMIT 3');
+    expect(sql.queries[0]!.params).toEqual(["3"]);
+  });
+
+  test("cursor supports DESC without returning rows before the boundary", async () => {
+    const sql = createFakeSql([]);
+    await executeFindMany(sql, schema, user, {
+      cursor: { id: "6" },
+      orderBy: { id: "desc" },
+      take: 3,
+    });
+
+    expect(sql.queries[0]!.sql).toContain('WHERE ("wq0"."id" < $1) ORDER BY "wq0"."id" DESC LIMIT 3');
+    expect(sql.queries[0]!.params).toEqual(["6"]);
+  });
+
+  test("cursor compiles compound keyset predicates for duplicate sort values", async () => {
+    const sql = createFakeSql([]);
+    await executeFindMany(sql, schema, post, {
+      where: { title: { startsWith: "Guide" } },
+      cursor: { likes: 100, id: "p2" },
+      orderBy: [{ likes: "asc" }, { id: "asc" }],
+      take: 2,
+      select: { id: true, likes: true },
+    });
+
+    expect(sql.queries[0]!.sql).toBe('SELECT "wq0"."id" AS "id", "wq0"."likes" AS "likes" FROM "posts" AS "wq0" WHERE "wq0"."title" LIKE $1 AND ("wq0"."likes" > $2 OR ("wq0"."likes" = $2 AND "wq0"."id" > $3)) ORDER BY "wq0"."likes" ASC, "wq0"."id" ASC LIMIT 2');
+    expect(sql.queries[0]!.params).toEqual(["Guide%", 100, "p2"]);
+  });
+
+  test("cursor uses each orderBy direction in mixed ASC/DESC predicates", async () => {
+    const sql = createFakeSql([]);
+    await executeFindMany(sql, schema, post, {
+      cursor: { likes: 300, title: "A", id: "p9" },
+      orderBy: [{ likes: "desc" }, { title: "asc" }, { id: "asc" }],
+      take: 1,
+    });
+
+    expect(sql.queries[0]!.sql).toContain('WHERE ("wq0"."likes" < $1 OR ("wq0"."likes" = $1 AND "wq0"."title" > $2) OR ("wq0"."likes" = $1 AND "wq0"."title" = $2 AND "wq0"."id" > $3))');
+    expect(sql.queries[0]!.sql).toContain('ORDER BY "wq0"."likes" DESC, "wq0"."title" ASC, "wq0"."id" ASC LIMIT 1');
+    expect(sql.queries[0]!.params).toEqual([300, "A", "p9"]);
+  });
+
+  test("cursor preserves the reported mixed-direction boundary with timestamp precision", async () => {
+    const sql = createFakeSql([]);
+    const cursorCreatedAt = new Date("2026-08-19T08:11:52.256Z");
+    await executeFindMany(sql, schema, product, {
+      where: {
+        isActive: true,
+        OR: [{ category: "electronics" }, { category: "automotive" }],
+      },
+      cursor: {
+        price: "4999.99",
+        createdAt: cursorCreatedAt,
+        id: "8ce695f9-1891-4385-9402-5ad615ce8708",
+      },
+      orderBy: [{ price: "desc" }, { createdAt: "asc" }, { id: "asc" }],
+      take: 10,
+    });
+
+    expect(sql.queries[0]!.sql).toBe('SELECT "wq0"."id" AS "id", "wq0"."price" AS "price", "wq0"."created_at" AS "createdAt", "wq0"."is_active" AS "isActive", "wq0"."category" AS "category" FROM "products" AS "wq0" WHERE "wq0"."is_active" = $1 AND ("wq0"."category" = $2 OR "wq0"."category" = $3) AND ("wq0"."price" < $4 OR ("wq0"."price" = $4 AND date_trunc(\'milliseconds\', "wq0"."created_at") > $5) OR ("wq0"."price" = $4 AND date_trunc(\'milliseconds\', "wq0"."created_at") = $5 AND "wq0"."id" > $6)) ORDER BY "wq0"."price" DESC, date_trunc(\'milliseconds\', "wq0"."created_at") ASC, "wq0"."id" ASC LIMIT 10');
+    expect(sql.queries[0]!.params).toEqual([true, "electronics", "automotive", "4999.99", cursorCreatedAt, "8ce695f9-1891-4385-9402-5ad615ce8708"]);
+    expect(sql.queries[0]!.sql).not.toContain(">=");
+    expect(sql.queries[0]!.sql).not.toContain("<=");
+  });
+
+  test("cursor compiles all two-field and three-field direction combinations", async () => {
+    const cases = [
+      {
+        orderBy: [{ likes: "asc" }, { id: "asc" }],
+        cursor: { likes: 10, id: "p2" },
+        predicate: '("wq0"."likes" > $1 OR ("wq0"."likes" = $1 AND "wq0"."id" > $2))',
+      },
+      {
+        orderBy: [{ likes: "desc" }, { id: "desc" }],
+        cursor: { likes: 10, id: "p2" },
+        predicate: '("wq0"."likes" < $1 OR ("wq0"."likes" = $1 AND "wq0"."id" < $2))',
+      },
+      {
+        orderBy: [{ likes: "asc" }, { id: "desc" }],
+        cursor: { likes: 10, id: "p2" },
+        predicate: '("wq0"."likes" > $1 OR ("wq0"."likes" = $1 AND "wq0"."id" < $2))',
+      },
+      {
+        orderBy: [{ likes: "desc" }, { id: "asc" }],
+        cursor: { likes: 10, id: "p2" },
+        predicate: '("wq0"."likes" < $1 OR ("wq0"."likes" = $1 AND "wq0"."id" > $2))',
+      },
+      {
+        orderBy: [{ likes: "asc" }, { title: "asc" }, { id: "asc" }],
+        cursor: { likes: 10, title: "A", id: "p2" },
+        predicate: '("wq0"."likes" > $1 OR ("wq0"."likes" = $1 AND "wq0"."title" > $2) OR ("wq0"."likes" = $1 AND "wq0"."title" = $2 AND "wq0"."id" > $3))',
+      },
+      {
+        orderBy: [{ likes: "desc" }, { title: "desc" }, { id: "desc" }],
+        cursor: { likes: 10, title: "A", id: "p2" },
+        predicate: '("wq0"."likes" < $1 OR ("wq0"."likes" = $1 AND "wq0"."title" < $2) OR ("wq0"."likes" = $1 AND "wq0"."title" = $2 AND "wq0"."id" < $3))',
+      },
+      {
+        orderBy: [{ likes: "desc" }, { title: "asc" }, { id: "asc" }],
+        cursor: { likes: 10, title: "A", id: "p2" },
+        predicate: '("wq0"."likes" < $1 OR ("wq0"."likes" = $1 AND "wq0"."title" > $2) OR ("wq0"."likes" = $1 AND "wq0"."title" = $2 AND "wq0"."id" > $3))',
+      },
+      {
+        orderBy: [{ likes: "asc" }, { title: "desc" }, { id: "asc" }],
+        cursor: { likes: 10, title: "A", id: "p2" },
+        predicate: '("wq0"."likes" > $1 OR ("wq0"."likes" = $1 AND "wq0"."title" < $2) OR ("wq0"."likes" = $1 AND "wq0"."title" = $2 AND "wq0"."id" > $3))',
+      },
+      {
+        orderBy: [{ likes: "asc" }, { title: "asc" }, { id: "desc" }],
+        cursor: { likes: 10, title: "A", id: "p2" },
+        predicate: '("wq0"."likes" > $1 OR ("wq0"."likes" = $1 AND "wq0"."title" > $2) OR ("wq0"."likes" = $1 AND "wq0"."title" = $2 AND "wq0"."id" < $3))',
+      },
+      {
+        orderBy: [{ likes: "desc" }, { title: "asc" }, { id: "desc" }],
+        cursor: { likes: 10, title: "A", id: "p2" },
+        predicate: '("wq0"."likes" < $1 OR ("wq0"."likes" = $1 AND "wq0"."title" > $2) OR ("wq0"."likes" = $1 AND "wq0"."title" = $2 AND "wq0"."id" < $3))',
+      },
+    ] as const;
+
+    for (const item of cases) {
+      const sql = createFakeSql([]);
+      await executeFindMany(sql, schema, post, {
+        cursor: item.cursor,
+        orderBy: item.orderBy,
+        take: 1,
+        select: { id: true },
+      });
+      expect(sql.queries[0]!.sql).toContain(`WHERE ${item.predicate}`);
+      expect(sql.queries[0]!.sql).not.toContain(">=");
+      expect(sql.queries[0]!.sql).not.toContain("<=");
+    }
   });
 
   test("count reuses the shared where compiler", async () => {
@@ -225,6 +384,10 @@ describe("read query compiler", () => {
     await expect(executeFindMany(createFakeSql(), schema, user, { where: { nope: 1 } })).rejects.toThrow(DatabaseQueryError);
     await expect(executeFindMany(createFakeSql(), schema, user, { orderBy: { nope: "asc" } })).rejects.toThrow(DatabaseQueryError);
     await expect(executeFindMany(createFakeSql(), schema, user, { take: 1.5 })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, post, { cursor: { likes: 100 }, orderBy: { likes: "asc" } })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, post, { cursor: { id: "p1" }, orderBy: [{ likes: "asc" }, { id: "asc" }] })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, post, { cursor: { cost: 10, id: "p1" }, orderBy: [{ cost: "asc" }, { id: "asc" }] })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, post, { cursor: { id: "p1" }, orderBy: { id: "asc" }, skip: 1 })).rejects.toThrow(DatabaseQueryError);
     await expect(executeAggregate(createFakeSql(), schema, user, { _sum: { email: true } })).rejects.toThrow(DatabaseQueryError);
     await expect(executeGroupBy(createFakeSql(), schema, user, { by: [] })).rejects.toThrow(DatabaseQueryError);
     await expect(executeGroupBy(createFakeSql(), schema, user, { by: ["active"], orderBy: { email: "asc" } })).rejects.toThrow(DatabaseQueryError);

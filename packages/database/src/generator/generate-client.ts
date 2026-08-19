@@ -253,6 +253,10 @@ function uniqueWhereType(typeName: string, uniqueColumns: readonly ColumnMetadat
   })].join("\n") + ";";
 }
 
+function cursorType(typeName: string, columns: readonly ColumnMetadata[]): string {
+  return [`export interface ${typeName} {`, ...columns.map((column) => `  readonly ${column.fieldName}?: ${nonNullableTsType(column)};`), "}"].join("\n");
+}
+
 function orderByType(typeName: string, columns: readonly ColumnMetadata[]): string {
   return [`export interface ${typeName} {`, ...columns.map((column) => `  readonly ${column.fieldName}?: SortDirection;`), "}"].join("\n");
 }
@@ -403,7 +407,7 @@ function includePayloadType(table: TableMetadata, rowType: string, relations: re
 
 function runtimeModelSource(table: TableMetadata, allTables: readonly TableMetadata[]): string {
   const columns = table.columns.map((column) =>
-    `{ field: ${JSON.stringify(column.fieldName)}, column: ${JSON.stringify(column.columnName)}, kind: ${JSON.stringify(runtimeKind(column))}, nullable: ${column.nullable}, unique: ${column.unique}, primaryKey: ${column.primaryKey}, aggregate: ${aggregateCapabilities(column)} }`
+    `{ field: ${JSON.stringify(column.fieldName)}, column: ${JSON.stringify(column.columnName)}, kind: ${JSON.stringify(runtimeKind(column))}, pgType: ${JSON.stringify(column.pgType)}, nullable: ${column.nullable}, unique: ${column.unique}, primaryKey: ${column.primaryKey}, aggregate: ${aggregateCapabilities(column)} }`
   );
   const relations = relationsFor(table, allTables).map((relation) =>
     `{ field: ${JSON.stringify(relation.field)}, kind: ${JSON.stringify(relation.kind)}, target: ${JSON.stringify(relation.target.modelName)}, localColumn: ${JSON.stringify(relation.localColumn)}, foreignColumn: ${JSON.stringify(relation.foreignColumn)} }`
@@ -412,6 +416,10 @@ function runtimeModelSource(table: TableMetadata, allTables: readonly TableMetad
       name: ${JSON.stringify(table.modelName)},
       table: ${JSON.stringify(table.tableName)},
       defaultOrderColumn: ${JSON.stringify(table.primaryKey[0] ?? table.columns[0]?.columnName ?? "")},
+      primaryKeyFields: Object.freeze([${table.primaryKey.map((columnName) => {
+        const column = table.columns.find((candidate) => candidate.columnName === columnName);
+        return JSON.stringify(column?.fieldName ?? columnName);
+      }).join(", ")}]),
       columns: Object.freeze([${columns.join(", ")}]),
       relations: Object.freeze([${relations.join(", ")}]),
     }`;
@@ -558,6 +566,8 @@ export function generateClientSource(table: TableMetadata, allTables: readonly T
     "",
     uniqueWhereType(`${table.modelName}UniqueWhere`, uniqueColumns),
     "",
+    cursorType(`${table.modelName}Cursor`, table.columns),
+    "",
     whereInterface(table, `${table.modelName}Where`, relations),
     "",
     orderByType(`${table.modelName}OrderBy`, table.columns),
@@ -606,7 +616,7 @@ export function generateClientSource(table: TableMetadata, allTables: readonly T
 }`,
     "",
     `export type ${table.modelName}FindUniqueArgs<S extends ${table.modelName}Select | undefined = undefined, I extends ${table.modelName}Include | undefined = undefined> = { readonly where: ${table.modelName}UniqueWhere; readonly select?: S; readonly include?: never; } | { readonly where: ${table.modelName}UniqueWhere; readonly select?: never; readonly include?: I; };`,
-    `export type ${table.modelName}FindFirstArgs<S extends ${table.modelName}Select | undefined = undefined, I extends ${table.modelName}Include | undefined = undefined> = { readonly where?: ${table.modelName}Where; readonly select?: S; readonly include?: never; readonly orderBy?: ${table.modelName}OrderBy | readonly ${table.modelName}OrderBy[]; readonly take?: number; readonly skip?: number; readonly cursor?: ${table.modelName}UniqueWhere; } | { readonly where?: ${table.modelName}Where; readonly select?: never; readonly include?: I; readonly orderBy?: ${table.modelName}OrderBy | readonly ${table.modelName}OrderBy[]; readonly take?: number; readonly skip?: number; readonly cursor?: ${table.modelName}UniqueWhere; };`,
+    `export type ${table.modelName}FindFirstArgs<S extends ${table.modelName}Select | undefined = undefined, I extends ${table.modelName}Include | undefined = undefined> = { readonly where?: ${table.modelName}Where; readonly select?: S; readonly include?: never; readonly orderBy?: ${table.modelName}OrderBy | readonly ${table.modelName}OrderBy[]; readonly take?: number; readonly skip?: number; readonly cursor?: ${table.modelName}Cursor; } | { readonly where?: ${table.modelName}Where; readonly select?: never; readonly include?: I; readonly orderBy?: ${table.modelName}OrderBy | readonly ${table.modelName}OrderBy[]; readonly take?: number; readonly skip?: number; readonly cursor?: ${table.modelName}Cursor; };`,
     `export type ${table.modelName}FindManyArgs<S extends ${table.modelName}Select | undefined = undefined, I extends ${table.modelName}Include | undefined = undefined> = ${table.modelName}FindFirstArgs<S, I>;`,
     "",
     selectPayloadType(table, rowType, relations),

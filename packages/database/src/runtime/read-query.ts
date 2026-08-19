@@ -28,6 +28,7 @@ export interface RuntimeColumn {
   readonly field: string;
   readonly column: string;
   readonly kind: "string" | "number" | "boolean" | "date" | "bytes" | "json";
+  readonly pgType?: string;
   readonly nullable: boolean;
   readonly unique: boolean;
   readonly primaryKey: boolean;
@@ -56,6 +57,7 @@ export interface RuntimeModel {
   readonly columns: readonly RuntimeColumn[];
   readonly relations: readonly RuntimeRelation[];
   readonly defaultOrderColumn: string;
+  readonly primaryKeyFields?: readonly string[];
 }
 
 export interface RuntimeReadSchema {
@@ -105,6 +107,11 @@ export interface CompileState {
 interface Selection {
   readonly sql: string;
   readonly hasRelation: boolean;
+}
+
+interface OrderedColumn {
+  readonly column: RuntimeColumn;
+  readonly direction: SortDirection;
 }
 
 const DEFAULT_FIND_MANY_LIMIT = 100;
@@ -318,34 +325,98 @@ export function compileWhere(state: CompileState, model: RuntimeModel, alias: st
   return parts.join(" AND ");
 }
 
-function compileOrderBy(state: CompileState, model: RuntimeModel, alias: string, orderBy: unknown): string {
-  if (orderBy === undefined) return "";
+function normalizeOrderBy(model: RuntimeModel, orderBy: unknown): readonly OrderedColumn[] {
+  if (orderBy === undefined) return [];
   const entries = Array.isArray(orderBy) ? orderBy : [orderBy];
-  const parts: string[] = [];
+  const ordered: OrderedColumn[] = [];
+  const seen = new Set<string>();
   for (const entry of entries) {
     if (!isPlainObject(entry)) throw new DatabaseQueryError(model.name, "`orderBy` entries must be objects.");
     for (const [field, direction] of Object.entries(entry)) {
       const column = columnByField(model, field);
       if (column === undefined) throw new DatabaseQueryError(model.name, `Unknown orderBy field "${field}".`);
       if (direction !== "asc" && direction !== "desc") throw new DatabaseQueryError(model.name, `Invalid order direction for "${field}".`);
-      parts.push(`${q(alias)}.${q(column.column)} ${direction.toUpperCase()}`);
+      if (seen.has(field)) throw new DatabaseQueryError(model.name, `Duplicate orderBy field "${field}".`);
+      seen.add(field);
+      ordered.push({ column, direction });
     }
   }
+  return ordered;
+}
+
+function columnReference(alias: string, column: RuntimeColumn): string {
+  return `${q(alias)}.${q(column.column)}`;
+}
+
+function orderExpression(alias: string, column: RuntimeColumn): string {
+  const reference = columnReference(alias, column);
+  if (column.pgType === "timestamp" || column.pgType === "timestamptz") {
+    return `date_trunc('milliseconds', ${reference})`;
+  }
+  return reference;
+}
+
+function compileOrderBy(state: CompileState, model: RuntimeModel, alias: string, orderBy: unknown): string {
+  const ordered = normalizeOrderBy(model, orderBy);
+  const parts = ordered.map(({ column, direction }) => `${orderExpression(alias, column)} ${direction.toUpperCase()}`);
   return parts.length === 0 ? "" : `ORDER BY ${parts.join(", ")}`;
+}
+
+function compileDefaultOrderBy(model: RuntimeModel, alias: string): string {
+  const { column, direction } = defaultOrderedColumn(model);
+  return `ORDER BY ${orderExpression(alias, column)} ${direction.toUpperCase()}`;
+}
+
+function defaultOrderedColumn(model: RuntimeModel): OrderedColumn {
+  const column = columnByName(model, model.defaultOrderColumn);
+  if (column === undefined) throw new DatabaseQueryError(model.name, "Default order column is unavailable.");
+  return { column, direction: "asc" };
+}
+
+function primaryKeyFields(model: RuntimeModel): readonly string[] {
+  return model.primaryKeyFields ?? model.columns.filter((column) => column.primaryKey).map((column) => column.field);
+}
+
+function assertStableCursorOrder(model: RuntimeModel, ordered: readonly OrderedColumn[]): void {
+  const orderedFields = new Set(ordered.map(({ column }) => column.field));
+  if (ordered.some(({ column }) => column.unique)) return;
+  const primary = primaryKeyFields(model);
+  if (primary.length > 0 && primary.every((field) => orderedFields.has(field))) return;
+  throw new DatabaseQueryError(model.name, "Cursor pagination requires orderBy to include a primary key or unique field as a stable tie-breaker.");
 }
 
 function compileCursor(state: CompileState, model: RuntimeModel, alias: string, cursor: unknown, orderBy: unknown): string {
   if (cursor === undefined) return "";
   if (!isPlainObject(cursor)) throw new DatabaseQueryError(model.name, "`cursor` must be a unique selector object.");
   const keys = Object.keys(cursor);
-  if (keys.length !== 1) throw new DatabaseQueryError(model.name, "`cursor` must contain exactly one unique field.");
-  const field = keys[0]!;
-  const column = columnByField(model, field);
-  if (column === undefined || (!column.primaryKey && !column.unique)) throw new DatabaseQueryError(model.name, `Cursor field "${field}" is not unique.`);
-  const value = cursor[field];
-  if (value === undefined) rejectUndefined(model, `cursor.${field}`);
-  const direction = isPlainObject(orderBy) && orderBy[field] === "desc" ? "<" : ">";
-  return `${q(alias)}.${q(column.column)} ${direction} ${param(state, value)}`;
+  if (keys.length === 0) throw new DatabaseQueryError(model.name, "`cursor` must contain at least one field.");
+  const ordered = normalizeOrderBy(model, orderBy);
+  const cursorOrder = ordered.length === 0 ? [defaultOrderedColumn(model)] : ordered;
+  const orderedFields = new Set(cursorOrder.map(({ column }) => column.field));
+  for (const key of keys) {
+    const column = columnByField(model, key);
+    if (column === undefined) throw new DatabaseQueryError(model.name, `Unknown cursor field "${key}".`);
+    if (!orderedFields.has(key)) throw new DatabaseQueryError(model.name, `Cursor field "${key}" must appear in orderBy.`);
+    if (cursor[key] === undefined) rejectUndefined(model, `cursor.${key}`);
+  }
+  for (const { column } of cursorOrder) {
+    if (column.nullable) throw new DatabaseQueryError(model.name, `Cursor order field "${column.field}" is nullable; nullable cursor ordering is not supported.`);
+    if (!(column.field in cursor)) throw new DatabaseQueryError(model.name, `Cursor is missing orderBy field "${column.field}".`);
+    if (cursor[column.field] === undefined) rejectUndefined(model, `cursor.${column.field}`);
+    if (cursor[column.field] === null) throw new DatabaseQueryError(model.name, `Cursor field "${column.field}" cannot be null.`);
+  }
+  assertStableCursorOrder(model, cursorOrder);
+  const placeholders = cursorOrder.map(({ column }) => param(state, cursor[column.field]));
+  const branches = cursorOrder.map(({ column, direction }, index) => {
+    const comparisons: string[] = [];
+    for (let before = 0; before < index; before++) {
+      const previous = cursorOrder[before]!;
+      comparisons.push(`${orderExpression(alias, previous.column)} = ${placeholders[before]}`);
+    }
+    comparisons.push(`${orderExpression(alias, column)} ${direction === "asc" ? ">" : "<"} ${placeholders[index]}`);
+    return comparisons.length === 1 ? comparisons[0]! : `(${comparisons.join(" AND ")})`;
+  });
+  return `(${branches.join(" OR ")})`;
 }
 
 export function scalarSelection(model: RuntimeModel, alias: string, fields: readonly string[] | undefined): string[] {
@@ -642,6 +713,10 @@ function compileReadSql(schema: RuntimeReadSchema, model: RuntimeModel, args: Re
   assertNoSelectInclude(model, query);
   const state: CompileState = { schema, params: [], nextAlias: 1, maxDepth: MAX_QUERY_DEPTH, maxTake: MAX_TAKE };
   const alias = "wq0";
+  if (query.cursor !== undefined && query.skip !== undefined) {
+    const skipped = parseSkip(model, query.skip);
+    if (skipped !== 0) throw new DatabaseQueryError(model.name, "`skip` cannot be greater than 0 when `cursor` is used.");
+  }
   const where = compileWhere(state, model, alias, query.where, 0);
   const cursor = compileCursor(state, model, alias, query.cursor, query.orderBy);
   const predicates = [where, cursor].filter((part) => part.length > 0);
@@ -651,7 +726,7 @@ function compileReadSql(schema: RuntimeReadSchema, model: RuntimeModel, args: Re
   }
   const selection = compileSelection(state, model, alias, query, 0);
   const orderBy = compileOrderBy(state, model, alias, query.orderBy);
-  const defaultOrder = orderBy === "" && (mode === "first" || mode === "many") ? `ORDER BY ${q(alias)}.${q(model.defaultOrderColumn)} ASC` : orderBy;
+  const defaultOrder = orderBy === "" && (mode === "first" || mode === "many") ? compileDefaultOrderBy(model, alias) : orderBy;
   const take = mode === "first" || mode === "unique" ? 1 : parseTake(model, query.take, DEFAULT_FIND_MANY_LIMIT);
   const skip = parseSkip(model, query.skip);
   const limitSql = take === undefined ? "" : `LIMIT ${take}`;

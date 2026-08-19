@@ -28,6 +28,13 @@ describe("generateClientSource aggregation types", () => {
     expect(source).toContain("executeExists");
     expect(source).toContain("executeGroupBy");
     expect(source).toContain("count<S extends OrderCountAggregateInput>");
+    expect(source).toContain("export interface OrderCursor");
+    expect(source).toContain("readonly total?: string;");
+    expect(source).toContain("readonly tax?: number;");
+    expect(source).toContain("readonly cursor?: OrderCursor;");
+    expect(source).toContain('primaryKeyFields: Object.freeze(["id"])');
+    expect(source).toContain('field: "id", column: "id", kind: "string", pgType: "uuid"');
+    expect(source).toContain('field: "total", column: "total", kind: "number", pgType: "numeric"');
     expect(source).toContain("exists(args?: { readonly where?: OrderWhere }): Promise<boolean>;");
     expect(source).toContain("aggregate<A extends OrderAggregateArgs>(args: A): Promise<OrderAggregatePayload<A>>;");
     expect(source).toContain("groupBy<A extends OrderGroupByArgs>(args: A): Promise<readonly OrderGroupByPayload<A>[]>;");
