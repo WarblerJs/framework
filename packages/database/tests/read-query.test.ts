@@ -70,6 +70,9 @@ const schema: RuntimeReadSchema = Object.freeze({
         Object.freeze({ field: "createdAt", column: "created_at", kind: "date", pgType: "timestamp", nullable: false, unique: false, primaryKey: false }),
         Object.freeze({ field: "isActive", column: "is_active", kind: "boolean", pgType: "boolean", nullable: false, unique: false, primaryKey: false }),
         Object.freeze({ field: "category", column: "category", kind: "string", pgType: "varchar", nullable: false, unique: false, primaryKey: false }),
+        Object.freeze({ field: "brand", column: "brand", kind: "string", pgType: "varchar", nullable: false, unique: false, primaryKey: false }),
+        Object.freeze({ field: "status", column: "status", kind: "string", pgType: "varchar", nullable: false, unique: false, primaryKey: false }),
+        Object.freeze({ field: "rating", column: "rating", kind: "number", pgType: "numeric", nullable: true, unique: false, primaryKey: false }),
       ]),
       relations: Object.freeze([]),
     }),
@@ -213,6 +216,7 @@ describe("read query compiler", () => {
         id: "8ce695f9-1891-4385-9402-5ad615ce8708",
       },
       orderBy: [{ price: "desc" }, { createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, price: true, createdAt: true, isActive: true, category: true },
       take: 10,
     });
 
@@ -288,6 +292,101 @@ describe("read query compiler", () => {
       expect(sql.queries[0]!.sql).not.toContain(">=");
       expect(sql.queries[0]!.sql).not.toContain("<=");
     }
+  });
+
+  test("distinct compiles projection-only scalar keys to plain PostgreSQL DISTINCT", async () => {
+    const sql = createFakeSql([]);
+    await executeFindMany(sql, schema, product, {
+      distinct: ["brand"],
+      select: { brand: true },
+      orderBy: { brand: "asc" },
+      take: 3,
+    });
+
+    expect(sql.queries[0]!.sql).toBe('SELECT DISTINCT "wq0"."brand" AS "brand" FROM "products" AS "wq0" ORDER BY "wq0"."brand" ASC LIMIT 3');
+    expect(sql.queries[0]!.sql).not.toContain("DISTINCT ON");
+    expect(sql.queries[0]!.sql).not.toContain('"wq0"."id" ASC');
+    expect(sql.queries[0]!.params).toEqual([]);
+  });
+
+  test("distinct supports compound projection-only keys with where, take, and skip on the distinct result", async () => {
+    const sql = createFakeSql([]);
+    await executeFindMany(sql, schema, product, {
+      where: { isActive: true },
+      distinct: ["category", "brand"],
+      select: { category: true, brand: true },
+      orderBy: [{ category: "asc" }, { brand: "asc" }],
+      take: 2,
+      skip: 1,
+    });
+
+    expect(sql.queries[0]!.sql).toBe('SELECT DISTINCT "wq0"."category" AS "category", "wq0"."brand" AS "brand" FROM "products" AS "wq0" WHERE "wq0"."is_active" = $1 ORDER BY "wq0"."category" ASC, "wq0"."brand" ASC LIMIT 2 OFFSET 1');
+    expect(sql.queries[0]!.sql).not.toContain("DISTINCT ON");
+    expect(sql.queries[0]!.sql).not.toContain('"wq0"."id" ASC');
+    expect(sql.queries[0]!.params).toEqual([true]);
+  });
+
+  test("distinct fast path supports three-field keys and preserves explicit order sequence", async () => {
+    const sql = createFakeSql([]);
+    await executeFindMany(sql, schema, product, {
+      distinct: ["category", "brand", "status"],
+      select: { category: true, brand: true, status: true },
+      orderBy: [{ brand: "desc" }, { category: "asc" }, { status: "asc" }],
+    });
+
+    expect(sql.queries[0]!.sql).toBe('SELECT DISTINCT "wq0"."category" AS "category", "wq0"."brand" AS "brand", "wq0"."status" AS "status" FROM "products" AS "wq0" ORDER BY "wq0"."brand" DESC, "wq0"."category" ASC, "wq0"."status" ASC LIMIT 100');
+    expect(sql.queries[0]!.sql).not.toContain("DISTINCT ON");
+    expect(sql.queries[0]!.sql).not.toContain('"wq0"."id" ASC');
+  });
+
+  test("distinct full-row queries choose deterministic representatives", async () => {
+    const sql = createFakeSql([]);
+    await executeFindMany(sql, schema, product, {
+      distinct: ["brand"],
+      orderBy: [{ brand: "asc" }, { price: "desc" }],
+      take: 5,
+    });
+
+    expect(sql.queries[0]!.sql).toBe('SELECT DISTINCT ON ("wq0"."brand") "wq0"."id" AS "id", "wq0"."price" AS "price", "wq0"."created_at" AS "createdAt", "wq0"."is_active" AS "isActive", "wq0"."category" AS "category", "wq0"."brand" AS "brand", "wq0"."status" AS "status", "wq0"."rating" AS "rating" FROM "products" AS "wq0" ORDER BY "wq0"."brand" ASC, "wq0"."price" DESC, "wq0"."id" ASC LIMIT 5');
+    expect(sql.queries[0]!.sql).toContain("DISTINCT ON");
+  });
+
+  test("distinct partial projections with extra fields stay on representative-row DISTINCT ON", async () => {
+    const sql = createFakeSql([]);
+    await executeFindMany(sql, schema, product, {
+      distinct: ["brand"],
+      select: { brand: true, price: true },
+      orderBy: [{ brand: "asc" }, { price: "desc" }],
+      take: 5,
+    });
+
+    expect(sql.queries[0]!.sql).toBe('SELECT DISTINCT ON ("wq0"."brand") "wq0"."brand" AS "brand", "wq0"."price" AS "price" FROM "products" AS "wq0" ORDER BY "wq0"."brand" ASC, "wq0"."price" DESC, "wq0"."id" ASC LIMIT 5');
+  });
+
+  test("distinct supports nullable scalar fields using PostgreSQL semantics", async () => {
+    const sql = createFakeSql([]);
+    await executeFindMany(sql, schema, product, {
+      distinct: ["rating"],
+      select: { rating: true },
+      orderBy: { rating: "asc" },
+    });
+
+    expect(sql.queries[0]!.sql).toBe('SELECT DISTINCT "wq0"."rating" AS "rating" FROM "products" AS "wq0" ORDER BY "wq0"."rating" ASC LIMIT 100');
+    expect(sql.queries[0]!.sql).not.toContain("DISTINCT ON");
+  });
+
+  test("distinct parent queries remain compatible with relation includes", async () => {
+    const sql = createFakeSql([]);
+    await executeFindMany(sql, schema, user, {
+      distinct: ["email"],
+      include: { posts: true },
+      orderBy: { email: "asc" },
+      take: 2,
+    });
+
+    expect(sql.queries[0]!.sql).toStartWith('SELECT DISTINCT ON ("wq0"."email")');
+    expect(sql.queries[0]!.sql).toContain("json_agg(row_to_json");
+    expect(sql.queries[0]!.sql).toContain('ORDER BY "wq0"."email" ASC, "wq0"."id" ASC LIMIT 2');
   });
 
   test("count reuses the shared where compiler", async () => {
@@ -388,6 +487,13 @@ describe("read query compiler", () => {
     await expect(executeFindMany(createFakeSql(), schema, post, { cursor: { id: "p1" }, orderBy: [{ likes: "asc" }, { id: "asc" }] })).rejects.toThrow(DatabaseQueryError);
     await expect(executeFindMany(createFakeSql(), schema, post, { cursor: { cost: 10, id: "p1" }, orderBy: [{ cost: "asc" }, { id: "asc" }] })).rejects.toThrow(DatabaseQueryError);
     await expect(executeFindMany(createFakeSql(), schema, post, { cursor: { id: "p1" }, orderBy: { id: "asc" }, skip: 1 })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, product, { distinct: [] })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, product, { distinct: ["brand", "brand"] })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, product, { distinct: ["nope"] })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, user, { distinct: ["posts"] })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, product, { distinct: ["brand"], orderBy: { price: "desc" } })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, product, { distinct: ["brand"], orderBy: [{ brand: "asc" }], cursor: { brand: "Acme" } })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindFirst(createFakeSql(), schema, product, { distinct: ["brand"] })).rejects.toThrow(DatabaseQueryError);
     await expect(executeAggregate(createFakeSql(), schema, user, { _sum: { email: true } })).rejects.toThrow(DatabaseQueryError);
     await expect(executeGroupBy(createFakeSql(), schema, user, { by: [] })).rejects.toThrow(DatabaseQueryError);
     await expect(executeGroupBy(createFakeSql(), schema, user, { by: ["active"], orderBy: { email: "asc" } })).rejects.toThrow(DatabaseQueryError);

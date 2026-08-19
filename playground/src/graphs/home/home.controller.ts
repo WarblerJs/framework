@@ -14,9 +14,30 @@ export default class HomeController {
   @Get("/", { name: "home" })
   async index(request:AppRequest): Promise<Response> {
 
+    const result = await WlbPg.product.findMany({
+      where: {
+        isActive: true,
+        price: {
+          gte: "100",
+        },
+      },
     
+      distinct: ["brand"],
     
-    return JsonRes(  {products:true} );
+      select: {
+        brand: true,
+      },
+    
+      orderBy: {
+        brand: "asc",
+      },
+    
+      take: 5,
+    });
+    
+    console.table(result);
+    
+    return JsonRes(  {result} );
   }
 
 
