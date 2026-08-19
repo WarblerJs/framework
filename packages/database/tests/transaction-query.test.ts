@@ -17,12 +17,15 @@ function createFakeSql(): FakeSql {
   const beginOptions: (string | undefined)[] = [];
   let rollbacks = 0;
 
-  const tx = {
+  const tx = Object.assign((strings: TemplateStringsArray, ...values: unknown[]) => {
+    txQueries.push({ sql: strings.join("?"), params: values });
+    return Promise.resolve([{ from: "tx-tag" }]);
+  }, {
     unsafe: async (sql: string, params?: readonly unknown[]) => {
       txQueries.push({ sql, params: params ?? [] });
       return [{ from: "tx" }];
     },
-  } as unknown as TransactionSQL;
+  }) as unknown as TransactionSQL;
 
   const sql = {
     unsafe: async (sql: string, params?: readonly unknown[]) => {
@@ -109,5 +112,6 @@ describe("executeTransaction", () => {
     });
 
     expect(() => leaked!.unsafe("SELECT 1")).toThrow(DatabaseTransactionError);
+    expect(() => (leaked as unknown as SQL)(["SELECT 1"] as unknown as TemplateStringsArray)).toThrow(DatabaseTransactionError);
   });
 });

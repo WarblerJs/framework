@@ -240,7 +240,8 @@ const total = await WlbPg.user.count();
 Each table gets `findUnique`, `findUniqueOrThrow`, `findFirst`, `findFirstOrThrow`, `findMany`,
 `count`, `create`, `createMany`, `createManyAndReturn`, `insert` (compatibility alias for
 `create({ data })`), `update`, `updateMany`, `updateManyAndReturn`, `upsert`, `delete`, and
-`deleteMany`. `WlbPg` also exposes `transaction`. Read and write methods use query objects:
+`deleteMany`. `WlbPg` also exposes `transaction` and the native Bun SQL escape hatch `db`. Read and
+write methods use query objects:
 
 ```ts
 await WlbPg.userSession.findFirst({
@@ -345,6 +346,48 @@ const user = await WlbPg.user.upsert({
 data is rejected, unknown fields fail fast, `createMany` is batched into one multi-row insert, and
 numeric columns support atomic `increment`, `decrement`, `multiply`, and `divide` operators.
 
+Use `WlbPg.db` for native Bun SQL when PostgreSQL-specific SQL is clearer than adding ORM surface
+area:
+
+```ts
+type UserSummary = { id: string; email: string };
+
+const users = await WlbPg.db<UserSummary[]>`
+  SELECT id, email
+  FROM users
+  WHERE is_active = ${true}
+  ORDER BY created_at DESC
+`;
+
+const table = WlbPg.db("users");
+const rows = await WlbPg.db`
+  SELECT *
+  FROM ${table}
+`;
+
+const filter = WlbPg.db`
+  AND created_at >= ${from}
+`;
+
+const active = await WlbPg.db`
+  SELECT *
+  FROM users
+  WHERE is_active = ${true}
+  ${filter}
+`.values();
+```
+
+`WlbPg.db` is the same configured Bun `SQL` instance used by generated ORM delegates, so Bun's
+native tagged-template parameter binding, fragments, dynamic identifier helper, object/bulk helper,
+`array`, `values`, `raw`, `execute`, `cancel`, `file`, and `unsafe` behavior are preserved. Bound
+values such as `${email}` stay parameterized. Do not build SQL by string-concatenating user input.
+`WlbPg.db.unsafe(...)` is exposed because Bun exposes it; it bypasses normal tagged-template safety
+and must only receive trusted SQL strings.
+
+Good uses for native SQL include CTEs, recursive CTEs, window functions, `FOR UPDATE`, complex
+aggregates, PostgreSQL-specific operators, advanced joins, reporting, analytics, hand-optimized
+queries, and special `RETURNING` queries.
+
 Transactions are callback-based and use Bun SQL's transaction connection for every `tx.*` query:
 
 ```ts
@@ -353,11 +396,18 @@ const result = await WlbPg.transaction(async (tx) => {
     data: { email: "ada@example.com", passwordHash: hash, isActive: true },
   });
 
+  const locked = await tx.db`
+    SELECT id
+    FROM users
+    WHERE id = ${user.id}
+    FOR UPDATE
+  `;
+
   const session = await tx.userSession.create({
     data: { userId: user.id, sessionHash, expiresAt },
   });
 
-  return { user, session };
+  return { user, locked, session };
 }, {
   isolationLevel: "serializable",
   readOnly: false,
@@ -365,19 +415,20 @@ const result = await WlbPg.transaction(async (tx) => {
 });
 ```
 
-The callback result type is preserved. A transaction client exposes model delegates only; it does
-not expose `tx.transaction`, so nested transactions are not part of the typed API. If a transaction
+The callback result type is preserved. A transaction client exposes `tx.db` plus model delegates,
+but not `tx.transaction`, so nested transactions are not part of the typed API. If a transaction
 client escapes its callback and is used later, Warbler throws a database transaction error instead
 of routing the query through the normal pool. `timeout` is implemented with transaction-local
-PostgreSQL `SET LOCAL statement_timeout`, and `isolationLevel`/`readOnly` are translated from
-trusted typed values into Bun/PostgreSQL transaction options.
+PostgreSQL `set_config('statement_timeout', ..., true)`, and `isolationLevel`/`readOnly` are
+translated from trusted typed values into Bun/PostgreSQL transaction options.
 
 Keep transactional operations sequential unless you have verified Bun/PostgreSQL behavior for your
 exact workload. A single transaction uses one connection, so `Promise.all` inside a transaction is
 not a throughput shortcut.
 
 The live connection lives in `generated/runtime/pg-client.ts` (built via the exported
-`createPgConnection` helper). Import it directly for a raw query or lower-level transaction:
+`createPgConnection` helper). It is the same object exposed as `WlbPg.db`. Import it directly only
+when you truly need lower-level lifecycle access:
 
 ```ts
 import { pg } from "../../database/warbler/pg/generated/runtime/pg-client";
