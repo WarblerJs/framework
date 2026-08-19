@@ -235,13 +235,25 @@ await WlbPg.user.delete({
 });
 
 const total = await WlbPg.user.count();
+
+const activeUsers = await WlbPg.user.count({
+  where: { isActive: true },
+});
+
+const selectedCounts = await WlbPg.user.count({
+  select: { _all: true, email: true },
+});
+
+const hasUser = await WlbPg.user.exists({
+  where: { email: "ada@example.com" },
+});
 ```
 
 Each table gets `findUnique`, `findUniqueOrThrow`, `findFirst`, `findFirstOrThrow`, `findMany`,
-`count`, `create`, `createMany`, `createManyAndReturn`, `insert` (compatibility alias for
-`create({ data })`), `update`, `updateMany`, `updateManyAndReturn`, `upsert`, `delete`, and
-`deleteMany`. `WlbPg` also exposes `transaction` and the native Bun SQL escape hatch `db`. Read and
-write methods use query objects:
+`count`, `exists`, `aggregate`, `groupBy`, `create`, `createMany`, `createManyAndReturn`, `insert`
+(compatibility alias for `create({ data })`), `update`, `updateMany`, `updateManyAndReturn`,
+`upsert`, `delete`, and `deleteMany`. `WlbPg` also exposes `transaction` and the native Bun SQL
+escape hatch `db`. Read and write methods use query objects:
 
 ```ts
 await WlbPg.userSession.findFirst({
@@ -265,6 +277,25 @@ record-not-found error.
 `in`, `notIn`, and string-only `contains`, `startsWith`, and `endsWith`. Logical filters are
 available through `AND`, `OR`, and `NOT`. Explicit `undefined` in filters is rejected so a missing
 value cannot silently broaden a query.
+
+Aggregation methods compile directly to PostgreSQL and reuse the same `where` filter compiler:
+
+```ts
+const totals = await WlbPg.userSession.aggregate({
+  where: { revokedAt: null },
+  _count: true,
+  _min: { createdAt: true },
+  _max: { lastUsedAt: true },
+});
+
+const grouped = await WlbPg.userSession.groupBy({
+  by: ["userId"],
+  where: { revokedAt: null },
+  _count: { id: true },
+  orderBy: { _count: { id: "desc" } },
+  take: 20,
+});
+```
 
 Use `select` to fetch only requested scalar fields:
 
@@ -441,5 +472,4 @@ await pg.begin(async (tx) => {
 ## Not yet implemented
 
 Table partitioning (`create:partition`), triggers, views, generated/computed columns,
-nested relation writes, `exists`/`aggregate`/`paginate` client methods, and multi-column unique
-selectors.
+nested relation writes, `paginate` client methods, and multi-column unique selectors.

@@ -18,26 +18,69 @@ export default class HomeController {
     const pass = await password.hash('password')
     const expiresAt = new Date(Date.now() +  ( 1000 * 60 * 60 * 24 * 30 ));
 
-    const sessionId = random.base64url(32);
-    const sessionHash = hash.sha256(sessionId);
 
-    const result = await WlbPg.transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: { email: "ada33dp09ii@example.com", passwordHash: pass, isActive: true },
-      });
+    // const result = await WlbPg.product.groupBy({
+    //   by: ["category", "brand"],
+    
+    //   where: {
+    //     isActive: true,
+    //     price: {
+    //       gte: '100',
+    //     },
+    //   },
+    
+    //   _count: true,
+    //   _sum: {
+    //     stock: true,
+    //     soldQuantity: true,
+    //   },
+    //   _avg: {
+    //     price: true,
+    //     rating: true,
+    //   },
+    // });
 
-      const session = await tx.userSession.create({
-        data: { userId: user.id, sessionHash, expiresAt },
-      });
-
-      return { user, session };
-    }, {
-      isolationLevel: "serializable",
-      readOnly: false,
-      timeout: 5_000,
+    const result = await WlbPg.product.groupBy({
+      by: ["category", "brand", "status"],
+    
+      where: {
+        isActive: true,
+        price: {
+          gte: "100",
+          lte: "3000",
+        },
+      },
+    
+      _count: true,
+    
+      _sum: {
+        stock: true,
+        soldQuantity: true,
+      },
+    
+      _avg: {
+        price: true,
+        rating: true,
+      },
+    
+      _min: {
+        price: true,
+      },
+    
+      _max: {
+        price: true,
+      },
+    
+      orderBy: {
+        _sum: {
+          soldQuantity: "desc",
+        },
+      },
+    
+      take: 20,
     });
 
-    return JsonRes({ s: this.#home.status(), result });
+    return JsonRes({  result });
   }
 
 
