@@ -1,6 +1,7 @@
 import type { SQL, TransactionSQL } from "bun";
 import { DatabaseTransactionError } from "../errors";
 import { isPlainObject } from "./read-query";
+import { markTransactionSql } from "./transaction-state";
 
 export type TransactionIsolationLevel = "readCommitted" | "repeatableRead" | "serializable";
 
@@ -83,7 +84,7 @@ export async function executeTransaction<Result>(
   const parsed = validateOptions(options);
   const run = async (tx: TransactionSQL): Promise<Awaited<Result>> => {
     const state: TransactionState = { active: true };
-    const guarded = guardTransactionSql(tx, state);
+    const guarded = markTransactionSql(guardTransactionSql(tx, state), () => state.active);
     try {
       if (parsed.timeout !== undefined) {
         await guarded.unsafe("SELECT set_config('statement_timeout', $1, true)", [`${parsed.timeout}ms`]);

@@ -1,6 +1,7 @@
 import type { SQL } from "bun";
-import { DatabaseQueryError, DatabaseRecordNotFoundError } from "../errors";
+import { DatabaseQueryError, DatabaseRecordNotFoundError, DatabaseTransactionError } from "../errors";
 import { quoteIdentifier } from "../utils/sql-identifier";
+import { isActiveTransactionSql } from "./transaction-state";
 
 export type SortDirection = "asc" | "desc";
 
@@ -73,6 +74,7 @@ export interface ReadQueryArgs {
   readonly skip?: unknown;
   readonly cursor?: unknown;
   readonly distinct?: unknown;
+  readonly lock?: unknown;
 }
 
 export interface CountQueryArgs {
@@ -114,6 +116,14 @@ export interface PgExplainResult<TPlan = unknown> {
   readonly plan: TPlan;
 }
 
+export type PgRowLockMode = "update" | "noKeyUpdate" | "share" | "keyShare";
+export type PgRowLockWait = "wait" | "nowait" | "skipLocked";
+
+export interface PgRowLock {
+  readonly mode: PgRowLockMode;
+  readonly wait?: PgRowLockWait;
+}
+
 export interface CompileState {
   readonly schema: RuntimeReadSchema;
   readonly params: unknown[];
@@ -136,6 +146,7 @@ interface OrderedColumn {
 interface CompiledQuery {
   readonly sql: string;
   readonly params: readonly unknown[];
+  readonly usesRowLock?: boolean;
 }
 
 const DEFAULT_FIND_MANY_LIMIT = 100;
@@ -143,6 +154,18 @@ const MAX_QUERY_DEPTH = 8;
 const MAX_TAKE = 1_000;
 const AGGREGATE_OPERATIONS = ["count", "sum", "avg", "min", "max"] as const;
 type AggregateOperation = typeof AGGREGATE_OPERATIONS[number];
+
+const ROW_LOCK_MODE_SQL: Readonly<Record<PgRowLockMode, string>> = Object.freeze({
+  update: "FOR UPDATE",
+  noKeyUpdate: "FOR NO KEY UPDATE",
+  share: "FOR SHARE",
+  keyShare: "FOR KEY SHARE",
+});
+
+const ROW_LOCK_WAIT_SQL: Readonly<Record<Exclude<PgRowLockWait, "wait">, string>> = Object.freeze({
+  nowait: "NOWAIT",
+  skipLocked: "SKIP LOCKED",
+});
 
 export function isPlainObject(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -209,6 +232,41 @@ function parseAggregateTake(model: RuntimeModel, value: unknown): number | undef
   return value;
 }
 
+function compileRowLock(model: RuntimeModel, lock: unknown): string {
+  if (lock === undefined) return "";
+  if (!isPlainObject(lock)) throw new DatabaseQueryError(model.name, "`lock` must be an object.");
+
+  for (const key of Object.keys(lock)) {
+    if (key !== "mode" && key !== "wait") throw new DatabaseQueryError(model.name, `Unknown lock option "${key}".`);
+  }
+
+  const mode = lock.mode;
+  if (mode !== "update" && mode !== "noKeyUpdate" && mode !== "share" && mode !== "keyShare") {
+    throw new DatabaseQueryError(model.name, '`lock.mode` must be update, noKeyUpdate, share, or keyShare.');
+  }
+
+  const wait = lock.wait;
+  if (wait !== undefined && wait !== "wait" && wait !== "nowait" && wait !== "skipLocked") {
+    throw new DatabaseQueryError(model.name, '`lock.wait` must be wait, nowait, or skipLocked.');
+  }
+
+  const waitSql = wait === undefined || wait === "wait" ? "" : ROW_LOCK_WAIT_SQL[wait];
+  return [ROW_LOCK_MODE_SQL[mode], waitSql].filter((part) => part.length > 0).join(" ");
+}
+
+function assertRowLockTransaction(sql: SQL, model: RuntimeModel, query: CompiledQuery): void {
+  if (query.usesRowLock !== true) return;
+  if (!isActiveTransactionSql(sql)) {
+    throw new DatabaseTransactionError("unsupported", `row locking requires an active transaction for ${model.name}.`);
+  }
+}
+
+function rejectUnsupportedRowLock(model: RuntimeModel, args: unknown, operation: string): void {
+  if (isPlainObject(args) && args.lock !== undefined) {
+    throw new DatabaseQueryError(model.name, `\`lock\` is not supported on ${operation}.`);
+  }
+}
+
 function validateExplainBoolean(model: RuntimeModel, options: Readonly<Record<string, unknown>>, field: keyof PgExplainOptions): boolean | undefined {
   const value = options[field];
   if (value === undefined) return undefined;
@@ -253,6 +311,7 @@ function extractExplainPlan(format: "json" | "text", rows: readonly Readonly<Rec
 }
 
 async function executeExplain(sql: SQL, model: RuntimeModel, query: CompiledQuery, options?: PgExplainOptions): Promise<PgExplainResult> {
+  assertRowLockTransaction(sql, model, query);
   const explain = compileExplainPrefix(model, options);
   const rows = await sql.unsafe<Readonly<Record<string, unknown>>[]>(`${explain.prefix} ${query.sql}`, [...query.params]);
   return Object.freeze({
@@ -660,6 +719,7 @@ function compileRelationSelection(state: CompileState, model: RuntimeModel, alia
   if (target === undefined) throw new DatabaseQueryError(model.name, `Relation "${relation.field}" target is unavailable.`);
   const relationAlias = `wq${state.nextAlias++}`;
   const relationArgs = value as ReadQueryArgs;
+  if (relationArgs.lock !== undefined) throw new DatabaseQueryError(model.name, "`lock` is not supported in relation selections.");
   const selection = compileSelection(state, target, relationAlias, relationArgs, depth + 1);
   const where = compileWhere(state, target, relationAlias, relationArgs.where, depth + 1);
   const relationWhere = `${q(relationAlias)}.${q(relation.foreignColumn)} = ${q(alias)}.${q(relation.localColumn)}${where === "" ? "" : ` AND ${where}`}`;
@@ -897,8 +957,12 @@ function compileReadSql(schema: RuntimeReadSchema, model: RuntimeModel, args: Re
   assertNoSelectInclude(model, query);
   const state: CompileState = { schema, params: [], nextAlias: 1, maxDepth: MAX_QUERY_DEPTH, maxTake: MAX_TAKE };
   const alias = "wq0";
+  const lockSql = mode === "count" ? "" : compileRowLock(model, query.lock);
+  const usesRowLock = lockSql.length > 0;
+  if (mode === "count" && query.lock !== undefined) throw new DatabaseQueryError(model.name, "`lock` is only supported on findUnique, findFirst, and findMany.");
   const distinctColumns = normalizeDistinct(model, query.distinct);
   if (distinctColumns.length > 0 && mode !== "many") throw new DatabaseQueryError(model.name, "`distinct` is only supported on findMany.");
+  if (usesRowLock && distinctColumns.length > 0) throw new DatabaseQueryError(model.name, "`lock` cannot be used with `distinct` because PostgreSQL does not allow row locking clauses with DISTINCT.");
   if (distinctColumns.length > 0 && query.cursor !== undefined) throw new DatabaseQueryError(model.name, "`cursor` cannot be used with `distinct`.");
   if (query.cursor !== undefined && query.skip !== undefined) {
     const skipped = parseSkip(model, query.skip);
@@ -912,6 +976,7 @@ function compileReadSql(schema: RuntimeReadSchema, model: RuntimeModel, args: Re
     return { sql: `SELECT count(*)::int AS "count" FROM ${q(model.table)} AS ${q(alias)} ${whereSql}`.trim(), params: state.params };
   }
   const selection = compileSelection(state, model, alias, query, 0);
+  if (usesRowLock && selection.hasRelation) throw new DatabaseQueryError(model.name, "`lock` cannot be used with relation select/include; only root model rows are lockable.");
   const orderBy = compileOrderBy(state, model, alias, query.orderBy);
   const defaultOrder = orderBy === "" && (mode === "first" || mode === "many") ? compileDefaultOrderBy(model, alias) : orderBy;
   const take = mode === "first" || mode === "unique" ? 1 : parseTake(model, query.take, DEFAULT_FIND_MANY_LIMIT);
@@ -932,8 +997,10 @@ function compileReadSql(schema: RuntimeReadSchema, model: RuntimeModel, args: Re
       defaultOrder,
       limitSql,
       offsetSql,
+      lockSql,
     ].filter((part) => part.length > 0).join(" "),
     params: state.params,
+    usesRowLock,
   };
 }
 
@@ -950,6 +1017,7 @@ function assertUniqueWhere(model: RuntimeModel, args: ReadQueryArgs | undefined)
 export async function executeFindUnique<Row>(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: ReadQueryArgs): Promise<Row | null> {
   assertUniqueWhere(model, args);
   const query = compileReadSql(schema, model, args, "unique");
+  assertRowLockTransaction(sql, model, query);
   const rows = await sql.unsafe<Row[]>(query.sql, [...query.params]);
   return rows[0] ?? null;
 }
@@ -984,6 +1052,7 @@ export async function executeFindUniqueOrThrow<Row>(sql: SQL, schema: RuntimeRea
 
 export async function executeFindFirst<Row>(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: ReadQueryArgs): Promise<Row | null> {
   const query = compileReadSql(schema, model, args, "first");
+  assertRowLockTransaction(sql, model, query);
   const rows = await sql.unsafe<Row[]>(query.sql, [...query.params]);
   return rows[0] ?? null;
 }
@@ -996,6 +1065,7 @@ export async function executeFindFirstOrThrow<Row>(sql: SQL, schema: RuntimeRead
 
 export async function executeFindMany<Row>(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: ReadQueryArgs): Promise<Row[]> {
   const query = compileReadSql(schema, model, args, "many");
+  assertRowLockTransaction(sql, model, query);
   return sql.unsafe<Row[]>(query.sql, [...query.params]);
 }
 
@@ -1011,6 +1081,7 @@ function compileCountSelectionSql(schema: RuntimeReadSchema, model: RuntimeModel
 }
 
 function compileCountSql(schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs): CompiledQuery {
+  rejectUnsupportedRowLock(model, args, "count");
   if (args?.select !== undefined) return compileCountSelectionSql(schema, model, args);
   return compileReadSql(schema, model, args, "count");
 }
@@ -1030,6 +1101,7 @@ export async function executeCount(sql: SQL, schema: RuntimeReadSchema, model: R
 }
 
 function compileExistsSql(schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs): CompiledQuery {
+  rejectUnsupportedRowLock(model, args, "exists");
   const state = createCompileState(schema);
   const alias = "wq0";
   const where = compileWhere(state, model, alias, args?.where, 0);
