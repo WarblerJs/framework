@@ -14,36 +14,42 @@ export default class HomeController {
   @Get("/", { name: "home" })
   async index(request:AppRequest): Promise<Response> {
 
-    const plan = await WlbPg.product.explain.findMany(
-      {
-        where: {
-          isActive: true,
+    const productId = "000005c1-4692-428b-a38a-8bbf60ace9fe";
+
+    const a = WlbPg.transaction(async (tx) => {
+      await tx.product.findUnique({
+        where: { id: productId },
+        lock: {
+          mode: "update",
         },
+      });
     
-        distinct: ["category", "brand"],
+      console.log("A: LOCKED");
     
-        select: {
-          category: true,
-          brand: true,
+      throw new Error("force rollback");
+    });
+    
+    const aResult = await Promise.allSettled([a]);
+    
+    console.log("A rolled back:", aResult[0]?.status);
+    
+    const b = await WlbPg.transaction(async (tx) => {
+      const row = await tx.product.findUnique({
+        where: { id: productId },
+        lock: {
+          mode: "update",
+          wait: "nowait",
         },
+      });
     
-        orderBy: [
-          { category: "asc" },
-          { brand: "asc" },
-        ],
+      console.log("✅ B acquired lock after rollback");
     
-        take: 100,
-      },
-      {
-        analyze: true,
-        buffers: true,
-        format: "json",
-      },
-    );
+      return row;
+    });
     
-    console.dir(plan, { depth: null });
+    console.log(b?.id);
     
-    return JsonRes(  {result:plan} );
+    return JsonRes(  {result:true} );
   }
 
 

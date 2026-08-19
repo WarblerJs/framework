@@ -596,6 +596,59 @@ Keep transactional operations sequential unless you have verified Bun/PostgreSQL
 exact workload. A single transaction uses one connection, so `Promise.all` inside a transaction is
 not a throughput shortcut.
 
+Generated read delegates support PostgreSQL row-level locks on `findUnique`, `findFirst`, and
+`findMany` inside an explicit `WlbPg.transaction` callback:
+
+```ts
+await WlbPg.transaction(async (tx) => {
+  const product = await tx.product.findUnique({
+    where: { id: productId },
+    select: { id: true, stock: true },
+    lock: { mode: "update" },
+  });
+
+  if (!product) throw new Error("Product not found");
+  if (product.stock < quantity) throw new Error("Insufficient stock");
+
+  await tx.product.update({
+    where: { id: product.id },
+    data: { stock: product.stock - quantity },
+  });
+});
+```
+
+Lock modes map directly to PostgreSQL locking clauses: `update` emits `FOR UPDATE`,
+`noKeyUpdate` emits `FOR NO KEY UPDATE`, `share` emits `FOR SHARE`, and `keyShare` emits
+`FOR KEY SHARE`. `wait` or an omitted `wait` uses PostgreSQL's normal blocking behavior,
+`nowait` emits `NOWAIT`, and `skipLocked` emits `SKIP LOCKED`.
+
+```ts
+const jobs = await WlbPg.transaction((tx) =>
+  tx.product.findMany({
+    where: { status: "pending" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: 20,
+    lock: { mode: "update", wait: "skipLocked" },
+  })
+);
+```
+
+Row locking is transaction-only. Calling `WlbPg.product.findFirst({ lock: ... })` outside
+`WlbPg.transaction` throws a Warbler database transaction error because PostgreSQL releases the
+row lock when an autocommit `SELECT` finishes. Inside a transaction, the lock is held by the same
+Bun SQL transaction connection until `COMMIT` or `ROLLBACK`; there is no manual unlock API.
+
+`NOWAIT` asks PostgreSQL to fail immediately when a conflicting row lock already exists. Warbler
+does not retry automatically. `SKIP LOCKED` asks PostgreSQL to skip locked rows, which is useful
+for worker queues where multiple workers claim different pending rows. It is intentionally not a
+general consistent-view mechanism because locked rows disappear from that result set.
+
+Locks compose with scalar `select`, `where`, `orderBy`, `take`, `skip`, and keyset `cursor`.
+PostgreSQL does not allow locking clauses with `DISTINCT`, so `lock` with Warbler `distinct` is
+rejected before SQL is sent. Relation `select`/`include` is also rejected with `lock`; this initial
+API locks only root model rows and does not imply that nested relation rows are locked. Applications
+that lock multiple resources should acquire them in a consistent order to reduce deadlock risk.
+
 The live connection lives in `generated/runtime/pg-client.ts` (built via the exported
 `createPgConnection` helper). It is the same object exposed as `WlbPg.db`. Import it directly only
 when you truly need lower-level lifecycle access:
