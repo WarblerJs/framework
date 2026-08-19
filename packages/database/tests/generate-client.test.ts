@@ -25,6 +25,8 @@ describe("generateClientSource aggregation types", () => {
     const source = generateClientSource(orderTable);
 
     expect(source).toContain("executeAggregate");
+    expect(source).toContain("executeExplainFindMany");
+    expect(source).toContain("PgExplainOptions");
     expect(source).toContain("executeExists");
     expect(source).toContain("executeGroupBy");
     expect(source).toContain("count<S extends OrderCountAggregateInput>");
@@ -33,6 +35,11 @@ describe("generateClientSource aggregation types", () => {
     expect(source).toContain("readonly tax?: number;");
     expect(source).toContain("readonly cursor?: OrderCursor;");
     expect(source).toContain("readonly distinct?: readonly OrderScalarField[];");
+    expect(source).toContain("export interface OrderExplainDelegate");
+    expect(source).toContain("readonly explain: OrderExplainDelegate;");
+    expect(source).toContain("delegate.explain = explain as unknown as OrderExplainDelegate;");
+    expect(source).toContain("Object.freeze(explain);");
+    expect(source).toContain("export const explain = DEFAULT_DELEGATE.explain;");
     expect(source).toContain('primaryKeyFields: Object.freeze(["id"])');
     expect(source).toContain('field: "id", column: "id", kind: "string", pgType: "uuid"');
     expect(source).toContain('field: "total", column: "total", kind: "number", pgType: "numeric"');
