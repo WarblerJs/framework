@@ -28,9 +28,19 @@ export interface RuntimeColumn {
   readonly field: string;
   readonly column: string;
   readonly kind: "string" | "number" | "boolean" | "date" | "bytes" | "json";
+  readonly pgType?: string;
   readonly nullable: boolean;
   readonly unique: boolean;
   readonly primaryKey: boolean;
+  readonly aggregate?: RuntimeColumnAggregateCapabilities;
+}
+
+export interface RuntimeColumnAggregateCapabilities {
+  readonly count: boolean;
+  readonly sum: boolean;
+  readonly avg: boolean;
+  readonly min: boolean;
+  readonly max: boolean;
 }
 
 export interface RuntimeRelation {
@@ -47,6 +57,7 @@ export interface RuntimeModel {
   readonly columns: readonly RuntimeColumn[];
   readonly relations: readonly RuntimeRelation[];
   readonly defaultOrderColumn: string;
+  readonly primaryKeyFields?: readonly string[];
 }
 
 export interface RuntimeReadSchema {
@@ -65,6 +76,24 @@ export interface ReadQueryArgs {
 
 export interface CountQueryArgs {
   readonly where?: unknown;
+  readonly select?: unknown;
+}
+
+export interface AggregateQueryArgs {
+  readonly where?: unknown;
+  readonly _count?: unknown;
+  readonly _sum?: unknown;
+  readonly _avg?: unknown;
+  readonly _min?: unknown;
+  readonly _max?: unknown;
+}
+
+export interface GroupByQueryArgs extends AggregateQueryArgs {
+  readonly by?: unknown;
+  readonly having?: unknown;
+  readonly orderBy?: unknown;
+  readonly take?: unknown;
+  readonly skip?: unknown;
 }
 
 export interface CompileState {
@@ -80,9 +109,16 @@ interface Selection {
   readonly hasRelation: boolean;
 }
 
+interface OrderedColumn {
+  readonly column: RuntimeColumn;
+  readonly direction: SortDirection;
+}
+
 const DEFAULT_FIND_MANY_LIMIT = 100;
 const MAX_QUERY_DEPTH = 8;
 const MAX_TAKE = 1_000;
+const AGGREGATE_OPERATIONS = ["count", "sum", "avg", "min", "max"] as const;
+type AggregateOperation = typeof AGGREGATE_OPERATIONS[number];
 
 export function isPlainObject(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -137,6 +173,15 @@ function parseSkip(model: RuntimeModel, value: unknown): number | undefined {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     throw new DatabaseQueryError(model.name, "`skip` must be a non-negative safe integer.");
   }
+  return value;
+}
+
+function parseAggregateTake(model: RuntimeModel, value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new DatabaseQueryError(model.name, "`take` must be a non-negative safe integer.");
+  }
+  if (value > MAX_TAKE) throw new DatabaseQueryError(model.name, `take must be less than or equal to ${MAX_TAKE}.`);
   return value;
 }
 
@@ -280,34 +325,98 @@ export function compileWhere(state: CompileState, model: RuntimeModel, alias: st
   return parts.join(" AND ");
 }
 
-function compileOrderBy(state: CompileState, model: RuntimeModel, alias: string, orderBy: unknown): string {
-  if (orderBy === undefined) return "";
+function normalizeOrderBy(model: RuntimeModel, orderBy: unknown): readonly OrderedColumn[] {
+  if (orderBy === undefined) return [];
   const entries = Array.isArray(orderBy) ? orderBy : [orderBy];
-  const parts: string[] = [];
+  const ordered: OrderedColumn[] = [];
+  const seen = new Set<string>();
   for (const entry of entries) {
     if (!isPlainObject(entry)) throw new DatabaseQueryError(model.name, "`orderBy` entries must be objects.");
     for (const [field, direction] of Object.entries(entry)) {
       const column = columnByField(model, field);
       if (column === undefined) throw new DatabaseQueryError(model.name, `Unknown orderBy field "${field}".`);
       if (direction !== "asc" && direction !== "desc") throw new DatabaseQueryError(model.name, `Invalid order direction for "${field}".`);
-      parts.push(`${q(alias)}.${q(column.column)} ${direction.toUpperCase()}`);
+      if (seen.has(field)) throw new DatabaseQueryError(model.name, `Duplicate orderBy field "${field}".`);
+      seen.add(field);
+      ordered.push({ column, direction });
     }
   }
+  return ordered;
+}
+
+function columnReference(alias: string, column: RuntimeColumn): string {
+  return `${q(alias)}.${q(column.column)}`;
+}
+
+function orderExpression(alias: string, column: RuntimeColumn): string {
+  const reference = columnReference(alias, column);
+  if (column.pgType === "timestamp" || column.pgType === "timestamptz") {
+    return `date_trunc('milliseconds', ${reference})`;
+  }
+  return reference;
+}
+
+function compileOrderBy(state: CompileState, model: RuntimeModel, alias: string, orderBy: unknown): string {
+  const ordered = normalizeOrderBy(model, orderBy);
+  const parts = ordered.map(({ column, direction }) => `${orderExpression(alias, column)} ${direction.toUpperCase()}`);
   return parts.length === 0 ? "" : `ORDER BY ${parts.join(", ")}`;
+}
+
+function compileDefaultOrderBy(model: RuntimeModel, alias: string): string {
+  const { column, direction } = defaultOrderedColumn(model);
+  return `ORDER BY ${orderExpression(alias, column)} ${direction.toUpperCase()}`;
+}
+
+function defaultOrderedColumn(model: RuntimeModel): OrderedColumn {
+  const column = columnByName(model, model.defaultOrderColumn);
+  if (column === undefined) throw new DatabaseQueryError(model.name, "Default order column is unavailable.");
+  return { column, direction: "asc" };
+}
+
+function primaryKeyFields(model: RuntimeModel): readonly string[] {
+  return model.primaryKeyFields ?? model.columns.filter((column) => column.primaryKey).map((column) => column.field);
+}
+
+function assertStableCursorOrder(model: RuntimeModel, ordered: readonly OrderedColumn[]): void {
+  const orderedFields = new Set(ordered.map(({ column }) => column.field));
+  if (ordered.some(({ column }) => column.unique)) return;
+  const primary = primaryKeyFields(model);
+  if (primary.length > 0 && primary.every((field) => orderedFields.has(field))) return;
+  throw new DatabaseQueryError(model.name, "Cursor pagination requires orderBy to include a primary key or unique field as a stable tie-breaker.");
 }
 
 function compileCursor(state: CompileState, model: RuntimeModel, alias: string, cursor: unknown, orderBy: unknown): string {
   if (cursor === undefined) return "";
   if (!isPlainObject(cursor)) throw new DatabaseQueryError(model.name, "`cursor` must be a unique selector object.");
   const keys = Object.keys(cursor);
-  if (keys.length !== 1) throw new DatabaseQueryError(model.name, "`cursor` must contain exactly one unique field.");
-  const field = keys[0]!;
-  const column = columnByField(model, field);
-  if (column === undefined || (!column.primaryKey && !column.unique)) throw new DatabaseQueryError(model.name, `Cursor field "${field}" is not unique.`);
-  const value = cursor[field];
-  if (value === undefined) rejectUndefined(model, `cursor.${field}`);
-  const direction = isPlainObject(orderBy) && orderBy[field] === "desc" ? "<" : ">";
-  return `${q(alias)}.${q(column.column)} ${direction} ${param(state, value)}`;
+  if (keys.length === 0) throw new DatabaseQueryError(model.name, "`cursor` must contain at least one field.");
+  const ordered = normalizeOrderBy(model, orderBy);
+  const cursorOrder = ordered.length === 0 ? [defaultOrderedColumn(model)] : ordered;
+  const orderedFields = new Set(cursorOrder.map(({ column }) => column.field));
+  for (const key of keys) {
+    const column = columnByField(model, key);
+    if (column === undefined) throw new DatabaseQueryError(model.name, `Unknown cursor field "${key}".`);
+    if (!orderedFields.has(key)) throw new DatabaseQueryError(model.name, `Cursor field "${key}" must appear in orderBy.`);
+    if (cursor[key] === undefined) rejectUndefined(model, `cursor.${key}`);
+  }
+  for (const { column } of cursorOrder) {
+    if (column.nullable) throw new DatabaseQueryError(model.name, `Cursor order field "${column.field}" is nullable; nullable cursor ordering is not supported.`);
+    if (!(column.field in cursor)) throw new DatabaseQueryError(model.name, `Cursor is missing orderBy field "${column.field}".`);
+    if (cursor[column.field] === undefined) rejectUndefined(model, `cursor.${column.field}`);
+    if (cursor[column.field] === null) throw new DatabaseQueryError(model.name, `Cursor field "${column.field}" cannot be null.`);
+  }
+  assertStableCursorOrder(model, cursorOrder);
+  const placeholders = cursorOrder.map(({ column }) => param(state, cursor[column.field]));
+  const branches = cursorOrder.map(({ column, direction }, index) => {
+    const comparisons: string[] = [];
+    for (let before = 0; before < index; before++) {
+      const previous = cursorOrder[before]!;
+      comparisons.push(`${orderExpression(alias, previous.column)} = ${placeholders[before]}`);
+    }
+    comparisons.push(`${orderExpression(alias, column)} ${direction === "asc" ? ">" : "<"} ${placeholders[index]}`);
+    return comparisons.length === 1 ? comparisons[0]! : `(${comparisons.join(" AND ")})`;
+  });
+  return `(${branches.join(" OR ")})`;
 }
 
 export function scalarSelection(model: RuntimeModel, alias: string, fields: readonly string[] | undefined): string[] {
@@ -382,11 +491,232 @@ function compileRelationSelection(state: CompileState, model: RuntimeModel, alia
   return `(SELECT row_to_json(${q(`${relationAlias}_row`)}) FROM (${subquery} LIMIT 1) AS ${q(`${relationAlias}_row`)}) AS ${q(relation.field)}`;
 }
 
+function aggregateCapabilities(column: RuntimeColumn): RuntimeColumnAggregateCapabilities {
+  return column.aggregate ?? Object.freeze({
+    count: true,
+    sum: column.kind === "number",
+    avg: column.kind === "number",
+    min: column.kind === "string" || column.kind === "number" || column.kind === "date",
+    max: column.kind === "string" || column.kind === "number" || column.kind === "date",
+  });
+}
+
+function aggregateAlias(operation: AggregateOperation, field: string): string {
+  return `__wlb_${operation}_${field}`;
+}
+
+function assertAggregateAllowed(model: RuntimeModel, column: RuntimeColumn, operation: AggregateOperation): void {
+  if (aggregateCapabilities(column)[operation]) return;
+  throw new DatabaseQueryError(model.name, `Aggregate "${operation}" is not supported for field "${column.field}".`);
+}
+
+function aggregateExpression(model: RuntimeModel, alias: string, operation: AggregateOperation, column?: RuntimeColumn): string {
+  if (operation === "count") {
+    if (column === undefined) return "count(*)::int";
+    assertAggregateAllowed(model, column, operation);
+    return `count(${q(alias)}.${q(column.column)})::int`;
+  }
+  if (column === undefined) throw new DatabaseQueryError(model.name, `Aggregate "${operation}" requires a field.`);
+  assertAggregateAllowed(model, column, operation);
+  return `${operation}(${q(alias)}.${q(column.column)})`;
+}
+
+function assertAggregateSelectionObject(model: RuntimeModel, operation: AggregateOperation, value: unknown): Readonly<Record<string, unknown>> {
+  if (!isPlainObject(value)) throw new DatabaseQueryError(model.name, `_${operation} must be true or an object.`);
+  return value;
+}
+
+function countSelectionParts(model: RuntimeModel, alias: string, select: unknown, target: string[]): void {
+  const selection = assertAggregateSelectionObject(model, "count", select);
+  for (const [field, enabled] of Object.entries(selection)) {
+    if (enabled === undefined) rejectUndefined(model, `_count.${field}`);
+    if (enabled === false) continue;
+    if (enabled !== true) throw new DatabaseQueryError(model.name, `_count field "${field}" must be true or false.`);
+    if (field === "_all") {
+      target.push(`${aggregateExpression(model, alias, "count")} AS ${q(aggregateAlias("count", "all"))}`);
+      continue;
+    }
+    const column = columnByField(model, field);
+    if (column === undefined) throw new DatabaseQueryError(model.name, `Unknown _count field "${field}".`);
+    target.push(`${aggregateExpression(model, alias, "count", column)} AS ${q(aggregateAlias("count", field))}`);
+  }
+}
+
+function aggregateSelectionParts(model: RuntimeModel, alias: string, operation: AggregateOperation, select: unknown, target: string[]): void {
+  const selection = assertAggregateSelectionObject(model, operation, select);
+  for (const [field, enabled] of Object.entries(selection)) {
+    if (enabled === undefined) rejectUndefined(model, `_${operation}.${field}`);
+    if (enabled === false) continue;
+    if (enabled !== true) throw new DatabaseQueryError(model.name, `_${operation} field "${field}" must be true or false.`);
+    const column = columnByField(model, field);
+    if (column === undefined) throw new DatabaseQueryError(model.name, `Unknown _${operation} field "${field}".`);
+    target.push(`${aggregateExpression(model, alias, operation, column)} AS ${q(aggregateAlias(operation, field))}`);
+  }
+}
+
+function compileAggregateSelections(model: RuntimeModel, alias: string, args: AggregateQueryArgs, allowEmpty: boolean): string[] {
+  const parts: string[] = [];
+  if (args._count !== undefined) {
+    if (args._count === true) parts.push(`${aggregateExpression(model, alias, "count")} AS ${q(aggregateAlias("count", "all"))}`);
+    else countSelectionParts(model, alias, args._count, parts);
+  }
+  if (args._sum !== undefined) aggregateSelectionParts(model, alias, "sum", args._sum, parts);
+  if (args._avg !== undefined) aggregateSelectionParts(model, alias, "avg", args._avg, parts);
+  if (args._min !== undefined) aggregateSelectionParts(model, alias, "min", args._min, parts);
+  if (args._max !== undefined) aggregateSelectionParts(model, alias, "max", args._max, parts);
+  if (!allowEmpty && parts.length === 0) throw new DatabaseQueryError(model.name, "At least one aggregate operation must be selected.");
+  return parts;
+}
+
+function mapCountSelection(model: RuntimeModel, row: Readonly<Record<string, unknown>>, select: unknown): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  const selection = assertAggregateSelectionObject(model, "count", select);
+  for (const [field, enabled] of Object.entries(selection)) {
+    if (enabled !== true) continue;
+    const key = field === "_all" ? "all" : field;
+    result[field] = row[aggregateAlias("count", key)] ?? 0;
+  }
+  return result;
+}
+
+function mapAggregateResult(model: RuntimeModel, row: Readonly<Record<string, unknown>> | undefined, args: AggregateQueryArgs): Record<string, unknown> {
+  const source = row ?? {};
+  const result: Record<string, unknown> = {};
+  if (args._count !== undefined) {
+    result._count = args._count === true ? source[aggregateAlias("count", "all")] ?? 0 : mapCountSelection(model, source, args._count);
+  }
+  for (const operation of ["sum", "avg", "min", "max"] as const) {
+    const key = `_${operation}` as const;
+    const selection = args[key];
+    if (selection === undefined) continue;
+    const payload: Record<string, unknown> = {};
+    for (const [field, enabled] of Object.entries(assertAggregateSelectionObject(model, operation, selection))) {
+      if (enabled === true) payload[field] = source[aggregateAlias(operation, field)] ?? null;
+    }
+    result[key] = payload;
+  }
+  return result;
+}
+
+function compileAggregateComparison(state: CompileState, model: RuntimeModel, expression: string, value: unknown, path: string): string {
+  if (value === undefined) rejectUndefined(model, path);
+  if (value === null) return `${expression} IS NULL`;
+  if (!isPlainObject(value)) return `${expression} = ${param(state, value)}`;
+  const parts: string[] = [];
+  for (const [operator, operand] of Object.entries(value)) {
+    if (operand === undefined) rejectUndefined(model, `${path}.${operator}`);
+    switch (operator) {
+      case "equals":
+        parts.push(operand === null ? `${expression} IS NULL` : `${expression} = ${param(state, operand)}`);
+        break;
+      case "not":
+        parts.push(`NOT (${compileAggregateComparison(state, model, expression, operand, `${path}.not`)})`);
+        break;
+      case "in":
+      case "notIn": {
+        if (!Array.isArray(operand) || operand.length === 0) throw new DatabaseQueryError(model.name, `${path}.${operator} requires a non-empty array.`);
+        if (operand.some((item) => item === undefined || item === null)) throw new DatabaseQueryError(model.name, `${path}.${operator} does not accept null or undefined values.`);
+        parts.push(`${expression} ${operator === "notIn" ? "NOT " : ""}IN (${operand.map((item) => param(state, item)).join(", ")})`);
+        break;
+      }
+      case "gt":
+        parts.push(`${expression} > ${param(state, operand)}`);
+        break;
+      case "gte":
+        parts.push(`${expression} >= ${param(state, operand)}`);
+        break;
+      case "lt":
+        parts.push(`${expression} < ${param(state, operand)}`);
+        break;
+      case "lte":
+        parts.push(`${expression} <= ${param(state, operand)}`);
+        break;
+      default:
+        throw new DatabaseQueryError(model.name, `Unsupported having operator "${operator}" at "${path}".`);
+    }
+  }
+  if (parts.length === 0) throw new DatabaseQueryError(model.name, `Having filter "${path}" cannot be empty.`);
+  return parts.join(" AND ");
+}
+
+function compileHaving(state: CompileState, model: RuntimeModel, alias: string, having: unknown): string {
+  if (having === undefined) return "";
+  if (!isPlainObject(having)) throw new DatabaseQueryError(model.name, "`having` must be an object.");
+  const parts: string[] = [];
+  for (const [field, value] of Object.entries(having)) {
+    if (value === undefined) rejectUndefined(model, `having.${field}`);
+    const column = columnByField(model, field);
+    if (column === undefined) throw new DatabaseQueryError(model.name, `Unknown having field "${field}".`);
+    if (!isPlainObject(value)) throw new DatabaseQueryError(model.name, `Having field "${field}" must contain aggregate filters.`);
+    for (const [operationKey, filter] of Object.entries(value)) {
+      if (filter === undefined) rejectUndefined(model, `having.${field}.${operationKey}`);
+      const operation = operationKey.startsWith("_") ? operationKey.slice(1) : operationKey;
+      if (!AGGREGATE_OPERATIONS.includes(operation as AggregateOperation)) throw new DatabaseQueryError(model.name, `Unsupported having aggregate "${operationKey}".`);
+      const aggregate = operation as AggregateOperation;
+      parts.push(compileAggregateComparison(state, model, aggregateExpression(model, alias, aggregate, column), filter, `having.${field}.${operationKey}`));
+    }
+  }
+  return parts.length === 0 ? "" : `HAVING ${parts.join(" AND ")}`;
+}
+
+function parseGroupByColumns(model: RuntimeModel, by: unknown): readonly RuntimeColumn[] {
+  if (!Array.isArray(by)) throw new DatabaseQueryError(model.name, "groupBy `by` must be a non-empty array.");
+  if (by.length === 0) throw new DatabaseQueryError(model.name, "groupBy `by` must contain at least one field.");
+  const columns: RuntimeColumn[] = [];
+  const seen = new Set<string>();
+  for (const field of by) {
+    if (typeof field !== "string") throw new DatabaseQueryError(model.name, "groupBy `by` entries must be field names.");
+    if (seen.has(field)) throw new DatabaseQueryError(model.name, `Duplicate groupBy field "${field}".`);
+    const column = columnByField(model, field);
+    if (column === undefined) throw new DatabaseQueryError(model.name, `Unknown groupBy field "${field}".`);
+    seen.add(field);
+    columns.push(column);
+  }
+  return columns;
+}
+
+function compileGroupOrderBy(state: CompileState, model: RuntimeModel, alias: string, orderBy: unknown, groupFields: ReadonlySet<string>): string {
+  if (orderBy === undefined) return "";
+  const entries = Array.isArray(orderBy) ? orderBy : [orderBy];
+  const parts: string[] = [];
+  for (const entry of entries) {
+    if (!isPlainObject(entry)) throw new DatabaseQueryError(model.name, "`orderBy` entries must be objects.");
+    for (const [field, value] of Object.entries(entry)) {
+      if (field.startsWith("_")) {
+        const operation = field.slice(1);
+        if (!AGGREGATE_OPERATIONS.includes(operation as AggregateOperation)) throw new DatabaseQueryError(model.name, `Unsupported aggregate orderBy "${field}".`);
+        if (!isPlainObject(value)) throw new DatabaseQueryError(model.name, `Aggregate orderBy "${field}" must be an object.`);
+        for (const [nestedField, direction] of Object.entries(value)) {
+          if (direction !== "asc" && direction !== "desc") throw new DatabaseQueryError(model.name, `Invalid aggregate order direction for "${nestedField}".`);
+          if (operation === "count" && nestedField === "_all") {
+            parts.push(`${aggregateExpression(model, alias, "count")} ${direction.toUpperCase()}`);
+            continue;
+          }
+          const column = columnByField(model, nestedField);
+          if (column === undefined) throw new DatabaseQueryError(model.name, `Unknown aggregate orderBy field "${nestedField}".`);
+          parts.push(`${aggregateExpression(model, alias, operation as AggregateOperation, column)} ${direction.toUpperCase()}`);
+        }
+        continue;
+      }
+      const column = columnByField(model, field);
+      if (column === undefined) throw new DatabaseQueryError(model.name, `Unknown orderBy field "${field}".`);
+      if (!groupFields.has(field)) throw new DatabaseQueryError(model.name, `orderBy field "${field}" must be included in groupBy \`by\`.`);
+      if (value !== "asc" && value !== "desc") throw new DatabaseQueryError(model.name, `Invalid order direction for "${field}".`);
+      parts.push(`${q(alias)}.${q(column.column)} ${value.toUpperCase()}`);
+    }
+  }
+  return parts.length === 0 ? "" : `ORDER BY ${parts.join(", ")}`;
+}
+
 function compileReadSql(schema: RuntimeReadSchema, model: RuntimeModel, args: ReadQueryArgs | undefined, mode: "unique" | "first" | "many" | "count"): { readonly sql: string; readonly params: readonly unknown[] } {
   const query = args ?? {};
   assertNoSelectInclude(model, query);
   const state: CompileState = { schema, params: [], nextAlias: 1, maxDepth: MAX_QUERY_DEPTH, maxTake: MAX_TAKE };
   const alias = "wq0";
+  if (query.cursor !== undefined && query.skip !== undefined) {
+    const skipped = parseSkip(model, query.skip);
+    if (skipped !== 0) throw new DatabaseQueryError(model.name, "`skip` cannot be greater than 0 when `cursor` is used.");
+  }
   const where = compileWhere(state, model, alias, query.where, 0);
   const cursor = compileCursor(state, model, alias, query.cursor, query.orderBy);
   const predicates = [where, cursor].filter((part) => part.length > 0);
@@ -396,7 +726,7 @@ function compileReadSql(schema: RuntimeReadSchema, model: RuntimeModel, args: Re
   }
   const selection = compileSelection(state, model, alias, query, 0);
   const orderBy = compileOrderBy(state, model, alias, query.orderBy);
-  const defaultOrder = orderBy === "" && (mode === "first" || mode === "many") ? `ORDER BY ${q(alias)}.${q(model.defaultOrderColumn)} ASC` : orderBy;
+  const defaultOrder = orderBy === "" && (mode === "first" || mode === "many") ? compileDefaultOrderBy(model, alias) : orderBy;
   const take = mode === "first" || mode === "unique" ? 1 : parseTake(model, query.take, DEFAULT_FIND_MANY_LIMIT);
   const skip = parseSkip(model, query.skip);
   const limitSql = take === undefined ? "" : `LIMIT ${take}`;
@@ -469,8 +799,90 @@ export async function executeFindMany<Row>(sql: SQL, schema: RuntimeReadSchema, 
   return sql.unsafe<Row[]>(query.sql, [...query.params]);
 }
 
-export async function executeCount(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs): Promise<number> {
+function compileCountSelectionSql(schema: RuntimeReadSchema, model: RuntimeModel, args: CountQueryArgs): { readonly sql: string; readonly params: readonly unknown[] } {
+  const state = createCompileState(schema);
+  const alias = "wq0";
+  const where = compileWhere(state, model, alias, args.where, 0);
+  const whereSql = where.length === 0 ? "" : `WHERE ${where}`;
+  const parts: string[] = [];
+  countSelectionParts(model, alias, args.select, parts);
+  if (parts.length === 0) throw new DatabaseQueryError(model.name, "At least one count field must be selected.");
+  return { sql: `SELECT ${parts.join(", ")} FROM ${q(model.table)} AS ${q(alias)} ${whereSql}`.trim(), params: state.params };
+}
+
+export async function executeCount(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs & { readonly select?: undefined }): Promise<number>;
+export async function executeCount(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: CountQueryArgs & { readonly select: unknown }): Promise<Record<string, unknown>>;
+export async function executeCount(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs): Promise<number | Record<string, unknown>>;
+export async function executeCount(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs): Promise<number | Record<string, unknown>> {
+  if (args?.select !== undefined) {
+    const query = compileCountSelectionSql(schema, model, args);
+    const rows = await sql.unsafe<Record<string, unknown>[]>(query.sql, [...query.params]);
+    return mapCountSelection(model, rows[0] ?? {}, args.select);
+  }
   const query = compileReadSql(schema, model, args, "count");
   const rows = await sql.unsafe<{ count: number }[]>(query.sql, [...query.params]);
   return rows[0]?.count ?? 0;
+}
+
+export async function executeExists(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs): Promise<boolean> {
+  const state = createCompileState(schema);
+  const alias = "wq0";
+  const where = compileWhere(state, model, alias, args?.where, 0);
+  const whereSql = where.length === 0 ? "" : `WHERE ${where}`;
+  const rows = await sql.unsafe<{ exists: boolean }[]>(
+    `SELECT EXISTS (SELECT 1 FROM ${q(model.table)} AS ${q(alias)} ${whereSql}) AS "exists"`,
+    [...state.params],
+  );
+  return rows[0]?.exists === true;
+}
+
+export async function executeAggregate(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: AggregateQueryArgs): Promise<Record<string, unknown>> {
+  if (!isPlainObject(args)) throw new DatabaseQueryError(model.name, "aggregate args must be an object.");
+  for (const key of Object.keys(args)) {
+    if (key !== "where" && key !== "_count" && key !== "_sum" && key !== "_avg" && key !== "_min" && key !== "_max") {
+      throw new DatabaseQueryError(model.name, `Unknown aggregate option "${key}".`);
+    }
+  }
+  const state = createCompileState(schema);
+  const alias = "wq0";
+  const selections = compileAggregateSelections(model, alias, args, false);
+  const where = compileWhere(state, model, alias, args.where, 0);
+  const whereSql = where.length === 0 ? "" : `WHERE ${where}`;
+  const rows = await sql.unsafe<Record<string, unknown>[]>(
+    `SELECT ${selections.join(", ")} FROM ${q(model.table)} AS ${q(alias)} ${whereSql}`.trim(),
+    [...state.params],
+  );
+  return mapAggregateResult(model, rows[0], args);
+}
+
+export async function executeGroupBy(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: GroupByQueryArgs): Promise<readonly Record<string, unknown>[]> {
+  if (!isPlainObject(args)) throw new DatabaseQueryError(model.name, "groupBy args must be an object.");
+  for (const key of Object.keys(args)) {
+    if (key !== "by" && key !== "where" && key !== "having" && key !== "orderBy" && key !== "take" && key !== "skip" && key !== "_count" && key !== "_sum" && key !== "_avg" && key !== "_min" && key !== "_max") {
+      throw new DatabaseQueryError(model.name, `Unknown groupBy option "${key}".`);
+    }
+  }
+  const state = createCompileState(schema);
+  const alias = "wq0";
+  const groupColumns = parseGroupByColumns(model, args.by);
+  const groupFields = new Set(groupColumns.map((column) => column.field));
+  const groupSelections = groupColumns.map((column) => `${q(alias)}.${q(column.column)} AS ${q(column.field)}`);
+  const aggregateSelections = compileAggregateSelections(model, alias, args, true);
+  const where = compileWhere(state, model, alias, args.where, 0);
+  const whereSql = where.length === 0 ? "" : `WHERE ${where}`;
+  const groupBy = `GROUP BY ${groupColumns.map((column) => `${q(alias)}.${q(column.column)}`).join(", ")}`;
+  const having = compileHaving(state, model, alias, args.having);
+  const orderBy = compileGroupOrderBy(state, model, alias, args.orderBy, groupFields);
+  const take = parseAggregateTake(model, args.take);
+  const skip = parseSkip(model, args.skip);
+  const limitSql = take === undefined ? "" : `LIMIT ${take}`;
+  const offsetSql = skip === undefined ? "" : `OFFSET ${skip}`;
+  const rows = await sql.unsafe<Record<string, unknown>[]>(
+    `SELECT ${[...groupSelections, ...aggregateSelections].join(", ")} FROM ${q(model.table)} AS ${q(alias)} ${whereSql} ${groupBy} ${having} ${orderBy} ${limitSql} ${offsetSql}`.trim(),
+    [...state.params],
+  );
+  return rows.map((row) => Object.freeze({
+    ...Object.fromEntries(groupColumns.map((column) => [column.field, row[column.field]])),
+    ...mapAggregateResult(model, row, args),
+  }));
 }

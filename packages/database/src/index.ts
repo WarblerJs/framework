@@ -29,19 +29,25 @@ export type { CompiledDatabaseArtifact, CompiledDatabaseArtifactInput } from "./
 
 export { createPgConnection } from "./runtime/create-connection";
 export {
+  executeAggregate,
   executeCount,
+  executeExists,
   executeFindFirst,
   executeFindFirstOrThrow,
   executeFindMany,
   executeFindUnique,
   executeFindUniqueOrThrow,
+  executeGroupBy,
 } from "./runtime/read-query";
 export type {
+  AggregateQueryArgs,
   ComparableFilter,
   CountQueryArgs,
   EqualityFilter,
+  GroupByQueryArgs,
   ReadQueryArgs,
   RuntimeColumn,
+  RuntimeColumnAggregateCapabilities,
   RuntimeModel,
   RuntimeReadSchema,
   RuntimeRelation,
