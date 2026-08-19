@@ -165,6 +165,7 @@ describe("database", () => {
     connection: {},
     migrations: {
       table: "_wrbls_migrations",
+      seedTable: "_warbler_seeds",
       generated: "database/warbler/pg/generated",
       path: "database/warbler/pg/migrations",
       seeds: "database/warbler/pg/seeds",
@@ -174,7 +175,7 @@ describe("database", () => {
 `,
     );
 
-  // Note: `db:pg generate`, `db:pg migration` (run), `db:pg rollback`, `db:pg reset`, and `db:pg seed` (run) all require
+  // Note: `db:pg generate`, `db:pg migration` (run), `db:pg rollback`, and `db:pg seed:run` all require
   // a reachable Postgres connection, which is not available in this environment — only the
   // config-validation and pure-scaffolding paths (which never connect) are covered here. Run the rest
   // against a real database before relying on them.
@@ -236,35 +237,55 @@ describe("database", () => {
     expect(capture.errors.join("\n")).toContain("CLI3002");
   });
 
-  test("db:pg reset refuses to run without --force", async () => {
+  test("db:pg migrate:fresh safely cancels by default before connecting", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
     await writeDatabaseConfig(project.root);
     const capture = captureOutput();
-    const code = await runCLI(["db:pg", "reset", "--project", project.root], { output: capture.output });
-    expect(code).toBe(ExitCode.INVALID_ARGUMENTS);
-    expect(capture.errors.join("\n")).toContain("CLI3003");
+    const code = await runCLI(["db:pg", "migrate:fresh", "--seed", "--project", project.root], { output: capture.output });
+    expect(code).toBe(0);
+    expect(capture.lines.join("\n")).toContain("PostgreSQL migrate:fresh cancelled.");
   });
 
-  test("db:pg seed fails clearly when database.config.ts is missing", async () => {
+  test("db:pg migrate:fresh uses one explicit confirmation and rejects --force", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    await writeDatabaseConfig(project.root);
+    const capture = captureOutput();
+    const code = await runCLI(["db:pg", "migrate:fresh", "--force", "--project", project.root], { output: capture.output });
+    expect(code).toBe(ExitCode.INVALID_ARGUMENTS);
+    expect(capture.errors.join("\n")).toContain("CLI1010");
+  });
+
+  test("db:pg seed:run fails clearly when database.config.ts is missing", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
     const capture = captureOutput();
-    const code = await runCLI(["db:pg", "seed", "--project", project.root], { output: capture.output });
+    const code = await runCLI(["db:pg", "seed:run", "--project", project.root], { output: capture.output });
     expect(code).toBe(ExitCode.INVALID_PROJECT);
     expect(capture.errors.join("\n")).toContain("CLI3001");
   });
 
-  test("db:pg seed <name> scaffolds a timestamped seed file without connecting to a database", async () => {
+  test("db:pg seed:make <name> scaffolds numbered ORM-aware seed files without connecting to a database", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    await writeDatabaseConfig(project.root);
+    await Bun.write(join(project.root, "database/warbler/pg/seeds/0004_products.seed.ts"), "existing");
+    await Bun.write(join(project.root, "database/warbler/pg/seeds/helpers.ts"), "helper");
+    const capture = captureOutput();
+    const code = await runCLI(["db:pg", "seed:make", "admin_user", "--project", project.root], { output: capture.output });
+    expect(code).toBe(0);
+    expect(capture.lines.join("\n")).toContain("Generated");
+    const files = [...new Bun.Glob("*.seed.ts").scanSync({ cwd: join(project.root, "database/warbler/pg/seeds") })].sort();
+    expect(files).toEqual(["0004_products.seed.ts", "0005_admin_user.seed.ts"]);
+    const content = await Bun.file(join(project.root, "database/warbler/pg/seeds/0005_admin_user.seed.ts")).text();
+    expect(content).toContain("export const seed: PgSeed<WlbPgTransactionClient>");
+    expect(content).toContain('from "../generated/client"');
+  });
+
+  test("db:pg old seed action is no longer ambiguous", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
     await writeDatabaseConfig(project.root);
     const capture = captureOutput();
     const code = await runCLI(["db:pg", "seed", "admin_user", "--project", project.root], { output: capture.output });
-    expect(code).toBe(0);
-    expect(capture.lines.join("\n")).toContain("Generated");
-    const files = [...new Bun.Glob("*.ts").scanSync({ cwd: join(project.root, "database/warbler/pg/seeds") })];
-    expect(files).toHaveLength(1);
-    expect(files[0]).toMatch(/^\d{14}_admin_user\.ts$/u);
-    const content = await Bun.file(join(project.root, "database/warbler/pg/seeds", files[0]!)).text();
-    expect(content).toContain("export const seed: PgSeed");
+    expect(code).toBe(ExitCode.INVALID_ARGUMENTS);
+    expect(capture.errors.join("\n")).toContain("CLI3002");
   });
 });
 

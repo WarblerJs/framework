@@ -528,28 +528,47 @@ function delegateFactory(table: TableMetadata): string {
 }
 
 function defaultExports(table: TableMetadata): readonly string[] {
+  const delegateMethods = [
+    "findUnique",
+    "findUniqueOrThrow",
+    "findFirst",
+    "findFirstOrThrow",
+    "findMany",
+    "create",
+    "insert",
+    "createMany",
+    "createManyAndReturn",
+    "update",
+    "updateMany",
+    "updateManyAndReturn",
+    "upsert",
+    "deleteMany",
+    "count",
+    "exists",
+    "aggregate",
+    "groupBy",
+  ];
+  const explainMethods = ["findUnique", "findFirst", "findMany", "count", "exists", "aggregate", "groupBy"];
   return [
-    `const DEFAULT_DELEGATE = create${table.modelName}Delegate(pg);`,
-    "export const explain = DEFAULT_DELEGATE.explain;",
-    "export const findUnique = DEFAULT_DELEGATE.findUnique;",
-    "export const findUniqueOrThrow = DEFAULT_DELEGATE.findUniqueOrThrow;",
-    "export const findFirst = DEFAULT_DELEGATE.findFirst;",
-    "export const findFirstOrThrow = DEFAULT_DELEGATE.findFirstOrThrow;",
-    "export const findMany = DEFAULT_DELEGATE.findMany;",
-    "export const create = DEFAULT_DELEGATE.create;",
-    "export const insert = DEFAULT_DELEGATE.insert;",
-    "export const createMany = DEFAULT_DELEGATE.createMany;",
-    "export const createManyAndReturn = DEFAULT_DELEGATE.createManyAndReturn;",
-    "export const update = DEFAULT_DELEGATE.update;",
-    "export const updateMany = DEFAULT_DELEGATE.updateMany;",
-    "export const updateManyAndReturn = DEFAULT_DELEGATE.updateManyAndReturn;",
-    "export const upsert = DEFAULT_DELEGATE.upsert;",
-    "export const deleteOne = DEFAULT_DELEGATE.delete;",
-    "export const deleteMany = DEFAULT_DELEGATE.deleteMany;",
-    "export const count = DEFAULT_DELEGATE.count;",
-    "export const exists = DEFAULT_DELEGATE.exists;",
-    "export const aggregate = DEFAULT_DELEGATE.aggregate;",
-    "export const groupBy = DEFAULT_DELEGATE.groupBy;",
+    `let DEFAULT_DELEGATE: ${table.modelName}Delegate | undefined;`,
+    `function defaultDelegate(): ${table.modelName}Delegate {`,
+    `  DEFAULT_DELEGATE ??= create${table.modelName}Delegate(getPg());`,
+    "  return DEFAULT_DELEGATE;",
+    "}",
+    "",
+    "function callDefault(method: string, args: readonly unknown[]): unknown {",
+    "  return ((defaultDelegate() as unknown as Readonly<Record<string, unknown>>)[method] as (...callArgs: readonly unknown[]) => unknown)(...args);",
+    "}",
+    "",
+    "function callDefaultExplain(method: string, args: readonly unknown[]): unknown {",
+    "  return ((defaultDelegate().explain as unknown as Readonly<Record<string, unknown>>)[method] as (...callArgs: readonly unknown[]) => unknown)(...args);",
+    "}",
+    "",
+    "export const explain = Object.freeze({",
+    ...explainMethods.map((method) => `  ${method}: (...args: readonly unknown[]) => callDefaultExplain(${JSON.stringify(method)}, args),`),
+    "});",
+    ...delegateMethods.map((method) => `export const ${method} = (...args: readonly unknown[]) => callDefault(${JSON.stringify(method)}, args);`),
+    'export const deleteOne = (...args: readonly unknown[]) => callDefault("delete", args);',
   ];
 }
 
@@ -575,7 +594,7 @@ export function generateClientSource(table: TableMetadata, allTables: readonly T
     'import { executeAggregate, executeCount, executeCreate, executeCreateMany, executeCreateManyAndReturn, executeDelete, executeDeleteMany, executeExists, executeExplainAggregate, executeExplainCount, executeExplainExists, executeExplainFindFirst, executeExplainFindMany, executeExplainFindUnique, executeExplainGroupBy, executeFindFirst, executeFindFirstOrThrow, executeFindMany, executeFindUnique, executeFindUniqueOrThrow, executeGroupBy, executeUpdate, executeUpdateMany, executeUpdateManyAndReturn, executeUpsert } from "@warbler/database";',
     'import type { ComparableFilter, EqualityFilter, MutationCountResult, PgExplainOptions, PgExplainResult, PgRowLock, RuntimeReadSchema, SortDirection, StringFilter } from "@warbler/database";',
     'import type { SQL } from "bun";',
-    'import { pg } from "../runtime/pg-client";',
+    'import { getPg } from "../runtime/pg-factory";',
     ...relationImports(table, relations),
     "",
     rowInterface(table, rowType),
@@ -662,45 +681,61 @@ export function generateClientSource(table: TableMetadata, allTables: readonly T
   ].join("\n");
 }
 
-/** Generates `client/index.ts`: imports every per-model module and assembles `WlbPg`. */
-export function generateClientBarrelSource(tables: readonly TableMetadata[]): string {
+/** Generates side-effect-free `client/factory.ts`: imports delegates and assembles transaction/root-shaped clients. */
+export function generateClientFactorySource(tables: readonly TableMetadata[]): string {
   const modules = tableModules(tables);
   const imports = modules.map((entry) => `import * as ${entry.namespace} from "./${entry.fileName}";`);
   const delegateFields = modules.map((entry) => `  readonly ${entry.clientKey}: ${entry.namespace}.${entry.modelName}Delegate;`);
   const entries = modules.map((entry) => `    ${entry.clientKey}: ${entry.namespace}.create${entry.modelName}Delegate(database),`);
-  const typeExports = modules.map((entry) => `export type * as ${pascalCase(entry.modelName)}Client from "./${entry.fileName}";`);
   return [
     "/* Generated by @warbler/database. Do not edit by hand. */",
-    'import { executeTransaction } from "@warbler/database";',
-    'import type { TransactionOptions } from "@warbler/database";',
     'import type { SQL, TransactionSQL } from "bun";',
-    'import { pg } from "../runtime/pg-client";',
     ...imports,
     "",
-    "interface WlbPgDelegates<Database extends SQL> {",
+    "export interface WlbPgDelegates<Database extends SQL> {",
     "  readonly db: Database;",
     ...delegateFields,
     "}",
     "",
     "export type WlbPgTransactionClient = Readonly<WlbPgDelegates<TransactionSQL>>;",
-    "export type WlbPgClient = Readonly<WlbPgDelegates<SQL> & {",
-    "  readonly transaction: typeof transaction;",
-    "}>;",
     "",
-    "function createClient<Database extends SQL>(database: Database): Readonly<WlbPgDelegates<Database>> {",
+    "export function createWlbPgClient<Database extends SQL>(database: Database): Readonly<WlbPgDelegates<Database>> {",
     "  return Object.freeze({",
     "    db: database,",
     ...entries,
     "  });",
     "}",
     "",
-    "const CLIENT = createClient(pg);",
+  ].join("\n");
+}
+
+/** Generates `client/index.ts`: imports the factory and exposes the default configured `WlbPg`. */
+export function generateClientBarrelSource(tables: readonly TableMetadata[]): string {
+  const modules = tableModules(tables);
+  const typeExports = modules.map((entry) => `export type * as ${pascalCase(entry.modelName)}Client from "./${entry.fileName}";`);
+  return [
+    "/* Generated by @warbler/database. Do not edit by hand. */",
+    'import { executeTransaction } from "@warbler/database";',
+    'import type { TransactionOptions } from "@warbler/database";',
+    'import type { SQL } from "bun";',
+    'import { pg } from "../runtime/pg-client";',
+    'import { createWlbPgClient } from "./factory";',
+    'import type { WlbPgDelegates, WlbPgTransactionClient } from "./factory";',
+    "",
+    'export { createWlbPgClient } from "./factory";',
+    'export type { WlbPgDelegates, WlbPgTransactionClient } from "./factory";',
+    "",
+    "export type WlbPgClient = Readonly<WlbPgDelegates<SQL> & {",
+    "  readonly transaction: typeof transaction;",
+    "}>;",
+    "",
+    "const CLIENT = createWlbPgClient(pg);",
     "",
     "export function transaction<Result>(",
     "  callback: (tx: WlbPgTransactionClient) => Result | Promise<Result>,",
     "  options?: TransactionOptions,",
     "): Promise<Awaited<Result>> {",
-    "  return executeTransaction(pg, (tx) => callback(createClient(tx)), options);",
+    "  return executeTransaction(pg, (tx) => callback(createWlbPgClient(tx)), options);",
     "}",
     "",
     "export const WlbPg: WlbPgClient = Object.freeze({",

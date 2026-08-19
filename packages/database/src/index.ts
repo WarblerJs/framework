@@ -103,8 +103,8 @@ export {
 } from "./schema/ddl-fragments";
 export type { ColumnDefinitionInput } from "./schema/ddl-fragments";
 
-export { generateClientBarrelSource, generateClientSource } from "./generator/generate-client";
-export { generateRuntimeClientSource } from "./generator/generate-runtime";
+export { generateClientBarrelSource, generateClientFactorySource, generateClientSource } from "./generator/generate-client";
+export { generateRuntimeClientSource, generateRuntimeFactorySource } from "./generator/generate-runtime";
 export { generateModelMirrorSource } from "./generator/generate-model-mirror";
 
 export {
@@ -125,8 +125,8 @@ export { scaffoldMigration } from "./migrations/scaffold-migration";
 export type { ScaffoldedMigration } from "./migrations/scaffold-migration";
 export { resetDatabase } from "./migrations/reset-database";
 
-export { runSeeds } from "./seeds/run-seeds";
-export type { RunSeedsOptions, RunSeedsResult } from "./seeds/run-seeds";
+export { DEFAULT_SEED_TABLE, discoverSeedFiles, ensureSeedsTable, runSeeds } from "./seeds/run-seeds";
+export type { ExecutedSeed, RunSeedsOptions, RunSeedsResult, SeedFile } from "./seeds/run-seeds";
 export { scaffoldSeed } from "./seeds/scaffold-seed";
 export type { ScaffoldedSeed } from "./seeds/scaffold-seed";
 export type { PgSeed } from "./seeds/types";

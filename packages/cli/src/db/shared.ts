@@ -1,4 +1,4 @@
-import type { DatabaseProjectConfig } from "@warbler/database";
+import { DEFAULT_SEED_TABLE, SeedError, type DatabaseProjectConfig } from "@warbler/database";
 import { loadDatabaseConfig } from "../config";
 import { CLIError } from "../errors";
 import type { ProjectLayout } from "../project";
@@ -15,5 +15,19 @@ export async function requireDatabaseConfig(layout: ProjectLayout): Promise<Data
       "Create src/config/database.config.ts to use the database ORM.",
     );
   }
-  return loadDatabaseConfig(layout.root);
+  return normalizeDatabaseConfig(await loadDatabaseConfig(layout.root));
+}
+
+function normalizeDatabaseConfig(config: DatabaseProjectConfig): DatabaseProjectConfig {
+  const seedTable = config.migrations.seedTable ?? DEFAULT_SEED_TABLE;
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(seedTable)) {
+    throw new SeedError(seedTable, "Seed table name must be an unqualified PostgreSQL identifier.");
+  }
+  return Object.freeze({
+    ...config,
+    migrations: Object.freeze({
+      ...config.migrations,
+      seedTable,
+    }),
+  });
 }

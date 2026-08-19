@@ -28,6 +28,7 @@ export const databaseConfig = {
 
     migrations: {
       table: "_wrbls_migrations",
+      seedTable: "_warbler_seeds",
       generated: "database/warbler/pg/generated",
       path: "database/warbler/pg/migrations",
       seeds: "database/warbler/pg/seeds",

@@ -1,18 +1,19 @@
-import { createPgConnection, resetDatabase, runMigrations, runSeeds, type ExecutedMigration } from "@warbler/database";
+import { createPgConnection, resetDatabase, runMigrations, runSeeds, type ExecutedMigration, type ExecutedSeed } from "@warbler/database";
 import type { ProjectLayout } from "../project";
 import { requireDatabaseConfig } from "./shared";
+import { createLazySeedClientFactory } from "./seed-command";
 
-export interface ResetCommandOptions {
+export interface MigrateFreshCommandOptions {
   readonly seed: boolean;
 }
 
-export interface ResetCommandResult {
+export interface MigrateFreshCommandResult {
   readonly executed: readonly ExecutedMigration[];
-  readonly seeded: readonly string[];
+  readonly seeded: readonly ExecutedSeed[];
 }
 
-/** `warbler db:pg reset`: drops every table/enum/sequence in the `public` schema, then replays every migration from scratch. */
-export async function resetCommand(layout: ProjectLayout, options: ResetCommandOptions): Promise<ResetCommandResult> {
+/** `warbler db:pg migrate:fresh`: drops public schema objects, replays migrations, and optionally runs pending tracked seeds. */
+export async function migrateFreshCommand(layout: ProjectLayout, options: MigrateFreshCommandOptions): Promise<MigrateFreshCommandResult> {
   const config = await requireDatabaseConfig(layout);
   const sql = createPgConnection(config.connection, config.log === true);
   try {
@@ -23,7 +24,12 @@ export async function resetCommand(layout: ProjectLayout, options: ResetCommandO
       table: config.migrations.table,
     });
     if (!options.seed) return Object.freeze({ executed: migrated.executed, seeded: Object.freeze([]) });
-    const seeded = await runSeeds(sql, { projectRoot: layout.root, path: config.migrations.seeds });
+    const seeded = await runSeeds(sql, {
+      projectRoot: layout.root,
+      path: config.migrations.seeds,
+      ...(config.migrations.seedTable === undefined ? {} : { table: config.migrations.seedTable }),
+      createClient: createLazySeedClientFactory(layout, config.migrations.generated),
+    });
     return Object.freeze({ executed: migrated.executed, seeded: seeded.executed });
   } finally {
     await sql.close();

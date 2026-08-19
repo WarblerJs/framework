@@ -16,6 +16,7 @@ export interface PgConnectionConfig {
 /** Migration table name, project-relative directories, and naming overrides. */
 export interface PgMigrationsConfig {
   readonly table: string;
+  readonly seedTable?: string;
   readonly generated: string;
   readonly path: string;
   readonly seeds: string;

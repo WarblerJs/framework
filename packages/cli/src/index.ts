@@ -35,7 +35,7 @@ export {
   type MigrationRollbackCommandResult,
   type MigrationScaffoldCommandResult,
 } from "./db/migration-command";
-export { resetCommand, type ResetCommandOptions, type ResetCommandResult } from "./db/reset-command";
+export { migrateFreshCommand, type MigrateFreshCommandOptions, type MigrateFreshCommandResult } from "./db/reset-command";
 export {
   seedRunCommand,
   seedScaffoldCommand,

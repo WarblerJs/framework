@@ -14,6 +14,7 @@ describe("CLI parser", () => {
   test("supports equals syntax and top-level aliases", () => {
     expect(parseCLI(["build", "--port=3000"]).flags.port).toBe("3000");
     expect(parseCLI(["db:pg", "rollback", "--step=3"]).flags.step).toBe("3");
+    expect(parseCLI(["db:pg", "seed:run", "--only", "users"]).flags.only).toBe("users");
     expect(parseCLI(["--help"]).command).toBe("help");
     expect(parseCLI(["--version"]).command).toBe("version");
   });
