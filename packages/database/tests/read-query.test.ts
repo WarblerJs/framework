@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import type { SQL } from "bun";
-import { DatabaseQueryError, DatabaseRecordNotFoundError } from "../src/errors";
+import type { SQL, TransactionSQL } from "bun";
+import { DatabaseQueryError, DatabaseRecordNotFoundError, DatabaseTransactionError } from "../src/errors";
 import {
   executeAggregate,
   executeCount,
@@ -20,6 +20,7 @@ import {
   executeGroupBy,
   type RuntimeReadSchema,
 } from "../src/runtime/read-query";
+import { executeTransaction } from "../src/runtime/transaction-query";
 
 function createFakeSql(rows: readonly unknown[] = []): SQL & { readonly queries: readonly { sql: string; params: readonly unknown[] }[] } {
   const queries: { sql: string; params: readonly unknown[] }[] = [];
@@ -29,6 +30,20 @@ function createFakeSql(rows: readonly unknown[] = []): SQL & { readonly queries:
       queries.push({ sql, params: params ?? [] });
       return [...rows];
     },
+  } as unknown as SQL & { readonly queries: readonly { sql: string; params: readonly unknown[] }[] };
+}
+
+function createFakeTransactionSql(rows: readonly unknown[] = []): SQL & { readonly queries: readonly { sql: string; params: readonly unknown[] }[] } {
+  const queries: { sql: string; params: readonly unknown[] }[] = [];
+  const tx = {
+    unsafe: async (sql: string, params?: readonly unknown[]) => {
+      queries.push({ sql, params: params ?? [] });
+      return [...rows];
+    },
+  } as unknown as TransactionSQL;
+  return {
+    get queries() { return queries; },
+    begin: async (callback: (transaction: TransactionSQL) => unknown) => callback(tx),
   } as unknown as SQL & { readonly queries: readonly { sql: string; params: readonly unknown[] }[] };
 }
 
@@ -479,6 +494,60 @@ describe("read query compiler", () => {
     await expect(executeExplainFindMany(createFakeSql(), schema, product, {}, { timing: true })).rejects.toThrow(DatabaseQueryError);
     await expect(executeExplainFindMany(createFakeSql(), schema, product, {}, { format: "json) SELECT pg_sleep(10); --" as "json" })).rejects.toThrow(DatabaseQueryError);
     await expect(executeExplainFindMany(createFakeSql(), schema, product, {}, { analyze: true, unknown: true } as unknown as { analyze: true })).rejects.toThrow(DatabaseQueryError);
+  });
+
+  test("row locking compiles supported modes and wait policies only inside transactions", async () => {
+    const sql = createFakeTransactionSql([{ id: "p1" }]);
+    await executeTransaction(sql, async (tx) => {
+      await executeFindUnique(tx, schema, product, { where: { id: "p1" }, lock: { mode: "update" } });
+      await executeFindFirst(tx, schema, product, { where: { status: "pending" }, orderBy: { createdAt: "asc" }, lock: { mode: "noKeyUpdate", wait: "wait" } });
+      await executeFindMany(tx, schema, product, { where: { status: "pending" }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 20, lock: { mode: "share", wait: "nowait" } });
+      await executeFindMany(tx, schema, product, { where: { status: "pending" }, take: 5, lock: { mode: "keyShare", wait: "skipLocked" } });
+    });
+
+    expect(sql.queries.map((query) => query.sql)).toEqual([
+      'SELECT "wq0"."id" AS "id", "wq0"."price" AS "price", "wq0"."created_at" AS "createdAt", "wq0"."is_active" AS "isActive", "wq0"."category" AS "category", "wq0"."brand" AS "brand", "wq0"."status" AS "status", "wq0"."rating" AS "rating" FROM "products" AS "wq0" WHERE "wq0"."id" = $1 LIMIT 1 FOR UPDATE',
+      'SELECT "wq0"."id" AS "id", "wq0"."price" AS "price", "wq0"."created_at" AS "createdAt", "wq0"."is_active" AS "isActive", "wq0"."category" AS "category", "wq0"."brand" AS "brand", "wq0"."status" AS "status", "wq0"."rating" AS "rating" FROM "products" AS "wq0" WHERE "wq0"."status" = $1 ORDER BY date_trunc(\'milliseconds\', "wq0"."created_at") ASC LIMIT 1 FOR NO KEY UPDATE',
+      'SELECT "wq0"."id" AS "id", "wq0"."price" AS "price", "wq0"."created_at" AS "createdAt", "wq0"."is_active" AS "isActive", "wq0"."category" AS "category", "wq0"."brand" AS "brand", "wq0"."status" AS "status", "wq0"."rating" AS "rating" FROM "products" AS "wq0" WHERE "wq0"."status" = $1 ORDER BY date_trunc(\'milliseconds\', "wq0"."created_at") ASC, "wq0"."id" ASC LIMIT 20 FOR SHARE NOWAIT',
+      'SELECT "wq0"."id" AS "id", "wq0"."price" AS "price", "wq0"."created_at" AS "createdAt", "wq0"."is_active" AS "isActive", "wq0"."category" AS "category", "wq0"."brand" AS "brand", "wq0"."status" AS "status", "wq0"."rating" AS "rating" FROM "products" AS "wq0" WHERE "wq0"."status" = $1 ORDER BY "wq0"."id" ASC LIMIT 5 FOR KEY SHARE SKIP LOCKED',
+    ]);
+  });
+
+  test("row locking supports scalar select, cursor predicates, and explain within a transaction", async () => {
+    const sql = createFakeTransactionSql([{ id: "p2", stock: 4 }, { "QUERY PLAN": [] }]);
+    await executeTransaction(sql, async (tx) => {
+      await executeFindMany(tx, schema, product, {
+        select: { id: true, status: true },
+        where: { status: "pending" },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        cursor: { createdAt: new Date("2026-01-01T00:00:00.123Z"), id: "p1" },
+        take: 50,
+        lock: { mode: "update", wait: "skipLocked" },
+      });
+      await executeExplainFindFirst(tx, schema, product, { where: { status: "pending" }, lock: { mode: "update" } });
+    });
+
+    expect(sql.queries[0]!.sql).toBe('SELECT "wq0"."id" AS "id", "wq0"."status" AS "status" FROM "products" AS "wq0" WHERE "wq0"."status" = $1 AND (date_trunc(\'milliseconds\', "wq0"."created_at") > $2 OR (date_trunc(\'milliseconds\', "wq0"."created_at") = $2 AND "wq0"."id" > $3)) ORDER BY date_trunc(\'milliseconds\', "wq0"."created_at") ASC, "wq0"."id" ASC LIMIT 50 FOR UPDATE SKIP LOCKED');
+    expect(sql.queries[1]!.sql).toContain("EXPLAIN (FORMAT JSON) SELECT");
+    expect(sql.queries[1]!.sql).toContain("FOR UPDATE");
+  });
+
+  test("row locking rejects unsafe or unsupported combinations before executing SQL", async () => {
+    await expect(executeFindUnique(createFakeSql(), schema, product, { where: { id: "p1" }, lock: { mode: "update" } })).rejects.toThrow(DatabaseTransactionError);
+    await expect(executeFindMany(createFakeSql(), schema, product, { lock: "FOR UPDATE" })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, product, { lock: { mode: "update; SELECT pg_sleep(10)" } })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, product, { lock: { mode: "update", wait: "nowait; SELECT pg_sleep(10)" } })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, product, { lock: { mode: "update", of: "products" } })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, product, { distinct: ["brand"], lock: { mode: "update" } })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindFirst(createFakeSql(), schema, user, { include: { posts: true }, lock: { mode: "update" } })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindFirst(createFakeSql(), schema, user, { select: { id: true, posts: true }, lock: { mode: "update" } })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindFirst(createFakeSql(), schema, user, { select: { posts: { lock: { mode: "update" } } } })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeCount(createFakeSql(), schema, product, { lock: { mode: "update" } } as never)).rejects.toThrow(DatabaseQueryError);
+    await expect(executeCount(createFakeSql(), schema, product, { select: { _all: true }, lock: { mode: "update" } } as never)).rejects.toThrow(DatabaseQueryError);
+    await expect(executeExists(createFakeSql(), schema, product, { lock: { mode: "update" } } as never)).rejects.toThrow(DatabaseQueryError);
+    await expect(executeExplainCount(createFakeSql(), schema, product, { select: { _all: true }, lock: { mode: "update" } } as never)).rejects.toThrow(DatabaseQueryError);
+    await expect(executeExplainExists(createFakeSql(), schema, product, { lock: { mode: "update" } } as never)).rejects.toThrow(DatabaseQueryError);
+    await expect(executeExplainFindMany(createFakeSql(), schema, product, { lock: { mode: "update" } })).rejects.toThrow(DatabaseTransactionError);
   });
 
   test("count reuses the shared where compiler", async () => {

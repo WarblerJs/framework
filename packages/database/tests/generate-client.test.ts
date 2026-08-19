@@ -27,6 +27,7 @@ describe("generateClientSource aggregation types", () => {
     expect(source).toContain("executeAggregate");
     expect(source).toContain("executeExplainFindMany");
     expect(source).toContain("PgExplainOptions");
+    expect(source).toContain("PgRowLock");
     expect(source).toContain("executeExists");
     expect(source).toContain("executeGroupBy");
     expect(source).toContain("count<S extends OrderCountAggregateInput>");
@@ -35,6 +36,10 @@ describe("generateClientSource aggregation types", () => {
     expect(source).toContain("readonly tax?: number;");
     expect(source).toContain("readonly cursor?: OrderCursor;");
     expect(source).toContain("readonly distinct?: readonly OrderScalarField[];");
+    expect(source).toContain("readonly lock?: PgRowLock;");
+    expect(source).toContain("findUnique<S extends OrderSelect | undefined = undefined, I extends OrderInclude | undefined = undefined>(args: OrderFindUniqueArgs<S, I>, options?: PgExplainOptions)");
+    expect(source).toContain("count<S extends OrderCountAggregateInput | undefined = undefined>(args?: OrderCountArgs<S>, options?: PgExplainOptions)");
+    expect(source).toContain("export type OrderCountArgs<S extends OrderCountAggregateInput | undefined = undefined> = { readonly where?: OrderWhere; readonly select?: S; };");
     expect(source).toContain("export interface OrderExplainDelegate");
     expect(source).toContain("readonly explain: OrderExplainDelegate;");
     expect(source).toContain("delegate.explain = explain as unknown as OrderExplainDelegate;");
@@ -44,8 +49,12 @@ describe("generateClientSource aggregation types", () => {
     expect(source).toContain('field: "id", column: "id", kind: "string", pgType: "uuid"');
     expect(source).toContain('field: "total", column: "total", kind: "number", pgType: "numeric"');
     expect(source).toContain("exists(args?: { readonly where?: OrderWhere }): Promise<boolean>;");
-    expect(source).toContain("aggregate<A extends OrderAggregateArgs>(args: A): Promise<OrderAggregatePayload<A>>;");
-    expect(source).toContain("groupBy<A extends OrderGroupByArgs>(args: A): Promise<readonly OrderGroupByPayload<A>[]>;");
+    expect(source).toContain("aggregate<A extends OrderAggregateArgs>(args: A & { readonly lock?: never }): Promise<OrderAggregatePayload<A>>;");
+    expect(source).toContain("groupBy<A extends OrderGroupByArgs>(args: A & { readonly lock?: never }): Promise<readonly OrderGroupByPayload<A>[]>;");
+    expect(source).not.toContain("readonly where?: OrderWhere; readonly select?: S; readonly lock?: PgRowLock; };");
+    expect(source).not.toContain("exists(args?: { readonly where?: OrderWhere; readonly lock?: PgRowLock })");
+    expect(source).not.toContain("aggregate<A extends OrderAggregateArgs & { readonly lock");
+    expect(source).not.toContain("groupBy<A extends OrderGroupByArgs & { readonly lock");
     expect(source).toContain("const delegate: Record<string, unknown> = {};");
     expect(source).toContain("Object.freeze(delegate);");
     expect(source).toContain("aggregate: Object.freeze({ count: true, sum: false, avg: false, min: true, max: true })");
