@@ -2,17 +2,33 @@ import { describe, expect, test } from "bun:test";
 import { SeedError } from "../src/errors";
 import { scaffoldSeed } from "../src/seeds/scaffold-seed";
 
-const FIXED_DATE = new Date(Date.UTC(2026, 7, 5, 14, 30, 25));
-
 describe("scaffoldSeed", () => {
-  test("produces a timestamped filename and a valid-looking seed template", () => {
-    const { fileName, content } = scaffoldSeed("admin_user", FIXED_DATE);
-    expect(fileName).toBe("20260805143025_admin_user.ts");
+  test("starts at 0001 and produces an ORM-aware seed template", () => {
+    const { fileName, content } = scaffoldSeed("admin_user", { clientImportPath: "../generated/client" });
+
+    expect(fileName).toBe("0001_admin_user.seed.ts");
     expect(content).toContain('import type { PgSeed } from "@warbler/database"');
-    expect(content).toContain("export const seed: PgSeed");
+    expect(content).toContain('import type { WlbPgTransactionClient } from "../generated/client"');
+    expect(content).toContain("export const seed: PgSeed<WlbPgTransactionClient>");
+    expect(content).toContain("await db.user.createMany");
   });
 
-  test("throws SeedError for an empty name", () => {
-    expect(() => scaffoldSeed("", FIXED_DATE)).toThrow(SeedError);
+  test("uses the highest valid existing prefix and ignores unrelated files", () => {
+    const { fileName } = scaffoldSeed("categories", {
+      existingFileNames: [
+        "0001_users.seed.ts",
+        "0004_products.seed.ts",
+        "helpers.ts",
+        "9999_not_a_seed.ts",
+      ],
+    });
+
+    expect(fileName).toBe("0005_categories.seed.ts");
+  });
+
+  test("throws SeedError for unsafe names", () => {
+    expect(() => scaffoldSeed("")).toThrow(SeedError);
+    expect(() => scaffoldSeed("../users")).toThrow(SeedError);
+    expect(() => scaffoldSeed("Users")).toThrow(SeedError);
   });
 });

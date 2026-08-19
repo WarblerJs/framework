@@ -3,7 +3,7 @@ import type { SQL } from "bun";
 import { generateFromDatabase } from "../src/introspection/generate-from-database";
 import type { DatabaseProjectConfig } from "../src/types/config.types";
 
-const TABLE_ROWS = [{ tableName: "users" }, { tableName: "_wrbls_migrations" }];
+const TABLE_ROWS = [{ tableName: "users" }, { tableName: "_wrbls_migrations" }, { tableName: "_warbler_seeds" }];
 const COLUMN_ROWS = [
   {
     tableName: "users",
@@ -60,14 +60,23 @@ describe("generateFromDatabase", () => {
     expect(await Bun.file(`${generated}/client/session.ts`).exists()).toBe(false);
     expect(await Bun.file(`${generated}/models/Session.ts`).exists()).toBe(false);
     const index = await Bun.file(`${generated}/client/index.ts`).text();
-    expect(index).toContain('import * as userClient from "./user";');
-    expect(index).toContain("interface WlbPgDelegates<Database extends SQL>");
-    expect(index).toContain("readonly db: Database;");
-    expect(index).toContain("export type WlbPgTransactionClient = Readonly<WlbPgDelegates<TransactionSQL>>;");
+    const factory = await Bun.file(`${generated}/client/factory.ts`).text();
+    expect(index).toContain('import { createWlbPgClient } from "./factory";');
+    expect(index).toContain('export { createWlbPgClient } from "./factory";');
     expect(index).toContain("readonly transaction: typeof transaction;");
-    expect(index).toContain("db: database,");
-    expect(index).toContain("return executeTransaction(pg, (tx) => callback(createClient(tx)), options);");
+    expect(index).toContain("return executeTransaction(pg, (tx) => callback(createWlbPgClient(tx)), options);");
     expect(index).not.toContain("session");
+    expect(factory).toContain('import * as userClient from "./user";');
+    expect(factory).toContain("export interface WlbPgDelegates<Database extends SQL>");
+    expect(factory).toContain("readonly db: Database;");
+    expect(factory).toContain("export type WlbPgTransactionClient = Readonly<WlbPgDelegates<TransactionSQL>>;");
+    expect(factory).toContain("db: database,");
+    expect(factory).not.toContain("session");
+    const runtimeFactory = await Bun.file(`${generated}/runtime/pg-factory.ts`).text();
+    const runtimeClient = await Bun.file(`${generated}/runtime/pg-client.ts`).text();
+    expect(runtimeFactory).toContain("export function getPg(): SQL");
+    expect(runtimeFactory).toContain("instance ??= createPgConnection");
+    expect(runtimeClient).toContain('import { getPg } from "./pg-factory";');
 
     const userClient = await Bun.file(`${generated}/client/user.ts`).text();
     expect(userClient).toContain("export interface UserDelegate");

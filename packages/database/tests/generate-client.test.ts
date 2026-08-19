@@ -44,7 +44,10 @@ describe("generateClientSource aggregation types", () => {
     expect(source).toContain("readonly explain: OrderExplainDelegate;");
     expect(source).toContain("delegate.explain = explain as unknown as OrderExplainDelegate;");
     expect(source).toContain("Object.freeze(explain);");
-    expect(source).toContain("export const explain = DEFAULT_DELEGATE.explain;");
+    expect(source).toContain('import { getPg } from "../runtime/pg-factory";');
+    expect(source).toContain("function defaultDelegate(): OrderDelegate");
+    expect(source).toContain("DEFAULT_DELEGATE ??= createOrderDelegate(getPg());");
+    expect(source).toContain("export const explain = Object.freeze({");
     expect(source).toContain('primaryKeyFields: Object.freeze(["id"])');
     expect(source).toContain('field: "id", column: "id", kind: "string", pgType: "uuid"');
     expect(source).toContain('field: "total", column: "total", kind: "number", pgType: "numeric"');

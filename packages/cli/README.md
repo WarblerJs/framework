@@ -13,8 +13,9 @@ warbler generate <kind> <name>
 warbler db:pg migration [<kind>:<name>]
 warbler db:pg rollback [--step 3]
 warbler db:pg generate
-warbler db:pg reset --force [--seed]
-warbler db:pg seed [<name>]
+warbler db:pg migrate:fresh [--seed]
+warbler db:pg seed:make <name>
+warbler db:pg seed:run [--only <name>]
 warbler clean
 warbler version
 warbler help

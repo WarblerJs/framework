@@ -10,7 +10,7 @@ import { cleanCommand } from "./clean/clean-command";
 import { cliDiagnostic } from "./diagnostics";
 import { databaseGenerateCommand } from "./db/generate-command";
 import { migrationRollbackCommand, migrationRunCommand, migrationScaffoldCommand } from "./db/migration-command";
-import { resetCommand } from "./db/reset-command";
+import { migrateFreshCommand } from "./db/reset-command";
 import { seedRunCommand, seedScaffoldCommand } from "./db/seed-command";
 import { doctorCommand } from "./doctor/doctor-command";
 import { CLIError } from "./errors";
@@ -31,6 +31,7 @@ export interface CLIServices {
   readonly runtimeLauncher?: DevelopmentRuntimeLauncher;
   readonly waitForDevSession?: boolean;
   readonly onDevSession?: (session: DevSession) => void;
+  readonly confirm?: (message: string) => boolean | Promise<boolean>;
 }
 
 /** Runs one CLI invocation inside a safe diagnostic boundary. */
@@ -210,36 +211,50 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
         writeResult(output, context.format, { command: "db:pg", status: "success", action: "rollback", rolledBack: result.rolledBack }, message);
         return ExitCode.SUCCESS;
       }
-      if (action === "reset") {
+      if (action === "migrate:fresh") {
         assertArgs(context, 1);
-        if (context.flags.force !== true) {
-          throw new CLIError(
-            "CLI3003",
-            "db:pg reset drops every table in the database.",
-            ExitCode.INVALID_ARGUMENTS,
-            "Re-run with --force to confirm, optionally with --seed to run seeds afterward.",
-          );
-        }
-        const result = await resetCommand(layout, { seed: context.flags.seed === true });
-        const message = [
-          result.executed.length === 0 ? "No migrations to run." : result.executed.map((migration) => `${migration.name} (batch ${migration.batch}, ${migration.executionMs}ms)`).join("\n"),
-          ...(result.seeded.length === 0 ? [] : [`Seeded: ${result.seeded.join(", ")}`]),
-        ].join("\n");
-        writeResult(output, context.format, { command: "db:pg", status: "success", action: "reset", executed: result.executed, seeded: result.seeded }, message);
-        return ExitCode.SUCCESS;
-      }
-      if (action === "seed") {
-        if (target === undefined) {
-          const result = await seedRunCommand(layout);
-          const message = result.executed.length === 0 ? "No seed files found." : result.executed.join("\n");
-          writeResult(output, context.format, { command: "db:pg", status: "success", action: "seed", executed: result.executed }, message);
+        const confirmed = await confirmAction(context, output, services, context.flags.seed === true
+          ? "This will rebuild the PostgreSQL database, run migrations, and execute all seed files."
+          : "This will rebuild the PostgreSQL database and run migrations.");
+        if (!confirmed) {
+          writeResult(output, context.format, { command: "db:pg", status: "cancelled", action: "migrate:fresh" }, "PostgreSQL migrate:fresh cancelled.");
           return ExitCode.SUCCESS;
         }
-        const scaffold = await seedScaffoldCommand(layout, target);
-        writeResult(output, context.format, { command: "db:pg", status: "success", action: "seed", file: scaffold.path }, `Generated ${scaffold.path}`);
+        const result = await migrateFreshCommand(layout, { seed: context.flags.seed === true });
+        const message = [
+          result.executed.length === 0 ? "No migrations to run." : result.executed.map((migration) => `${migration.name} (batch ${migration.batch}, ${migration.executionMs}ms)`).join("\n"),
+          ...(result.seeded.length === 0 ? [] : [`Seeded: ${result.seeded.map((seed) => `${seed.name} (batch ${seed.batch})`).join(", ")}`]),
+        ].join("\n");
+        writeResult(output, context.format, { command: "db:pg", status: "success", action: "migrate:fresh", executed: result.executed, seeded: result.seeded }, message);
         return ExitCode.SUCCESS;
       }
-      throw new CLIError("CLI3002", `Unknown db:pg action: ${action ?? ""}`, ExitCode.INVALID_ARGUMENTS, "Run warbler db:pg generate, migration, rollback, reset, or seed.");
+      if (action === "seed:make") {
+        if (target === undefined) throw new CLIError("CLI3007", "db:pg seed:make requires a seed name.", ExitCode.INVALID_ARGUMENTS);
+        const scaffold = await seedScaffoldCommand(layout, target);
+        writeResult(output, context.format, { command: "db:pg", status: "success", action: "seed:make", file: scaffold.path }, `Generated ${scaffold.path}`);
+        return ExitCode.SUCCESS;
+      }
+      if (action === "seed:run") {
+        assertArgs(context, 1);
+        const result = await seedRunCommand(layout, {
+          ...(stringFlag(context.flags.only) === undefined ? {} : { only: stringFlag(context.flags.only)! }),
+          confirm: (pending) => confirmAction(context, output, services, [
+            "The following pending PostgreSQL seeds will be executed:",
+            "",
+            pending.join("\n"),
+          ].join("\n")),
+        });
+        const message = result.canceled
+          ? "PostgreSQL seed run cancelled."
+          : result.alreadyExecuted !== undefined
+            ? `Seed "${result.alreadyExecuted}" has already been executed.`
+            : result.executed.length === 0
+              ? "No pending seeds."
+              : result.executed.map((seed) => `${seed.name} (batch ${seed.batch})`).join("\n");
+        writeResult(output, context.format, { command: "db:pg", status: result.canceled ? "cancelled" : "success", action: "seed:run", executed: result.executed, skipped: result.skipped, pending: result.pending }, message);
+        return ExitCode.SUCCESS;
+      }
+      throw new CLIError("CLI3002", `Unknown db:pg action: ${action ?? ""}`, ExitCode.INVALID_ARGUMENTS, "Run warbler db:pg generate, migration, rollback, migrate:fresh, seed:make, or seed:run.");
     }
     default: throw new CLIError("CLI1001", `Unsupported command: ${context.command}`, ExitCode.INVALID_ARGUMENTS);
   }
@@ -265,6 +280,13 @@ function assertArgs(context: CLIContext, count: number | readonly [min: number, 
   if (context.args.length !== count) throw new CLIError("CLI1009", `${context.command} expects ${count} positional argument(s).`, ExitCode.INVALID_ARGUMENTS);
 }
 function stringFlag(value: string | boolean | undefined): string | undefined { return typeof value === "string" ? value : undefined; }
+async function confirmAction(context: CLIContext, output: CLIOutput, services: CLIServices, message: string): Promise<boolean> {
+  if (services.confirm !== undefined) return await services.confirm(`${message}\n\nContinue? (y/N)`);
+  if (context.format === "json" || !process.stdin.isTTY) return false;
+  output.write(`${message}\n\nContinue? (y/N)`);
+  const answer = prompt("");
+  return answer?.toLowerCase() === "y" || answer?.toLowerCase() === "yes";
+}
 function parseRollbackStep(value: string | undefined): number {
   if (value === undefined) return 1;
   if (!/^[1-9]\d*$/u.test(value)) throw new CLIError("CLI3004", "Rollback step must be a positive safe integer.", ExitCode.INVALID_ARGUMENTS);
@@ -282,7 +304,7 @@ function validateCommandFlags(context: CLIContext): void {
     inspect: [...common, "project"],
     new: [...common, "dry-run"],
     generate: [...common, "project", "dry-run", "force"],
-    "db:pg": [...common, "project", "force", "seed", "step"],
+    "db:pg": [...common, "project", "seed", "step", "only"],
     clean: [...common, "project", "dry-run"],
     version: common,
     help: common,
@@ -311,8 +333,9 @@ Usage:
   warbler db:pg migration [<kind>:<name>]
   warbler db:pg rollback [--step 3]
   warbler db:pg generate
-  warbler db:pg reset --force [--seed]
-  warbler db:pg seed [<name>]
+  warbler db:pg migrate:fresh [--seed]
+  warbler db:pg seed:make <name>
+  warbler db:pg seed:run [--only <name>]
   warbler clean
   warbler version
 

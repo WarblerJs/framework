@@ -11,6 +11,7 @@ Migration files  →  warbler db:pg migration  →  PostgreSQL  →  warbler db:
 ```
 database/warbler/pg/
   migrations/   you write these — <timestamp>_<kind>_<name>.ts
+  seeds/        you write these — NNNN_<name>.seed.ts
   generated/    compiler output — do not edit, gitignored
     schema.sql            read-only mirror of the live schema (not an input)
     metadata.json
@@ -18,7 +19,6 @@ database/warbler/pg/
     client/<key>.ts       typed CRUD functions per introspected table
     client/index.ts       WlbPg barrel
     models/<Model>.ts     read-only PgTypes mirror of each table, for reference only
-  seeds/        reserved for a future phase
 ```
 
 ## Configuration
@@ -48,6 +48,7 @@ export const databaseConfig = {
     },
     migrations: {
       table: "_wrbls_migrations",
+      seedTable: "_warbler_seeds",
       generated: "database/warbler/pg/generated",
       path: "database/warbler/pg/migrations",
       seeds: "database/warbler/pg/seeds",
@@ -178,6 +179,55 @@ After a rollback changes the live schema, refresh generated client files explici
 ```sh
 warbler db:pg generate
 ```
+
+## Seeding
+
+Scaffold explicit numbered seed files under `seeds/`:
+
+```sh
+warbler db:pg seed:make users
+# database/warbler/pg/seeds/0001_users.seed.ts
+```
+
+New seeds use the next prefix after the highest valid existing seed filename, so if `0004_products.seed.ts`
+exists then `seed:make categories` creates `0005_categories.seed.ts`. Only files matching
+`NNNN_name.seed.ts` participate in seed discovery; helpers such as `helpers.ts`, `index.ts`, and
+`data.ts` are ignored.
+
+Seed files export a named `seed` function and receive the generated transaction-bound ORM client:
+
+```ts
+import type { PgSeed } from "@warbler/database";
+import type { WlbPgTransactionClient } from "../generated/client";
+
+export const seed: PgSeed<WlbPgTransactionClient> = async (db) => {
+  await db.product.createMany({
+    data: [],
+  });
+};
+```
+
+Run pending seeds explicitly:
+
+```sh
+warbler db:pg seed:run
+warbler db:pg seed:run --only users
+```
+
+Warbler stores successful seed identities by full filename, for example `0001_users.seed.ts`, in
+the configured `migrations.seedTable` table. The default table is `_warbler_seeds`; it contains
+`id`, `name`, `batch`, and `executed_at`, with a unique constraint on `name`. A tracking row means
+that seed committed successfully. Failed seeds are rolled back and are not tracked.
+
+Each `seed:run` invocation computes one batch number from the seed table and applies it to all seeds
+that commit during that invocation. A second `seed:run` skips already-tracked seeds and runs only
+new files. `--only users` resolves exactly to `NNNN_users.seed.ts`; missing and ambiguous logical
+names fail clearly, and already-executed seeds are reported without being rerun.
+
+If pending seeds exist, `seed:run` asks for confirmation and defaults to No. There is no `--force`,
+`--yes`, or rerun bypass. `migrate:fresh --seed` performs one destructive confirmation, rebuilds the
+schema, runs migrations, recreates the seed table naturally, and then runs all discovered seeds.
+Executed seed files should be treated as immutable; create a new numbered seed for data changes.
 
 ## Generating
 

@@ -1,12 +1,13 @@
 import type { SQL } from "bun";
 import { mkdir, rm } from "node:fs/promises";
 import { createCompiledDatabaseArtifact, type CompiledDatabaseArtifact } from "../artifact";
-import { generateClientBarrelSource, generateClientSource } from "../generator/generate-client";
+import { generateClientBarrelSource, generateClientFactorySource, generateClientSource } from "../generator/generate-client";
 import { generateModelMirrorSource } from "../generator/generate-model-mirror";
-import { generateRuntimeClientSource } from "../generator/generate-runtime";
+import { generateRuntimeClientSource, generateRuntimeFactorySource } from "../generator/generate-runtime";
 import { generateSchemaSql } from "../schema/generate-schema-sql";
 import type { DatabaseProjectConfig } from "../types/config.types";
 import { introspectDatabase } from "./introspect-database";
+import { DEFAULT_SEED_TABLE } from "../seeds/run-seeds";
 
 export interface GenerateFromDatabaseOptions {
   readonly projectRoot: string;
@@ -26,7 +27,7 @@ async function resetGeneratedDirectory(path: string): Promise<void> {
 export async function generateFromDatabase(sql: SQL, options: GenerateFromDatabaseOptions): Promise<DatabaseGenerationResult> {
   const { projectRoot, config } = options;
   const tables = await introspectDatabase(sql, {
-    excludeTables: [config.migrations.table],
+    excludeTables: [...new Set([config.migrations.table, config.migrations.seedTable ?? DEFAULT_SEED_TABLE])],
     ...(config.migrations.modelNames === undefined ? {} : { modelNames: config.migrations.modelNames }),
   });
   const artifact = createCompiledDatabaseArtifact({ tables });
@@ -37,12 +38,14 @@ export async function generateFromDatabase(sql: SQL, options: GenerateFromDataba
   await mkdir(`${generatedRoot}/runtime`, { recursive: true });
   await Bun.write(`${generatedRoot}/schema.sql`, generateSchemaSql(tables));
   await Bun.write(`${generatedRoot}/metadata.json`, `${JSON.stringify(tables, null, 2)}\n`);
+  await Bun.write(`${generatedRoot}/runtime/pg-factory.ts`, generateRuntimeFactorySource(config));
   await Bun.write(`${generatedRoot}/runtime/pg-client.ts`, generateRuntimeClientSource(config));
   for (const table of tables) {
     await Bun.write(`${generatedRoot}/client/${table.clientKey}.ts`, generateClientSource(table, tables));
     await Bun.write(`${generatedRoot}/models/${table.modelName}.ts`, generateModelMirrorSource(table));
   }
   await Bun.write(`${generatedRoot}/client/index.ts`, generateClientBarrelSource(tables));
+  await Bun.write(`${generatedRoot}/client/factory.ts`, generateClientFactorySource(tables));
 
   return Object.freeze({ artifact });
 }
