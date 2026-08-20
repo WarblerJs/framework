@@ -95,8 +95,19 @@ describe("build-ddl", () => {
   test("createIndex derives a deterministic name when none is given", () => {
     expect(buildCreateIndexSql("users", ["email"])).toBe('CREATE INDEX "users_email_idx" ON "users" ("email");');
     expect(buildCreateIndexSql("users", ["email"], { unique: true })).toBe('CREATE UNIQUE INDEX "users_email_key" ON "users" ("email");');
+    expect(buildCreateIndexSql("users", ["email"], { unique: true, where: { deletedAt: null } })).toBe('CREATE UNIQUE INDEX "users_email_key" ON "users" ("email") WHERE "deleted_at" IS NULL;');
     expect(buildCreateIndexSql("users", ["email"], { name: "custom_idx" })).toContain('"custom_idx"');
     expect(() => buildCreateIndexSql("users", [])).toThrow(DatabaseCompileError);
+  });
+
+  test("createTable can mark explicit nullable timestamp soft-delete metadata", () => {
+    const statements = buildCreateTableSql("users", {
+      id: PgTypes.Uuid({ primaryKey: true }),
+      deletedAt: PgTypes.Timestamp({ nullable: true }),
+    }, { softDelete: true });
+    expect(statements[0]).toContain('"deleted_at" TIMESTAMP');
+    expect(statements).toContain('COMMENT ON TABLE "users" IS \'warbler:soft-delete\';');
+    expect(() => buildCreateTableSql("users", { id: PgTypes.Uuid({ primaryKey: true }) }, { softDelete: true })).toThrow(DatabaseCompileError);
   });
 
   test("dropIndex honors ifExists", () => {

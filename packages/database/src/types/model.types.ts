@@ -14,6 +14,12 @@ export interface IndexMetadata {
   readonly name: string;
   readonly column: string;
   readonly unique: boolean;
+  readonly where?: readonly IndexPredicateMetadata[];
+}
+
+export interface IndexPredicateMetadata {
+  readonly column: string;
+  readonly operator: "isNull" | "isNotNull";
 }
 
 export interface ForeignKeyMetadata {
@@ -60,9 +66,16 @@ export interface TableMetadata {
   readonly clientKey: string;
   readonly tableName: string;
   readonly columns: readonly ColumnMetadata[];
+  readonly softDelete?: SoftDeleteMetadata;
   readonly primaryKey: readonly string[];
   readonly indexes: readonly IndexMetadata[];
   readonly foreignKeys: readonly ForeignKeyMetadata[];
   readonly checks: readonly CheckConstraintMetadata[];
   readonly enums: readonly EnumTypeMetadata[];
+}
+
+export interface SoftDeleteMetadata {
+  readonly enabled: true;
+  readonly column: string;
+  readonly field: string;
 }

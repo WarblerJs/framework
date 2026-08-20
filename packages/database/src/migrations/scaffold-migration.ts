@@ -26,6 +26,10 @@ export interface ScaffoldedMigration {
   readonly content: string;
 }
 
+export interface ScaffoldMigrationOptions {
+  readonly softDelete?: boolean;
+}
+
 function parseKindAndName(arg: string): Readonly<{ kind: MigrationKind; name: string }> {
   for (const kind of KINDS) {
     const prefix = `${kind}:`;
@@ -41,17 +45,18 @@ function parseKindAndName(arg: string): Readonly<{ kind: MigrationKind; name: st
 const header = 'import type { PgMigration } from "@warbler/database";\n';
 const headerWithBuilders = 'import type { PgMigration } from "@warbler/database";\nimport { PgDefault, PgTypes } from "@warbler/database";\n';
 
-function content(kind: MigrationKind, name: string): string {
+function content(kind: MigrationKind, name: string, options: ScaffoldMigrationOptions): string {
   switch (kind) {
     case "create:table": {
       const table = deriveTableName(name);
+      const softDelete = options.softDelete !== false;
       return `${headerWithBuilders}
 export const up: PgMigration = async (pgm) => {
   await pgm.createTable(${JSON.stringify(table)}, {
     id: PgTypes.Uuid({ primaryKey: true, default: PgDefault.GenRandomUuid }),
     createdAt: PgTypes.Timestamp({ default: PgDefault.Now, nullable: false }),
     updatedAt: PgTypes.Timestamp({ default: PgDefault.Now, nullable: false }),
-  });
+${softDelete ? "    deletedAt: PgTypes.Timestamp({ nullable: true }),\n" : ""}  }, { softDelete: ${String(softDelete)} });
 };
 
 export const down: PgMigration = async (pgm) => {
@@ -195,8 +200,8 @@ export const down: PgMigration = async (pgm) => {
 }
 
 /** Scaffolds a new timestamped migration file for one of the 14 supported `kind:name` labels. */
-export function scaffoldMigration(arg: string, now: Date = new Date()): ScaffoldedMigration {
+export function scaffoldMigration(arg: string, now: Date = new Date(), options: ScaffoldMigrationOptions = {}): ScaffoldedMigration {
   const { kind, name } = parseKindAndName(arg);
   const fileName = `${formatTimestamp(now)}_${arg.replaceAll(":", "_")}.ts`;
-  return Object.freeze({ fileName, content: content(kind, name) });
+  return Object.freeze({ fileName, content: content(kind, name, options) });
 }

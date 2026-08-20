@@ -40,6 +40,15 @@ describe("scaffoldMigration", () => {
     const { content } = scaffoldMigration("create:table:user", FIXED_DATE);
     expect(content).toContain('pgm.createTable("users"');
     expect(content).toContain('pgm.dropTable("users")');
+    expect(content).toContain("deletedAt: PgTypes.Timestamp({ nullable: true })");
+    expect(content).toContain("{ softDelete: true }");
+  });
+
+  test("create:table can opt out of soft-delete scaffolding", () => {
+    const { content } = scaffoldMigration("create:table:log", FIXED_DATE, { softDelete: false });
+    expect(content).toContain('pgm.createTable("logs"');
+    expect(content).not.toContain("deletedAt");
+    expect(content).toContain("{ softDelete: false }");
   });
 
   test("rejects an unknown kind", () => {

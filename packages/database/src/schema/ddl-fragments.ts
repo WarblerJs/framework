@@ -1,5 +1,5 @@
 import { PgDefault } from "../columns/pg-default";
-import type { CheckConstraintMetadata, ForeignKeyMetadata, RawSqlDefault } from "../types/model.types";
+import type { CheckConstraintMetadata, ForeignKeyMetadata, IndexPredicateMetadata, RawSqlDefault } from "../types/model.types";
 import { quoteIdentifier, quoteLiteral } from "../utils/sql-identifier";
 
 const RAW_DEFAULT_EXPRESSIONS = new Set<string>(Object.values(PgDefault));
@@ -67,9 +67,13 @@ export function renderCreateIndexStatement(
   indexName: string,
   columns: readonly string[],
   unique: boolean,
+  where: readonly IndexPredicateMetadata[] = [],
 ): string {
   const kind = unique ? "CREATE UNIQUE INDEX" : "CREATE INDEX";
-  return `${kind} ${quoteIdentifier(indexName)} ON ${quoteIdentifier(tableName)} (${columns.map(quoteIdentifier).join(", ")});`;
+  const predicate = where.length === 0
+    ? ""
+    : ` WHERE ${where.map((item) => `${quoteIdentifier(item.column)} IS ${item.operator === "isNotNull" ? "NOT " : ""}NULL`).join(" AND ")}`;
+  return `${kind} ${quoteIdentifier(indexName)} ON ${quoteIdentifier(tableName)} (${columns.map(quoteIdentifier).join(", ")})${predicate};`;
 }
 
 /** Renders `DROP INDEX [IF EXISTS] "name"`. */

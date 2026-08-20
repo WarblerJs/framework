@@ -3,7 +3,7 @@ import { ExitCode, type CLICommandName, type CLIFlagValue, type ParsedCLI } from
 
 const COMMANDS = new Set<CLICommandName>(["dev", "build", "start", "doctor", "inspect", "new", "generate", "db:pg", "clean", "version", "help"]);
 const VALUE_FLAGS = new Set(["project", "mode", "host", "port", "out", "step", "only"]);
-const BOOLEAN_FLAGS = new Set(["watch", "no-watch", "minify", "no-minify", "sourcemap", "no-sourcemap", "no-color", "json", "verbose", "quiet", "dry-run", "force", "seed", "help"]);
+const BOOLEAN_FLAGS = new Set(["watch", "no-watch", "minify", "no-minify", "sourcemap", "no-sourcemap", "no-color", "json", "verbose", "quiet", "dry-run", "force", "seed", "no-soft-delete", "help"]);
 
 /** Parses CLI arguments without mutating input or retaining global state. */
 export function parseCLI(input: readonly string[]): ParsedCLI {

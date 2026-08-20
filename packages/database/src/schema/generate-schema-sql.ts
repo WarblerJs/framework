@@ -26,7 +26,11 @@ function renderTable(table: TableMetadata): string {
   const statements = [`CREATE TABLE ${quoteIdentifier(table.tableName)} (\n${lines.join(",\n")}\n);`];
 
   for (const index of table.indexes) {
-    statements.push(renderCreateIndexStatement(table.tableName, index.name, [index.column], index.unique));
+    statements.push(renderCreateIndexStatement(table.tableName, index.name, [index.column], index.unique, index.where ?? []));
+  }
+
+  if (table.softDelete?.enabled === true) {
+    statements.push(`COMMENT ON TABLE ${quoteIdentifier(table.tableName)} IS ${quoteLiteral("warbler:soft-delete")};`);
   }
 
   for (const column of table.columns) {

@@ -7,6 +7,12 @@ import {
   executeCreateManyAndReturn,
   executeDelete,
   executeDeleteMany,
+  executeForceDelete,
+  executeForceDeleteMany,
+  executeRestore,
+  executeRestoreMany,
+  executeSoftDelete,
+  executeSoftDeleteMany,
   executeUpdate,
   executeUpdateMany,
   executeUpdateManyAndReturn,
@@ -44,6 +50,14 @@ const schema: RuntimeReadSchema = Object.freeze({
 });
 
 const user = schema.models.User!;
+const softUser = Object.freeze({
+  ...user,
+  columns: Object.freeze([
+    ...user.columns,
+    Object.freeze({ field: "deletedAt", column: "deleted_at", kind: "date" as const, pgType: "timestamp", nullable: true, unique: false, primaryKey: false }),
+  ]),
+  softDelete: Object.freeze({ column: "deleted_at", field: "deletedAt" }),
+});
 
 describe("write query compiler", () => {
   test("create inserts parameterized data and returns selected columns", async () => {
@@ -154,6 +168,36 @@ describe("write query compiler", () => {
     expect(deleteManySql.queries[0]!.sql).toContain('DELETE FROM "users" AS "wq0" WHERE "wq0"."active" = $1 RETURNING 1');
     await expect(executeDeleteMany(createFakeSql(), schema, user, { where: {} })).rejects.toThrow(DatabaseQueryError);
     await expect(executeDelete(createFakeSql(), schema, user, { where: { id: "missing" } })).rejects.toThrow(DatabaseRecordNotFoundError);
+  });
+
+  test("soft-delete lifecycle mutations use guarded single-statement SQL and forceDelete remains physical", async () => {
+    const deletedAt = new Date("2026-01-01T00:00:00Z");
+    const softDelete = createFakeSql([{ id: "u1", deletedAt }]);
+    await executeSoftDelete(softDelete, schema, softUser, { where: { id: "u1" }, select: { id: true, deletedAt: true } });
+    expect(softDelete.queries[0]!.sql).toBe('UPDATE "users" SET "deleted_at" = NOW() WHERE "id" = $1 AND "deleted_at" IS NULL RETURNING "id" AS "id", "deleted_at" AS "deletedAt"');
+    expect(softDelete.queries[0]!.params).toEqual(["u1"]);
+
+    const softMany = createFakeSql([{ count: 2 }]);
+    await expect(executeSoftDeleteMany(softMany, schema, softUser, { where: { active: true } })).resolves.toEqual({ count: 2 });
+    expect(softMany.queries[0]!.sql).toContain('UPDATE "users" AS "wq0" SET "deleted_at" = NOW() WHERE ("wq0"."active" = $1) AND "wq0"."deleted_at" IS NULL RETURNING 1');
+
+    const restore = createFakeSql([{ id: "u1" }]);
+    await executeRestore(restore, schema, softUser, { where: { id: "u1" }, select: { id: true } });
+    expect(restore.queries[0]!.sql).toBe('UPDATE "users" SET "deleted_at" = NULL WHERE "id" = $1 AND "deleted_at" IS NOT NULL RETURNING "id" AS "id"');
+
+    const restoreMany = createFakeSql([{ count: 1 }]);
+    await expect(executeRestoreMany(restoreMany, schema, softUser, { where: { active: false } })).resolves.toEqual({ count: 1 });
+    expect(restoreMany.queries[0]!.sql).toContain('SET "deleted_at" = NULL WHERE ("wq0"."active" = $1) AND "wq0"."deleted_at" IS NOT NULL');
+
+    const force = createFakeSql([{ id: "u1" }]);
+    await executeForceDelete(force, schema, softUser, { where: { id: "u1" }, select: { id: true } });
+    expect(force.queries[0]!.sql).toBe('DELETE FROM "users" WHERE "id" = $1 RETURNING "id" AS "id"');
+
+    const forceMany = createFakeSql([{ count: 1 }]);
+    await executeForceDeleteMany(forceMany, schema, softUser, { where: { active: false } });
+    expect(forceMany.queries[0]!.sql).toContain('DELETE FROM "users" AS "wq0" WHERE "wq0"."active" = $1 RETURNING 1');
+
+    await expect(executeSoftDelete(createFakeSql(), schema, user, { where: { id: "u1" } })).rejects.toThrow(DatabaseQueryError);
   });
 
   test("rejects explicit undefined, unknown fields, and invalid mutation operators", async () => {

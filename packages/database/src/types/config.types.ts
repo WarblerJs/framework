@@ -20,6 +20,8 @@ export interface PgMigrationsConfig {
   readonly generated: string;
   readonly path: string;
   readonly seeds: string;
+  /** Adds nullable `deleted_at` lifecycle columns to create-table migration scaffolds by default. @default true */
+  readonly softDelete?: boolean;
   /** Overrides automatic singularization for irregular table names, e.g. `{ people: "Person" }`. */
   readonly modelNames?: Readonly<Record<string, string>>;
 }

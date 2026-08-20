@@ -98,7 +98,7 @@ export const seed: PgSeed<WlbPgTransactionClient> = async (db) => {
       };
     });
 
-    await db.product.createMany({
+    await db.products.createMany({
       data: products,
     });
 

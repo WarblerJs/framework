@@ -51,7 +51,7 @@ describe("generateClientSource aggregation types", () => {
     expect(source).toContain('primaryKeyFields: Object.freeze(["id"])');
     expect(source).toContain('field: "id", column: "id", kind: "string", pgType: "uuid"');
     expect(source).toContain('field: "total", column: "total", kind: "number", pgType: "numeric"');
-    expect(source).toContain("exists(args?: { readonly where?: OrderWhere }): Promise<boolean>;");
+    expect(source).toContain("exists(args?: { readonly where?: OrderWhere; }): Promise<boolean>;");
     expect(source).toContain("aggregate<A extends OrderAggregateArgs>(args: A & { readonly lock?: never }): Promise<OrderAggregatePayload<A>>;");
     expect(source).toContain("groupBy<A extends OrderGroupByArgs>(args: A & { readonly lock?: never }): Promise<readonly OrderGroupByPayload<A>[]>;");
     expect(source).not.toContain("readonly where?: OrderWhere; readonly select?: S; readonly lock?: PgRowLock; };");
@@ -67,5 +67,30 @@ describe("generateClientSource aggregation types", () => {
     expect(source).toContain("readonly _sum?: OrderAggregateFilter<string | null>;");
     expect(source).toContain("readonly _min?: OrderAggregateFilter<string | null>;");
     expect(source).toContain("readonly _count?: OrderAggregateFilter<number>;");
+  });
+
+  test("emits soft-delete metadata, scopes, and lifecycle delegates only for capable models", () => {
+    const softOrder: TableMetadata = Object.freeze({
+      ...orderTable,
+      columns: Object.freeze([
+        ...orderTable.columns,
+        Object.freeze({ fieldName: "deletedAt", columnName: "deleted_at", pgType: "timestamp", sqlType: "TIMESTAMP", nullable: true, unique: false, primaryKey: false, identity: false, index: false }),
+      ]),
+      softDelete: Object.freeze({ enabled: true, column: "deleted_at", field: "deletedAt" }),
+    });
+    const source = generateClientSource(softOrder);
+    expect(source).toContain("readonly deletedAt: Date | null;");
+    expect(source).not.toContain("deletedAt?: Date | null;");
+    expect(source).toContain('softDelete: Object.freeze({ column: "deleted_at", field: "deletedAt" })');
+    expect(source).toContain("readonly withDeleted?: boolean;");
+    expect(source).toContain("softDelete(args: { readonly where: OrderUniqueWhere }): Promise<OrderRow>;");
+    expect(source).toContain("restoreMany(args: { readonly where: OrderWhere }): Promise<MutationCountResult>;");
+    expect(source).toContain("forceDeleteMany(args: { readonly where: OrderWhere }): Promise<MutationCountResult>;");
+    expect(source).toContain("delegate.softDelete =");
+    expect(source).toContain('export const softDelete = (...args: readonly unknown[]) => callDefault("softDelete", args);');
+
+    const normal = generateClientSource(orderTable);
+    expect(normal).not.toContain("delegate.softDelete =");
+    expect(normal).not.toContain("readonly withDeleted?: boolean;");
   });
 });

@@ -1,6 +1,8 @@
 import type { ColumnBuilder, ColumnValue } from "../types/column.types";
 import type { PgDefaultTypes } from "../columns/pg-default";
 
+export type IndexWherePredicate = Readonly<Record<string, null | { readonly not: null }>>;
+
 export interface AlterColumnChanges {
   readonly type?: ColumnBuilder;
   readonly nullable?: boolean;
@@ -11,6 +13,7 @@ export interface AlterColumnChanges {
 export interface CreateIndexOptions {
   readonly unique?: boolean;
   readonly name?: string;
+  readonly where?: IndexWherePredicate;
 }
 
 export interface DropOptions {
@@ -19,6 +22,7 @@ export interface DropOptions {
 
 export interface CreateTableOptions {
   readonly ifNotExists?: boolean;
+  readonly softDelete?: boolean;
 }
 
 export interface DropTableOptions extends DropOptions {

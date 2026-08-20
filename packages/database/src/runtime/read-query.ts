@@ -59,6 +59,12 @@ export interface RuntimeModel {
   readonly relations: readonly RuntimeRelation[];
   readonly defaultOrderColumn: string;
   readonly primaryKeyFields?: readonly string[];
+  readonly softDelete?: RuntimeSoftDelete;
+}
+
+export interface RuntimeSoftDelete {
+  readonly column: string;
+  readonly field: string;
 }
 
 export interface RuntimeReadSchema {
@@ -75,11 +81,15 @@ export interface ReadQueryArgs {
   readonly cursor?: unknown;
   readonly distinct?: unknown;
   readonly lock?: unknown;
+  readonly withDeleted?: unknown;
+  readonly onlyDeleted?: unknown;
 }
 
 export interface CountQueryArgs {
   readonly where?: unknown;
   readonly select?: unknown;
+  readonly withDeleted?: unknown;
+  readonly onlyDeleted?: unknown;
 }
 
 export interface AggregateQueryArgs {
@@ -89,6 +99,8 @@ export interface AggregateQueryArgs {
   readonly _avg?: unknown;
   readonly _min?: unknown;
   readonly _max?: unknown;
+  readonly withDeleted?: unknown;
+  readonly onlyDeleted?: unknown;
 }
 
 export interface GroupByQueryArgs extends AggregateQueryArgs {
@@ -147,6 +159,11 @@ interface CompiledQuery {
   readonly sql: string;
   readonly params: readonly unknown[];
   readonly usesRowLock?: boolean;
+}
+
+interface DeletedScopeArgs {
+  readonly withDeleted?: unknown;
+  readonly onlyDeleted?: unknown;
 }
 
 const DEFAULT_FIND_MANY_LIMIT = 100;
@@ -265,6 +282,31 @@ function rejectUnsupportedRowLock(model: RuntimeModel, args: unknown, operation:
   if (isPlainObject(args) && args.lock !== undefined) {
     throw new DatabaseQueryError(model.name, `\`lock\` is not supported on ${operation}.`);
   }
+}
+
+function validateDeletedScope(model: RuntimeModel, args: DeletedScopeArgs | undefined): void {
+  const withDeleted = args?.withDeleted;
+  const onlyDeleted = args?.onlyDeleted;
+  if (withDeleted !== undefined && typeof withDeleted !== "boolean") throw new DatabaseQueryError(model.name, "`withDeleted` must be a boolean.");
+  if (onlyDeleted !== undefined && typeof onlyDeleted !== "boolean") throw new DatabaseQueryError(model.name, "`onlyDeleted` must be a boolean.");
+  if (withDeleted === true && onlyDeleted === true) throw new DatabaseQueryError(model.name, "`withDeleted` and `onlyDeleted` cannot both be true.");
+  if (model.softDelete === undefined && (withDeleted !== undefined || onlyDeleted !== undefined)) {
+    throw new DatabaseQueryError(model.name, "Deleted-row scope options require a soft-delete-enabled model.");
+  }
+}
+
+function deletedScopePredicate(model: RuntimeModel, alias: string, args: DeletedScopeArgs | undefined): string {
+  validateDeletedScope(model, args);
+  if (model.softDelete === undefined || args?.withDeleted === true) return "";
+  const column = `${q(alias)}.${q(model.softDelete.column)}`;
+  return args?.onlyDeleted === true ? `${column} IS NOT NULL` : `${column} IS NULL`;
+}
+
+function compileScopedWhere(state: CompileState, model: RuntimeModel, alias: string, where: unknown, depth: number, args?: DeletedScopeArgs): string {
+  const scope = deletedScopePredicate(model, alias, args);
+  const predicate = compileWhere(state, model, alias, where, depth);
+  if (scope.length === 0) return predicate;
+  return [scope, predicate.length === 0 ? "" : `(${predicate})`].filter((part) => part.length > 0).join(" AND ");
 }
 
 function validateExplainBoolean(model: RuntimeModel, options: Readonly<Record<string, unknown>>, field: keyof PgExplainOptions): boolean | undefined {
@@ -395,8 +437,10 @@ function compileRelationFilter(state: CompileState, model: RuntimeModel, alias: 
   const relationAlias = `wq${state.nextAlias++}`;
   const join = `${q(relationAlias)}.${q(relation.foreignColumn)} = ${q(alias)}.${q(relation.localColumn)}`;
   const existsFor = (where: unknown, negateWhere: boolean): string => {
+    const scope = deletedScopePredicate(target, relationAlias, undefined);
     const predicate = compileWhere(state, target, relationAlias, where, depth + 1);
-    const whereSql = predicate === "" ? join : `${join} AND ${negateWhere ? `NOT (${predicate})` : predicate}`;
+    const nested = predicate === "" ? "" : negateWhere ? `NOT (${predicate})` : scope.length === 0 ? predicate : `(${predicate})`;
+    const whereSql = [join, scope, nested].filter((part) => part.length > 0).join(" AND ");
     return `EXISTS (SELECT 1 FROM ${q(target.table)} AS ${q(relationAlias)} WHERE ${whereSql})`;
   };
 
@@ -721,7 +765,7 @@ function compileRelationSelection(state: CompileState, model: RuntimeModel, alia
   const relationArgs = value as ReadQueryArgs;
   if (relationArgs.lock !== undefined) throw new DatabaseQueryError(model.name, "`lock` is not supported in relation selections.");
   const selection = compileSelection(state, target, relationAlias, relationArgs, depth + 1);
-  const where = compileWhere(state, target, relationAlias, relationArgs.where, depth + 1);
+  const where = compileScopedWhere(state, target, relationAlias, relationArgs.where, depth + 1, relationArgs);
   const relationWhere = `${q(relationAlias)}.${q(relation.foreignColumn)} = ${q(alias)}.${q(relation.localColumn)}${where === "" ? "" : ` AND ${where}`}`;
   const orderBy = compileOrderBy(state, target, relationAlias, relationArgs.orderBy);
   const take = parseTake(target, relationArgs.take);
@@ -968,7 +1012,7 @@ function compileReadSql(schema: RuntimeReadSchema, model: RuntimeModel, args: Re
     const skipped = parseSkip(model, query.skip);
     if (skipped !== 0) throw new DatabaseQueryError(model.name, "`skip` cannot be greater than 0 when `cursor` is used.");
   }
-  const where = compileWhere(state, model, alias, query.where, 0);
+  const where = compileScopedWhere(state, model, alias, query.where, 0, query);
   const cursor = compileCursor(state, model, alias, query.cursor, query.orderBy);
   const predicates = [where, cursor].filter((part) => part.length > 0);
   const whereSql = predicates.length === 0 ? "" : `WHERE ${predicates.join(" AND ")}`;
@@ -1072,7 +1116,7 @@ export async function executeFindMany<Row>(sql: SQL, schema: RuntimeReadSchema, 
 function compileCountSelectionSql(schema: RuntimeReadSchema, model: RuntimeModel, args: CountQueryArgs): CompiledQuery {
   const state = createCompileState(schema);
   const alias = "wq0";
-  const where = compileWhere(state, model, alias, args.where, 0);
+  const where = compileScopedWhere(state, model, alias, args.where, 0, args);
   const whereSql = where.length === 0 ? "" : `WHERE ${where}`;
   const parts: string[] = [];
   countSelectionParts(model, alias, args.select, parts);
@@ -1104,7 +1148,7 @@ function compileExistsSql(schema: RuntimeReadSchema, model: RuntimeModel, args?:
   rejectUnsupportedRowLock(model, args, "exists");
   const state = createCompileState(schema);
   const alias = "wq0";
-  const where = compileWhere(state, model, alias, args?.where, 0);
+  const where = compileScopedWhere(state, model, alias, args?.where, 0, args);
   const whereSql = where.length === 0 ? "" : `WHERE ${where}`;
   return {
     sql: `SELECT EXISTS (${[
@@ -1128,14 +1172,14 @@ export async function executeExists(sql: SQL, schema: RuntimeReadSchema, model: 
 function compileAggregateSql(schema: RuntimeReadSchema, model: RuntimeModel, args: AggregateQueryArgs): CompiledQuery {
   if (!isPlainObject(args)) throw new DatabaseQueryError(model.name, "aggregate args must be an object.");
   for (const key of Object.keys(args)) {
-    if (key !== "where" && key !== "_count" && key !== "_sum" && key !== "_avg" && key !== "_min" && key !== "_max") {
+    if (key !== "where" && key !== "_count" && key !== "_sum" && key !== "_avg" && key !== "_min" && key !== "_max" && key !== "withDeleted" && key !== "onlyDeleted") {
       throw new DatabaseQueryError(model.name, `Unknown aggregate option "${key}".`);
     }
   }
   const state = createCompileState(schema);
   const alias = "wq0";
   const selections = compileAggregateSelections(model, alias, args, false);
-  const where = compileWhere(state, model, alias, args.where, 0);
+  const where = compileScopedWhere(state, model, alias, args.where, 0, args);
   const whereSql = where.length === 0 ? "" : `WHERE ${where}`;
   return {
     sql: `SELECT ${selections.join(", ")} FROM ${q(model.table)} AS ${q(alias)} ${whereSql}`.trim(),
@@ -1155,7 +1199,7 @@ export async function executeAggregate(sql: SQL, schema: RuntimeReadSchema, mode
 function compileGroupBySql(schema: RuntimeReadSchema, model: RuntimeModel, args: GroupByQueryArgs): CompiledQuery & { readonly groupColumns: readonly RuntimeColumn[] } {
   if (!isPlainObject(args)) throw new DatabaseQueryError(model.name, "groupBy args must be an object.");
   for (const key of Object.keys(args)) {
-    if (key !== "by" && key !== "where" && key !== "having" && key !== "orderBy" && key !== "take" && key !== "skip" && key !== "_count" && key !== "_sum" && key !== "_avg" && key !== "_min" && key !== "_max") {
+    if (key !== "by" && key !== "where" && key !== "having" && key !== "orderBy" && key !== "take" && key !== "skip" && key !== "_count" && key !== "_sum" && key !== "_avg" && key !== "_min" && key !== "_max" && key !== "withDeleted" && key !== "onlyDeleted") {
       throw new DatabaseQueryError(model.name, `Unknown groupBy option "${key}".`);
     }
   }
@@ -1165,7 +1209,7 @@ function compileGroupBySql(schema: RuntimeReadSchema, model: RuntimeModel, args:
   const groupFields = new Set(groupColumns.map((column) => column.field));
   const groupSelections = groupColumns.map((column) => `${q(alias)}.${q(column.column)} AS ${q(column.field)}`);
   const aggregateSelections = compileAggregateSelections(model, alias, args, true);
-  const where = compileWhere(state, model, alias, args.where, 0);
+  const where = compileScopedWhere(state, model, alias, args.where, 0, args);
   const whereSql = where.length === 0 ? "" : `WHERE ${where}`;
   const groupBy = `GROUP BY ${groupColumns.map((column) => `${q(alias)}.${q(column.column)}`).join(", ")}`;
   const having = compileHaving(state, model, alias, args.having);

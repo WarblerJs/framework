@@ -52,6 +52,7 @@ export const databaseConfig = {
       generated: "database/warbler/pg/generated",
       path: "database/warbler/pg/migrations",
       seeds: "database/warbler/pg/seeds",
+      softDelete: true,
       // Optional: override automatic table -> model name singularization for irregular words.
       // modelNames: { people: "Person" },
     },
@@ -93,7 +94,8 @@ export const up: PgMigration = async (pgm) => {
     email: PgTypes.VarChar({ length: 255, nullable: false, unique: true }),
     createdAt: PgTypes.Timestamp({ default: PgDefault.Now, nullable: false }),
     updatedAt: PgTypes.Timestamp({ default: PgDefault.Now, nullable: false }),
-  });
+    deletedAt: PgTypes.Timestamp({ nullable: true }),
+  }, { softDelete: true });
 };
 
 export const down: PgMigration = async (pgm) => {
@@ -125,6 +127,29 @@ export const down: PgMigration = async (pgm) => {
 The full `pgm` API: `createTable`, `dropTable`, `renameTable`, `addColumns`, `dropColumns`,
 `alterColumn`, `renameColumn`, `createIndex`, `dropIndex`, `createEnum`, `dropEnum`, `alterEnum`,
 `raw`. Every call executes immediately against the transaction that migration runs in.
+
+`migrations.softDelete` defaults to `true`. `create:table` scaffolds a nullable PostgreSQL
+`deleted_at TIMESTAMP` column mapped to generated TypeScript field `deletedAt`, and records an
+explicit table metadata marker. A column named `deleted_at` alone is not enough to enable soft
+delete. For tables where physical deletion is the right lifecycle, scaffold with:
+
+```sh
+warbler db:pg migration create:table:log --no-soft-delete
+```
+
+Active-only unique indexes are explicit and PostgreSQL-native:
+
+```ts
+await pgm.createIndex("users", ["email"], {
+  unique: true,
+  name: "users_email_unique_active",
+  where: { deletedAt: null },
+});
+```
+
+Warbler does not rewrite all unique constraints. Global uniqueness remains global unless you choose
+a partial index. Restoring a deleted row can fail if another active row now owns the same active-only
+unique value; that PostgreSQL uniqueness error is preserved.
 
 **Run pending migrations**:
 
@@ -304,6 +329,47 @@ Each table gets `findUnique`, `findUniqueOrThrow`, `findFirst`, `findFirstOrThro
 (compatibility alias for `create({ data })`), `update`, `updateMany`, `updateManyAndReturn`,
 `upsert`, `delete`, and `deleteMany`. `WlbPg` also exposes `transaction` and the native Bun SQL
 escape hatch `db`. Read and write methods use query objects:
+
+For soft-delete-enabled tables, normal reads automatically add `deleted_at IS NULL` in PostgreSQL.
+This applies to `findUnique`, `findFirst`, `findMany`, `count`, `exists`, `aggregate`, `groupBy`,
+`distinct`, cursor pagination, relation reads, row-locking reads, and `explain.*`. Scope overrides
+are local to the query level where they are written:
+
+```ts
+await WlbPg.user.findMany();                  // active rows only
+await WlbPg.user.findMany({ withDeleted: true }); // active + deleted
+await WlbPg.user.findMany({ onlyDeleted: true }); // deleted only
+
+await WlbPg.user.findUnique({
+  where: { id },
+  include: {
+    posts: { withDeleted: true },
+  },
+});
+```
+
+`withDeleted` and `onlyDeleted` cannot both be true. Root scope does not automatically propagate to
+relations; set the relation scope explicitly. Soft-delete lifecycle methods are generated only for
+soft-delete-enabled models:
+
+```ts
+await WlbPg.user.softDelete({ where: { id } });      // UPDATE ... SET deleted_at = NOW()
+await WlbPg.user.restore({ where: { id } });         // UPDATE ... SET deleted_at = NULL
+await WlbPg.user.forceDelete({ where: { id } });     // physical DELETE
+await WlbPg.user.softDeleteMany({ where: { isActive: false } });
+await WlbPg.user.restoreMany({ where: { isActive: true } });
+await WlbPg.user.forceDeleteMany({ where: { isActive: false } });
+```
+
+Existing `delete` and `deleteMany` remain physical deletes. Lifecycle updates run as normal
+transactional PostgreSQL statements and roll back naturally inside `WlbPg.transaction`; there is no
+automatic cascade soft delete or cascade restore, and foreign keys still see soft-deleted rows as
+physical rows.
+
+Soft delete is not universally appropriate. It complicates unique constraints, foreign keys,
+relations, storage growth, analytics, and query complexity. Use `--no-soft-delete` for append-only
+logs, join/history tables, high-volume ephemeral data, or domains where physical deletion is the
+correct lifecycle.
 
 ```ts
 await WlbPg.userSession.findFirst({

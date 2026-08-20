@@ -104,6 +104,31 @@ const schema: RuntimeReadSchema = Object.freeze({
 const user = schema.models.User!;
 const post = schema.models.Post!;
 const product = schema.models.Product!;
+const softProduct = Object.freeze({
+  ...product,
+  columns: Object.freeze([
+    ...product.columns,
+    Object.freeze({ field: "deletedAt", column: "deleted_at", kind: "date" as const, pgType: "timestamp", nullable: true, unique: false, primaryKey: false }),
+  ]),
+  softDelete: Object.freeze({ column: "deleted_at", field: "deletedAt" }),
+});
+const softSchema: RuntimeReadSchema = Object.freeze({
+  models: Object.freeze({
+    ...schema.models,
+    Product: softProduct,
+    User: Object.freeze({
+      ...user,
+      columns: Object.freeze([
+        ...user.columns,
+        Object.freeze({ field: "deletedAt", column: "deleted_at", kind: "date" as const, pgType: "timestamp", nullable: true, unique: false, primaryKey: false }),
+      ]),
+      softDelete: Object.freeze({ column: "deleted_at", field: "deletedAt" }),
+    }),
+    Post: Object.freeze({ ...post, softDelete: Object.freeze({ column: "deleted_at", field: "deletedAt" }) }),
+  }),
+});
+const softUser = softSchema.models.User!;
+const softPost = softSchema.models.Post!;
 
 describe("read query compiler", () => {
   test("findUnique uses query-object where and rejects non-unique or ambiguous selectors", async () => {
@@ -115,6 +140,99 @@ describe("read query compiler", () => {
     await expect(executeFindUnique(createFakeSql(), schema, user, { where: {} })).rejects.toThrow(DatabaseQueryError);
     await expect(executeFindUnique(createFakeSql(), schema, user, { where: { age: 3 } })).rejects.toThrow(DatabaseQueryError);
     await expect(executeFindUnique(createFakeSql(), schema, user, { where: { id: "u1", email: "a@example.com" } })).rejects.toThrow(DatabaseQueryError);
+  });
+
+  test("soft-delete scopes compose with findUnique, count, exists, aggregate, groupBy, OR predicates, and invalid flags", async () => {
+    const normal = createFakeSql([{ id: "p1" }]);
+    await executeFindUnique(normal, softSchema, softProduct, { where: { id: "p1" } });
+    expect(normal.queries[0]!.sql).toContain('WHERE "wq0"."deleted_at" IS NULL AND ("wq0"."id" = $1)');
+
+    const withDeleted = createFakeSql([]);
+    await executeFindMany(withDeleted, softSchema, softProduct, { withDeleted: true, orderBy: { id: "asc" }, take: 4 });
+    expect(withDeleted.queries[0]!.sql).not.toContain('"deleted_at" IS NULL');
+    expect(withDeleted.queries[0]!.sql).not.toContain('"deleted_at" IS NOT NULL');
+
+    const onlyDeleted = createFakeSql([{ count: 2 }]);
+    await executeCount(onlyDeleted, softSchema, softProduct, { onlyDeleted: true });
+    expect(onlyDeleted.queries[0]!.sql).toBe('SELECT count(*)::int AS "count" FROM "products" AS "wq0" WHERE "wq0"."deleted_at" IS NOT NULL');
+
+    const orSql = createFakeSql([]);
+    await executeFindMany(orSql, softSchema, softProduct, {
+      where: { OR: [{ category: "electronics" }, { brand: "Acme" }] },
+      select: { id: true },
+    });
+    expect(orSql.queries[0]!.sql).toContain('WHERE "wq0"."deleted_at" IS NULL AND (("wq0"."category" = $1 OR "wq0"."brand" = $2))');
+
+    const aggregate = createFakeSql([{ __wlb_count_all: 2 }]);
+    await executeAggregate(aggregate, softSchema, softProduct, { _count: true });
+    expect(aggregate.queries[0]!.sql).toContain('WHERE "wq0"."deleted_at" IS NULL');
+
+    const grouped = createFakeSql([]);
+    await executeGroupBy(grouped, softSchema, softProduct, { by: ["category"], _count: true });
+    expect(grouped.queries[0]!.sql).toContain('WHERE "wq0"."deleted_at" IS NULL GROUP BY');
+
+    const exists = createFakeSql([{ exists: true }]);
+    await executeExists(exists, softSchema, softProduct, { withDeleted: true, where: { brand: "Acme" } });
+    expect(exists.queries[0]!.sql).toContain('WHERE "wq0"."brand" = $1');
+    expect(exists.queries[0]!.sql).not.toContain("deleted_at");
+
+    await expect(executeFindMany(createFakeSql(), softSchema, softProduct, { withDeleted: true, onlyDeleted: true })).rejects.toThrow(DatabaseQueryError);
+    await expect(executeFindMany(createFakeSql(), schema, product, { withDeleted: true })).rejects.toThrow(DatabaseQueryError);
+  });
+
+  test("soft-delete scope composes with distinct, cursor, EXPLAIN, and row locking", async () => {
+    const distinct = createFakeSql([]);
+    await executeFindMany(distinct, softSchema, softProduct, {
+      distinct: ["brand"],
+      select: { brand: true },
+      orderBy: { brand: "asc" },
+    });
+    expect(distinct.queries[0]!.sql).toBe('SELECT DISTINCT "wq0"."brand" AS "brand" FROM "products" AS "wq0" WHERE "wq0"."deleted_at" IS NULL ORDER BY "wq0"."brand" ASC LIMIT 100');
+
+    const cursor = createFakeSql([]);
+    await executeFindMany(cursor, softSchema, softProduct, {
+      cursor: { id: "p1" },
+      orderBy: { id: "asc" },
+      take: 2,
+      select: { id: true },
+    });
+    expect(cursor.queries[0]!.sql).toContain('WHERE "wq0"."deleted_at" IS NULL AND ("wq0"."id" > $1)');
+
+    const explain = createFakeSql([{ "QUERY PLAN": [] }]);
+    await executeExplainFindMany(explain, softSchema, softProduct, { onlyDeleted: true, select: { id: true } });
+    expect(explain.queries[0]!.sql).toContain('EXPLAIN (FORMAT JSON) SELECT "wq0"."id" AS "id" FROM "products" AS "wq0" WHERE "wq0"."deleted_at" IS NOT NULL');
+
+    const locked = createFakeTransactionSql([{ id: "p1" }]);
+    await executeTransaction(locked, (tx) => executeFindUnique(tx, softSchema, softProduct, { where: { id: "p1" }, lock: { mode: "update" } }));
+    expect(locked.queries[0]!.sql).toContain('WHERE "wq0"."deleted_at" IS NULL AND ("wq0"."id" = $1) LIMIT 1 FOR UPDATE');
+  });
+
+  test("soft-delete relation scopes are target-local and support relation overrides", async () => {
+    const sql = createFakeSql([]);
+    await executeFindMany(sql, softSchema, softUser, {
+      withDeleted: true,
+      select: {
+        id: true,
+        posts: {
+          select: { id: true },
+          orderBy: { id: "asc" },
+        },
+      },
+    });
+    expect(sql.queries[0]!.sql).toContain('FROM "users" AS "wq0"');
+    expect(sql.queries[0]!.sql).not.toContain('"wq0"."deleted_at"');
+    expect(sql.queries[0]!.sql).toContain('"wq1"."deleted_at" IS NULL');
+
+    const nested = createFakeSql([]);
+    await executeFindMany(nested, softSchema, softUser, {
+      select: { posts: { withDeleted: true, select: { id: true } } },
+    });
+    expect(nested.queries[0]!.sql).not.toContain('"wq1"."deleted_at" IS NULL');
+
+    const filter = createFakeSql([]);
+    await executeFindMany(filter, softSchema, softUser, { where: { posts: { some: { title: "hello" } } }, select: { id: true } });
+    expect(filter.queries[0]!.sql).toContain('EXISTS (SELECT 1 FROM "posts" AS "wq1" WHERE "wq1"."user_id" = "wq0"."id" AND "wq1"."deleted_at" IS NULL AND ("wq1"."title" = $1))');
+    expect(softPost.softDelete).toEqual({ column: "deleted_at", field: "deletedAt" });
   });
 
   test("orThrow methods share query paths and throw DatabaseRecordNotFoundError", async () => {
