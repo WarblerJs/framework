@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { isAbsolute, resolve } from "node:path";
 import { Console, createCorrelationId } from "@warbler/console";
 import { analyzeProgram } from "../analyzer/analyze-program";
 import { discoverProject, loadProjectConfig } from "../filesystem/discover-project";
@@ -33,10 +34,43 @@ export interface CompileOptions {
 export class Compiler {
   readonly #projectRoot: string;
   #program: ts.Program | undefined;
+  #host: ts.CompilerHost | undefined;
+  #hostOptionsKey: string | undefined;
+  readonly #sourceFileCache = new Map<string, CachedSourceFile>();
+  readonly #changedFiles = new Set<string>();
 
   /** Creates a compiler rooted at the supplied application directory. */
   public constructor(projectRoot: string = process.cwd()) {
-    this.#projectRoot = projectRoot;
+    this.#projectRoot = ts.sys.resolvePath(projectRoot);
+  }
+
+  /** Evicts source files whose on-disk contents changed before the next compile. */
+  public markChanged(fileName: string): void {
+    if (isCompilerConfigurationPath(fileName)) {
+      this.reset();
+      return;
+    }
+
+    this.#changedFiles.add(this.#canonicalPath(fileName));
+  }
+
+  /** Evicts a coalesced watcher batch before the next compile. */
+  public markChangedFiles(fileNames: readonly string[]): void {
+    if (fileNames.some(isCompilerConfigurationPath)) {
+      this.reset();
+      return;
+    }
+
+    for (const fileName of fileNames) this.markChanged(fileName);
+  }
+
+  /** Drops retained TypeScript state when project shape or compiler options may have changed. */
+  public reset(): void {
+    this.#program = undefined;
+    this.#host = undefined;
+    this.#hostOptionsKey = undefined;
+    this.#sourceFileCache.clear();
+    this.#changedFiles.clear();
   }
 
   /**
@@ -64,19 +98,23 @@ export class Compiler {
       Console.compiler("Discovering project and Graphs", "success", { compileId });
       Console.compiler("Building dependency graph", "started", { compileId });
 
+      this.#resetIfCompilerOptionsChanged(parsed.options);
+      this.#evictChangedFiles();
+      const host = this.#compilerHost(parsed.options);
       const program = ts.createProgram({
         rootNames: parsed.fileNames,
         options: parsed.options,
-      
+        host,
+
         ...(this.#program === undefined
           ? {}
           : { oldProgram: this.#program }),
-      
+
         ...(parsed.projectReferences === undefined
           ? {}
           : { projectReferences: parsed.projectReferences }),
       });
-      
+
       this.#program = program;
 
       const sourceFiles = program
@@ -156,6 +194,7 @@ export class Compiler {
             }),
           ),
         });
+        this.#markGeneratedArtifactsChanged(context.generatedApplication.files);
 
         context.applicationEntry = `${config.projectRoot}/.warbler/generated/build-${context.fingerprint}/application.generated.ts`;
         context.productionEntry = `${config.projectRoot}/.warbler/generated/production.generated.ts`;
@@ -218,6 +257,87 @@ export class Compiler {
       return context;
     }
   }
+
+  #compilerHost(options: ts.CompilerOptions): ts.CompilerHost {
+    if (this.#host !== undefined) return this.#host;
+
+    const host = ts.createCompilerHost(options);
+    const getSourceFile = host.getSourceFile.bind(host);
+
+    host.getSourceFile = (
+      fileName: string,
+      languageVersionOrOptions: ts.ScriptTarget | ts.CreateSourceFileOptions,
+      onError?: (message: string) => void,
+      shouldCreateNewSourceFile?: boolean,
+    ): ts.SourceFile | undefined => this.#sourceFile(
+      fileName,
+      () => getSourceFile(fileName, languageVersionOrOptions, onError, shouldCreateNewSourceFile),
+      shouldCreateNewSourceFile === true,
+    );
+
+    const getSourceFileByPath = host.getSourceFileByPath?.bind(host);
+    if (getSourceFileByPath !== undefined) {
+      host.getSourceFileByPath = (
+        fileName: string,
+        path: ts.Path,
+        languageVersionOrOptions: ts.ScriptTarget | ts.CreateSourceFileOptions,
+        onError?: (message: string) => void,
+        shouldCreateNewSourceFile?: boolean,
+      ): ts.SourceFile | undefined => this.#sourceFile(
+        fileName,
+        () => getSourceFileByPath(fileName, path, languageVersionOrOptions, onError, shouldCreateNewSourceFile),
+        shouldCreateNewSourceFile === true,
+      );
+    }
+
+    this.#host = host;
+    return host;
+  }
+
+  #resetIfCompilerOptionsChanged(options: ts.CompilerOptions): void {
+    const key = compilerOptionsKey(options);
+    if (this.#hostOptionsKey !== undefined && this.#hostOptionsKey !== key) this.reset();
+    this.#hostOptionsKey = key;
+  }
+
+  #sourceFile(fileName: string, create: () => ts.SourceFile | undefined, forceFresh: boolean): ts.SourceFile | undefined {
+    const key = this.#canonicalPath(fileName);
+    if (forceFresh) this.#sourceFileCache.delete(key);
+
+    const cached = this.#sourceFileCache.get(key);
+    const modifiedTime = sourceModifiedTime(fileName);
+    if (cached !== undefined && cached.modifiedTime === modifiedTime) return cached.sourceFile;
+    if (cached !== undefined) this.#sourceFileCache.delete(key);
+
+    const sourceFile = create();
+    if (sourceFile !== undefined) {
+      this.#sourceFileCache.set(key, Object.freeze({
+        sourceFile,
+        ...(modifiedTime === undefined ? {} : { modifiedTime }),
+      }));
+    }
+    return sourceFile;
+  }
+
+  #evictChangedFiles(): void {
+    for (const fileName of this.#changedFiles) this.#sourceFileCache.delete(fileName);
+    this.#changedFiles.clear();
+  }
+
+  #markGeneratedArtifactsChanged(files: Readonly<Record<string, string>>): void {
+    for (const fileName of Object.keys(files)) this.#changedFiles.add(this.#canonicalPath(`.warbler/generated/${fileName}`));
+  }
+
+  #canonicalPath(fileName: string): string {
+    const absolute = isAbsolute(fileName) ? fileName : resolve(this.#projectRoot, fileName);
+    const normalized = ts.sys.resolvePath(absolute).replaceAll("\\", "/");
+    return ts.sys.useCaseSensitiveFileNames ? normalized : normalized.toLowerCase();
+  }
+}
+
+interface CachedSourceFile {
+  readonly sourceFile: ts.SourceFile;
+  readonly modifiedTime?: number;
 }
 
 /** Compiles a TypeScript project and returns its complete compiler context. */
@@ -256,6 +376,23 @@ function isApplicationSource(fileName: string, root: string): boolean {
     !normalized.includes("/node_modules/") &&
     !normalized.includes("/dist/") &&
     !normalized.includes("/.warbler/generated/");
+}
+
+function isCompilerConfigurationPath(fileName: string): boolean {
+  const normalized = fileName.replaceAll("\\", "/");
+
+  return normalized === "tsconfig.json" ||
+    normalized === "package.json" ||
+    normalized.endsWith("/tsconfig.json") ||
+    normalized.endsWith("/package.json");
+}
+
+function sourceModifiedTime(fileName: string): number | undefined {
+  return ts.sys.getModifiedTime?.(fileName)?.getTime();
+}
+
+function compilerOptionsKey(options: ts.CompilerOptions): string {
+  return JSON.stringify(Object.entries(options).sort(([left], [right]) => left.localeCompare(right)));
 }
 
 function normalizeTypeScriptDiagnostic(input: ts.Diagnostic): CompilerDiagnostic {

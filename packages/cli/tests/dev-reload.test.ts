@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { ManagedDevSession, type DevelopmentRuntimeHandle, type DevelopmentRuntimeLauncher } from "../src/dev/dev-session";
 import { importGeneratedApplication } from "../src/dev/runtime-launcher";
 import { startRuntime, type RuntimeTransportLauncher, type RuntimeTransportStartInput } from "@warbler/runtime";
+import type { CompilerContext } from "@warbler/compiler";
 import { createTestProject } from "./helpers";
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -133,6 +134,28 @@ describe("managed development reload", () => {
     const after = await routes["/"]!.GET!(new Request("http://127.0.0.1/"));
     expect(await after.json()).toEqual({ message: "Fresh" });
     expect(session.buildNumber).toBe(2);
+    await session.stop();
+  }, 20_000);
+
+  test("reuses compiler SourceFiles that were not invalidated by a rebuild", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    const contexts: CompilerContext[] = [];
+    const session = await new ManagedDevSession(project.root, {
+      start(_root, compiler) {
+        contexts.push(compiler);
+        return { stop() {} };
+      },
+    }, false).start();
+
+    const controller = join(project.root, "src/graphs/home/home.controller.ts");
+    const graph = join(project.root, "src/graphs/home/home.graph.ts");
+    const source = await Bun.file(controller).text();
+    await Bun.write(controller, source.replace('@Get("/")', '@Get("/cached")'));
+    await session.notifyChanges(["src/graphs/home/home.controller.ts"]);
+
+    expect(contexts).toHaveLength(2);
+    expect(contexts[1]!.program.getSourceFile(controller)).not.toBe(contexts[0]!.program.getSourceFile(controller));
+    expect(contexts[1]!.program.getSourceFile(graph)).toBe(contexts[0]!.program.getSourceFile(graph));
     await session.stop();
   }, 20_000);
 
