@@ -14,41 +14,20 @@ export default class HomeController {
   @Get("/", { name: "home" })
   async index(request:AppRequest): Promise<Response> {
 
-    const rows = await WlbPg.products.findMany({
-      distinct: ["brand"],
-    
+    const result = await WlbPg.products.findMany({
+
       select: {
-        brand: true,
-        deletedAt: true,
+        brand: true, 
       },
     
       orderBy: {
         brand: "asc",
       },
+      take: 42
     });
+     
     
-    type DistinctRow = {
-      brand: string;
-      deletedAt: Date | null;
-    };
-    
-    const simpleRows: readonly DistinctRow[] = rows;
-    
-    const leaked = simpleRows.filter(
-      (row) => row.deletedAt !== null
-    );
-    
-    console.log("distinct rows:", rows.length);
-    console.log("deleted leaked:", leaked.length);
-    
-    if (leaked.length > 0) {
-      console.table(leaked);
-      throw new Error("Soft-delete DISTINCT leakage detected");
-    }
-    
-    console.log("✅ DISTINCT respects soft-delete scope");
-    
-    return JsonRes(  {result:true} );
+    return JsonRes( result );
   }
 
 

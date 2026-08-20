@@ -10,200 +10,75 @@ import { optimizeWIR } from "../optimizer/optimize-wir";
 import { generateArtifacts, writeArtifacts } from "../generator/generate-artifacts";
 import { analyzeContextBindings, analyzeExecutableBindings } from "../bindings";
 
-export interface CompileOptions {
-  /**
-   * Runs TypeScript semantic diagnostics for the entire program.
-   *
-   * Keep enabled for production builds, CI, and explicit type-check commands.
-   * Disable on the development hot path because full semantic diagnostics can
-   * dominate save/recompile latency.
-   *
-   * @default true
-   */
-  readonly semanticDiagnostics?: boolean;
-}
-
-/**
- * Warbler compiler facade.
- *
- * A Compiler instance retains the previous TypeScript Program so repeated
- * development compilations can reuse TypeScript's internal source/program
- * structures instead of rebuilding from a completely cold program each time.
- */
+/** Phase 1 compiler facade. One instance performs one project compilation at a time. */
 export class Compiler {
   readonly #projectRoot: string;
-  #program: ts.Program | undefined;
 
   /** Creates a compiler rooted at the supplied application directory. */
   public constructor(projectRoot: string = process.cwd()) {
     this.#projectRoot = projectRoot;
   }
 
-  /**
-   * Discovers, loads, analyzes, validates, and emits the Warbler application.
-   *
-   * Reuse the same Compiler instance in `warbler dev` so `oldProgram` remains
-   * available across file saves.
-   */
-  public async compile(options: Readonly<CompileOptions> = {}): Promise<CompilerContext> {
+  /** Discovers, loads, analyzes, validates, and emits metadata-only WIR. */
+  public async compile(): Promise<CompilerContext> {
     await Promise.resolve();
-
-    const semanticDiagnostics = options.semanticDiagnostics ?? true;
     const compileId = createCorrelationId("compile");
-    const timer = Console.timer("Compiler", {
-      compileId,
-      projectRoot: this.#projectRoot,
-    });
-
+    const timer = Console.timer("Compiler", { compileId, projectRoot: this.#projectRoot });
     Console.compiler("Discovering project and Graphs", "started", { compileId });
-
     try {
       const config = discoverProject(this.#projectRoot);
       const parsed = loadProjectConfig(config);
-
       Console.compiler("Discovering project and Graphs", "success", { compileId });
       Console.compiler("Building dependency graph", "started", { compileId });
-
       const program = ts.createProgram({
         rootNames: parsed.fileNames,
         options: parsed.options,
-      
-        ...(this.#program === undefined
-          ? {}
-          : { oldProgram: this.#program }),
-      
-        ...(parsed.projectReferences === undefined
-          ? {}
-          : { projectReferences: parsed.projectReferences }),
+        ...(parsed.projectReferences === undefined ? {} : { projectReferences: parsed.projectReferences }),
       });
-      
-      this.#program = program;
-
-      const sourceFiles = program
-        .getSourceFiles()
-        .filter((source) => isApplicationSource(source.fileName, config.projectRoot));
-
-      const typeScriptDiagnostics: ts.Diagnostic[] = [
-        ...parsed.errors,
-        ...program.getSyntacticDiagnostics(),
-      ];
-
-      if (semanticDiagnostics) {
-        typeScriptDiagnostics.push(...program.getSemanticDiagnostics());
-      }
-
-      const diagnostics = typeScriptDiagnostics.map(normalizeTypeScriptDiagnostic);
+      const sourceFiles = program.getSourceFiles().filter((source) => isApplicationSource(source.fileName, config.projectRoot));
+      const diagnostics = [...parsed.errors, ...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()].map(normalizeTypeScriptDiagnostic);
       const context = new CompilerContext(program, sourceFiles, config, diagnostics);
-
-      context.applicationWIR = validateApplication(
-        config.projectRoot,
-        analyzeProgram(context),
-        context.diagnostics,
-      );
-
+      context.applicationWIR = validateApplication(config.projectRoot, analyzeProgram(context), context.diagnostics);
       for (const diagnostic of context.diagnostics) {
         Console.diagnostic({
           source: "compiler",
           code: diagnostic.code,
           severity: diagnostic.category,
           message: diagnostic.message,
-          ...(diagnostic.sourceFile.length === 0
-            ? {}
-            : {
-                file: diagnostic.sourceFile,
-                line: diagnostic.line,
-                column: diagnostic.column,
-              }),
+          ...(diagnostic.sourceFile.length === 0 ? {} : { file: diagnostic.sourceFile, line: diagnostic.line, column: diagnostic.column }),
         });
       }
-
       Console.compiler("Building dependency graph", "success", { compileId });
       Console.compiler("Optimizing lookup tables", "started", { compileId });
-
       const optimized = optimizeWIR(context.applicationWIR);
-
       Console.compiler("Optimizing lookup tables", "success", { compileId });
       Console.compiler("Generating executable bindings", "started", { compileId });
-
-      const bindings = analyzeExecutableBindings(
-        context,
-        context.applicationWIR,
-        optimized,
-      );
-
+      const bindings = analyzeExecutableBindings(context, context.applicationWIR, optimized);
       if (bindings !== undefined) {
         const contextEntries = analyzeContextBindings(context, optimized);
-
-        context.generatedApplication = generateArtifacts(
-          optimized,
-          bindings,
-          contextEntries,
-        );
-
-        context.fingerprint = Bun.hash(
-          JSON.stringify({
-            generated: context.generatedApplication.files,
-            sources: sourceFiles.map((source) => [source.fileName, source.text]),
-          }),
-        ).toString(16);
-
+        context.generatedApplication = generateArtifacts(optimized, bindings, contextEntries);
+        context.fingerprint = Bun.hash(JSON.stringify({
+          generated: context.generatedApplication.files,
+          sources: sourceFiles.map((source) => [source.fileName, source.text]),
+        })).toString(16);
         await writeArtifacts(config.projectRoot, context.generatedApplication, {
           fingerprint: context.fingerprint,
-          sources: sourceFiles.map((source) =>
-            Object.freeze({
-              file: source.fileName,
-              text: source.text,
-            }),
-          ),
+          sources: sourceFiles.map((source) => Object.freeze({ file: source.fileName, text: source.text })),
         });
-
         context.applicationEntry = `${config.projectRoot}/.warbler/generated/build-${context.fingerprint}/application.generated.ts`;
         context.productionEntry = `${config.projectRoot}/.warbler/generated/production.generated.ts`;
       }
-
       const elapsed = timer.end({ diagnostics: context.diagnostics.length });
-
-      Console.compiler(
-        "Generating executable bindings",
-        bindings === undefined ? "failure" : "success",
-        { compileId },
-      );
-
-      Console.success("Compiler completed.", {
-        compileId,
-        duration: elapsed,
-      });
-
+      Console.compiler("Generating executable bindings", bindings === undefined ? "failure" : "success", { compileId });
+      Console.success("Compiler completed.", { compileId, duration: elapsed });
       return context;
     } catch (cause) {
       const elapsed = timer.end();
-
-      Console.compiler("Compiler", "failure", {
-        compileId,
-        duration: elapsed,
-      });
-
+      Console.compiler("Compiler", "failure", { compileId, duration: elapsed });
       const root = ts.sys.resolvePath(this.#projectRoot);
-      const config = Object.freeze({
-        projectRoot: root,
-        tsconfigPath: `${root}/tsconfig.json`,
-      });
-
-      const program = ts.createProgram({
-        rootNames: [],
-        options: {
-          strict: true,
-          noEmit: true,
-        },
-      });
-
-      const context = new CompilerContext(
-        program,
-        [],
-        config,
-        [projectDiagnostic(cause)],
-      );
-
+      const config = Object.freeze({ projectRoot: root, tsconfigPath: `${root}/tsconfig.json` });
+      const program = ts.createProgram({ rootNames: [], options: { strict: true, noEmit: true } });
+      const context = new CompilerContext(program, [], config, [projectDiagnostic(cause)]);
       context.applicationWIR = Object.freeze({
         version: 1,
         projectRoot: config.projectRoot,
@@ -214,27 +89,19 @@ export class Compiler {
         eventListeners: Object.freeze([]),
         eventInterceptors: Object.freeze([]),
       });
-
       return context;
     }
   }
 }
 
 /** Compiles a TypeScript project and returns its complete compiler context. */
-export async function compileProject(
-  projectRoot: string = process.cwd(),
-  options: Readonly<CompileOptions> = {},
-): Promise<CompilerContext> {
-  return new Compiler(projectRoot).compile(options);
+export async function compileProject(projectRoot: string = process.cwd()): Promise<CompilerContext> {
+  return new Compiler(projectRoot).compile();
 }
 
 /** Compiles a TypeScript application and returns only its immutable WIR. */
-export async function compileApplication(
-  projectRoot: string = process.cwd(),
-  options: Readonly<CompileOptions> = {},
-): Promise<ApplicationWIR> {
-  const context = await compileProject(projectRoot, options);
-
+export async function compileApplication(projectRoot: string = process.cwd()): Promise<ApplicationWIR> {
+  const context = await compileProject(projectRoot);
   return context.applicationWIR ?? Object.freeze({
     version: 1,
     projectRoot: context.config.projectRoot,
@@ -250,19 +117,16 @@ export async function compileApplication(
 function isApplicationSource(fileName: string, root: string): boolean {
   const normalized = fileName.replaceAll("\\", "/");
   const normalizedRoot = root.replaceAll("\\", "/");
-
   return normalized.startsWith(`${normalizedRoot}/`) &&
     !normalized.endsWith(".d.ts") &&
     !normalized.includes("/node_modules/") &&
     !normalized.includes("/dist/") &&
     !normalized.includes("/.warbler/generated/");
 }
-
 function normalizeTypeScriptDiagnostic(input: ts.Diagnostic): CompilerDiagnostic {
   const source = input.file;
   const start = input.start ?? 0;
   const point = source?.getLineAndCharacterOfPosition(start);
-
   return Object.freeze({
     code: DiagnosticCode.PROJECT,
     category: input.category === ts.DiagnosticCategory.Warning ? "warning" : "error",
@@ -273,7 +137,6 @@ function normalizeTypeScriptDiagnostic(input: ts.Diagnostic): CompilerDiagnostic
     relatedSymbols: Object.freeze([]),
   });
 }
-
 function projectDiagnostic(cause: unknown): CompilerDiagnostic {
   return Object.freeze({
     code: DiagnosticCode.PROJECT,
