@@ -156,6 +156,33 @@ describe("managed development reload", () => {
     expect(contexts).toHaveLength(2);
     expect(contexts[1]!.program.getSourceFile(controller)).not.toBe(contexts[0]!.program.getSourceFile(controller));
     expect(contexts[1]!.program.getSourceFile(graph)).toBe(contexts[0]!.program.getSourceFile(graph));
+    expect(contexts[1]!.applicationWIR).not.toBe(contexts[0]!.applicationWIR);
+    expect(contexts[1]!.generatedApplication).not.toBe(contexts[0]!.generatedApplication);
+    await session.stop();
+  }, 20_000);
+
+  test("reuses Warbler pipeline state for code-only handler changes while emitting a fresh build entry", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    const contexts: CompilerContext[] = [];
+    const session = await new ManagedDevSession(project.root, {
+      start(_root, compiler) {
+        contexts.push(compiler);
+        return { stop() {} };
+      },
+    }, false).start();
+
+    const controller = join(project.root, "src/graphs/home/home.controller.ts");
+    const source = await Bun.file(controller).text();
+    await Bun.write(controller, source.replace('{ message: "Warbler" }', '{ message: "Fresh" }'));
+    await session.notifyChanges(["src/graphs/home/home.controller.ts"]);
+
+    expect(contexts).toHaveLength(2);
+    expect(contexts[1]!.applicationWIR).toBe(contexts[0]!.applicationWIR);
+    expect(contexts[1]!.generatedApplication).toBe(contexts[0]!.generatedApplication);
+    expect(contexts[1]!.fingerprint).not.toBe(contexts[0]!.fingerprint);
+    expect(contexts[1]!.applicationEntry).not.toBe(contexts[0]!.applicationEntry);
+    const snapshot = await Bun.file(join(project.root, ".warbler/generated", `build-${contexts[1]!.fingerprint}`, "source/src/graphs/home/home.controller.ts")).text();
+    expect(snapshot).toContain('{ message: "Fresh" }');
     await session.stop();
   }, 20_000);
 

@@ -10,6 +10,8 @@ import { CompilerContext } from "./compiler-context";
 import { optimizeWIR } from "../optimizer/optimize-wir";
 import { generateArtifacts, writeArtifacts } from "../generator/generate-artifacts";
 import { analyzeContextBindings, analyzeExecutableBindings } from "../bindings";
+import type { GeneratedApplication } from "../output/artifact-types";
+import { sourceMetadataSignature, type SourceChangeKind } from "./source-metadata-signature";
 
 export interface CompileOptions {
   /**
@@ -38,6 +40,7 @@ export class Compiler {
   #hostOptionsKey: string | undefined;
   readonly #sourceFileCache = new Map<string, CachedSourceFile>();
   readonly #changedFiles = new Set<string>();
+  #warblerState: WarblerPipelineState | undefined;
 
   /** Creates a compiler rooted at the supplied application directory. */
   public constructor(projectRoot: string = process.cwd()) {
@@ -71,6 +74,7 @@ export class Compiler {
     this.#hostOptionsKey = undefined;
     this.#sourceFileCache.clear();
     this.#changedFiles.clear();
+    this.#warblerState = undefined;
   }
 
   /**
@@ -99,7 +103,7 @@ export class Compiler {
       Console.compiler("Building dependency graph", "started", { compileId });
 
       this.#resetIfCompilerOptionsChanged(parsed.options);
-      this.#evictChangedFiles();
+      const changedFiles = this.#evictChangedFiles();
       const host = this.#compilerHost(parsed.options);
       const program = ts.createProgram({
         rootNames: parsed.fileNames,
@@ -132,6 +136,33 @@ export class Compiler {
 
       const diagnostics = typeScriptDiagnostics.map(normalizeTypeScriptDiagnostic);
       const context = new CompilerContext(program, sourceFiles, config, diagnostics);
+      const sourceSignatures = this.#sourceSignatures(sourceFiles);
+      const changeKind = this.#classifySourceChange(changedFiles, sourceSignatures);
+
+      if (changeKind === "code" && this.#warblerState !== undefined && !hasTypeScriptErrors(context.diagnostics)) {
+        context.diagnostics.push(...this.#warblerState.diagnostics);
+        context.applicationWIR = this.#warblerState.applicationWIR;
+        if (this.#warblerState.generatedApplication !== undefined) {
+          context.generatedApplication = this.#warblerState.generatedApplication;
+          await this.#writeGeneratedApplication(context, sourceFiles);
+        }
+        this.#warblerState = Object.freeze({
+          applicationWIR: context.applicationWIR,
+          diagnostics: this.#warblerState.diagnostics,
+          sourceSignatures,
+          ...(context.generatedApplication === undefined ? {} : { generatedApplication: context.generatedApplication }),
+        });
+
+        const elapsed = timer.end({ diagnostics: context.diagnostics.length });
+        Console.compiler("Building dependency graph", "success", { compileId });
+        Console.success("Compiler completed.", {
+          compileId,
+          duration: elapsed,
+        });
+
+        return context;
+      }
+      const diagnosticOffset = context.diagnostics.length;
 
       context.applicationWIR = validateApplication(
         config.projectRoot,
@@ -178,27 +209,15 @@ export class Compiler {
           contextEntries,
         );
 
-        context.fingerprint = Bun.hash(
-          JSON.stringify({
-            generated: context.generatedApplication.files,
-            sources: sourceFiles.map((source) => [source.fileName, source.text]),
-          }),
-        ).toString(16);
-
-        await writeArtifacts(config.projectRoot, context.generatedApplication, {
-          fingerprint: context.fingerprint,
-          sources: sourceFiles.map((source) =>
-            Object.freeze({
-              file: source.fileName,
-              text: source.text,
-            }),
-          ),
-        });
-        this.#markGeneratedArtifactsChanged(context.generatedApplication.files);
-
-        context.applicationEntry = `${config.projectRoot}/.warbler/generated/build-${context.fingerprint}/application.generated.ts`;
-        context.productionEntry = `${config.projectRoot}/.warbler/generated/production.generated.ts`;
+        await this.#writeGeneratedApplication(context, sourceFiles);
       }
+
+      this.#warblerState = Object.freeze({
+        applicationWIR: context.applicationWIR,
+        diagnostics: Object.freeze(context.diagnostics.slice(diagnosticOffset)),
+        sourceSignatures,
+        ...(context.generatedApplication === undefined ? {} : { generatedApplication: context.generatedApplication }),
+      });
 
       const elapsed = timer.end({ diagnostics: context.diagnostics.length });
 
@@ -319,9 +338,52 @@ export class Compiler {
     return sourceFile;
   }
 
-  #evictChangedFiles(): void {
+  #evictChangedFiles(): readonly string[] {
+    const changedFiles = Object.freeze([...this.#changedFiles]);
     for (const fileName of this.#changedFiles) this.#sourceFileCache.delete(fileName);
     this.#changedFiles.clear();
+    return changedFiles;
+  }
+
+  #writeGeneratedApplication(context: CompilerContext, sourceFiles: readonly ts.SourceFile[]): Promise<void> {
+    if (context.generatedApplication === undefined) return Promise.resolve();
+    context.fingerprint = Bun.hash(
+      JSON.stringify({
+        generated: context.generatedApplication.files,
+        sources: sourceFiles.map((source) => [source.fileName, source.text]),
+      }),
+    ).toString(16);
+    this.#markGeneratedArtifactsChanged(context.generatedApplication.files);
+    context.applicationEntry = `${context.config.projectRoot}/.warbler/generated/build-${context.fingerprint}/application.generated.ts`;
+    context.productionEntry = `${context.config.projectRoot}/.warbler/generated/production.generated.ts`;
+    return writeArtifacts(context.config.projectRoot, context.generatedApplication, {
+      fingerprint: context.fingerprint,
+      sources: sourceFiles.map((source) =>
+        Object.freeze({
+          file: source.fileName,
+          text: source.text,
+        }),
+      ),
+    });
+  }
+
+  #sourceSignatures(sourceFiles: readonly ts.SourceFile[]): ReadonlyMap<string, string> {
+    return new Map(sourceFiles.map((source) => [this.#canonicalPath(source.fileName), sourceMetadataSignature(source)]));
+  }
+
+  #classifySourceChange(changedFiles: readonly string[], sourceSignatures: ReadonlyMap<string, string>): SourceChangeKind {
+    if (this.#warblerState === undefined) return "graph";
+    if (changedFiles.length === 0) return sameSignatures(this.#warblerState.sourceSignatures, sourceSignatures) ? "code" : "graph";
+
+    let changedApplicationFile = false;
+    for (const fileName of changedFiles) {
+      const previous = this.#warblerState.sourceSignatures.get(fileName);
+      const current = sourceSignatures.get(fileName);
+      if (previous === undefined && current === undefined) continue;
+      changedApplicationFile = true;
+      if (previous !== current) return current !== undefined && isGraphShapingSignature(current) ? "graph" : "metadata";
+    }
+    return changedApplicationFile ? "code" : "graph";
   }
 
   #markGeneratedArtifactsChanged(files: Readonly<Record<string, string>>): void {
@@ -338,6 +400,13 @@ export class Compiler {
 interface CachedSourceFile {
   readonly sourceFile: ts.SourceFile;
   readonly modifiedTime?: number;
+}
+
+interface WarblerPipelineState {
+  readonly applicationWIR: ApplicationWIR;
+  readonly diagnostics: readonly CompilerDiagnostic[];
+  readonly sourceSignatures: ReadonlyMap<string, string>;
+  readonly generatedApplication?: GeneratedApplication;
 }
 
 /** Compiles a TypeScript project and returns its complete compiler context. */
@@ -393,6 +462,29 @@ function sourceModifiedTime(fileName: string): number | undefined {
 
 function compilerOptionsKey(options: ts.CompilerOptions): string {
   return JSON.stringify(Object.entries(options).sort(([left], [right]) => left.localeCompare(right)));
+}
+
+function hasTypeScriptErrors(diagnostics: readonly CompilerDiagnostic[]): boolean {
+  return diagnostics.some((diagnostic) => diagnostic.category === "error");
+}
+
+function sameSignatures(left: ReadonlyMap<string, string>, right: ReadonlyMap<string, string>): boolean {
+  if (left.size !== right.size) return false;
+  for (const [fileName, signature] of left) if (right.get(fileName) !== signature) return false;
+  return true;
+}
+
+function isGraphShapingSignature(signature: string): boolean {
+  return signature.includes("@Graph") ||
+    signature.includes("@Controller") ||
+    signature.includes("@SocketController") ||
+    signature.includes("@Service") ||
+    signature.includes("@Repository") ||
+    signature.includes("@Factory") ||
+    signature.includes("@Resolver") ||
+    signature.includes("@Gateway") ||
+    signature.includes("@Injectable") ||
+    signature.includes("inject:");
 }
 
 function normalizeTypeScriptDiagnostic(input: ts.Diagnostic): CompilerDiagnostic {

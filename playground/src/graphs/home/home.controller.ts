@@ -11,6 +11,10 @@ export default class HomeController {
   readonly #home = inject(HomeService);
   readonly #sockets = inject(SocketPublisher);
 
+  @Get("/op", { name: "home2" }) 
+  async test2() {
+    return JsonRes({tr:'true is true no need false'});
+  }
   @Get("/", { name: "home" })
   async index(request:AppRequest): Promise<Response> {
 
@@ -18,12 +22,13 @@ export default class HomeController {
 
       select: {
         brand: true, 
+        sku: true
       },
     
       orderBy: {
-        brand: "asc",
+        brand: "desc",
       },
-      take: 100
+      take: 150
     });
      
     
