@@ -8,7 +8,7 @@ import { validateApplication } from "../validation/validate-application";
 import type { ApplicationWIR } from "../wir/wir";
 import { CompilerContext } from "./compiler-context";
 import { optimizeWIR } from "../optimizer/optimize-wir";
-import { generateArtifacts, writeArtifacts } from "../generator/generate-artifacts";
+import { generateArtifacts, writeArtifacts, writeRuntimeSnapshot } from "../generator/generate-artifacts";
 import { analyzeContextBindings, analyzeExecutableBindings } from "../bindings";
 import type { GeneratedApplication } from "../output/artifact-types";
 import { sourceMetadataSignature, type SourceChangeKind } from "./source-metadata-signature";
@@ -39,7 +39,8 @@ export class Compiler {
   #host: ts.CompilerHost | undefined;
   #hostOptionsKey: string | undefined;
   readonly #sourceFileCache = new Map<string, CachedSourceFile>();
-  readonly #changedFiles = new Set<string>();
+  readonly #changedSourceFiles = new Set<string>();
+  readonly #invalidatedCompilerFiles = new Set<string>();
   #warblerState: WarblerPipelineState | undefined;
 
   /** Creates a compiler rooted at the supplied application directory. */
@@ -54,7 +55,9 @@ export class Compiler {
       return;
     }
 
-    this.#changedFiles.add(this.#canonicalPath(fileName));
+    const canonical = this.#canonicalPath(fileName);
+    this.#changedSourceFiles.add(canonical);
+    this.#invalidatedCompilerFiles.add(canonical);
   }
 
   /** Evicts a coalesced watcher batch before the next compile. */
@@ -73,7 +76,8 @@ export class Compiler {
     this.#host = undefined;
     this.#hostOptionsKey = undefined;
     this.#sourceFileCache.clear();
-    this.#changedFiles.clear();
+    this.#changedSourceFiles.clear();
+    this.#invalidatedCompilerFiles.clear();
     this.#warblerState = undefined;
   }
 
@@ -103,7 +107,7 @@ export class Compiler {
       Console.compiler("Building dependency graph", "started", { compileId });
 
       this.#resetIfCompilerOptionsChanged(parsed.options);
-      const changedFiles = this.#evictChangedFiles();
+      const changedSourceFiles = this.#evictInvalidatedCompilerFiles();
       const host = this.#compilerHost(parsed.options);
       const program = ts.createProgram({
         rootNames: parsed.fileNames,
@@ -136,20 +140,23 @@ export class Compiler {
 
       const diagnostics = typeScriptDiagnostics.map(normalizeTypeScriptDiagnostic);
       const context = new CompilerContext(program, sourceFiles, config, diagnostics);
-      const sourceSignatures = this.#sourceSignatures(sourceFiles);
-      const changeKind = this.#classifySourceChange(changedFiles, sourceSignatures);
+      const sourceFilesByPath = this.#sourceFilesByPath(sourceFiles);
+      const sourceSignatures = this.#sourceSignatures(sourceFilesByPath, changedSourceFiles);
+      const changeKind = this.#classifySourceChange(changedSourceFiles, sourceSignatures);
 
       if (changeKind === "code" && this.#warblerState !== undefined && !hasTypeScriptErrors(context.diagnostics)) {
         context.diagnostics.push(...this.#warblerState.diagnostics);
         context.applicationWIR = this.#warblerState.applicationWIR;
+        const sourceHashes = this.#sourceHashes(sourceFilesByPath, changedSourceFiles);
         if (this.#warblerState.generatedApplication !== undefined) {
           context.generatedApplication = this.#warblerState.generatedApplication;
-          await this.#writeGeneratedApplication(context, sourceFiles);
+          await this.#writeGeneratedApplication(context, sourceFiles, sourceHashes, true);
         }
         this.#warblerState = Object.freeze({
           applicationWIR: context.applicationWIR,
           diagnostics: this.#warblerState.diagnostics,
           sourceSignatures,
+          sourceHashes,
           ...(context.generatedApplication === undefined ? {} : { generatedApplication: context.generatedApplication }),
         });
 
@@ -199,6 +206,7 @@ export class Compiler {
         context.applicationWIR,
         optimized,
       );
+      let sourceHashes: ReadonlyMap<string, SourceHash> | undefined;
 
       if (bindings !== undefined) {
         const contextEntries = analyzeContextBindings(context, optimized);
@@ -209,13 +217,15 @@ export class Compiler {
           contextEntries,
         );
 
-        await this.#writeGeneratedApplication(context, sourceFiles);
+        sourceHashes = this.#sourceHashes(sourceFilesByPath, changedSourceFiles);
+        await this.#writeGeneratedApplication(context, sourceFiles, sourceHashes, false);
       }
 
       this.#warblerState = Object.freeze({
         applicationWIR: context.applicationWIR,
         diagnostics: Object.freeze(context.diagnostics.slice(diagnosticOffset)),
         sourceSignatures,
+        sourceHashes: sourceHashes ?? this.#sourceHashes(sourceFilesByPath, changedSourceFiles),
         ...(context.generatedApplication === undefined ? {} : { generatedApplication: context.generatedApplication }),
       });
 
@@ -338,25 +348,21 @@ export class Compiler {
     return sourceFile;
   }
 
-  #evictChangedFiles(): readonly string[] {
-    const changedFiles = Object.freeze([...this.#changedFiles]);
-    for (const fileName of this.#changedFiles) this.#sourceFileCache.delete(fileName);
-    this.#changedFiles.clear();
-    return changedFiles;
+  #evictInvalidatedCompilerFiles(): readonly string[] {
+    const changedSourceFiles = Object.freeze([...this.#changedSourceFiles]);
+    for (const fileName of this.#invalidatedCompilerFiles) this.#sourceFileCache.delete(fileName);
+    this.#changedSourceFiles.clear();
+    this.#invalidatedCompilerFiles.clear();
+    return changedSourceFiles;
   }
 
-  #writeGeneratedApplication(context: CompilerContext, sourceFiles: readonly ts.SourceFile[]): Promise<void> {
+  #writeGeneratedApplication(context: CompilerContext, sourceFiles: readonly ts.SourceFile[], sourceHashes: ReadonlyMap<string, SourceHash>, runtimeOnly: boolean): Promise<void> {
     if (context.generatedApplication === undefined) return Promise.resolve();
-    context.fingerprint = Bun.hash(
-      JSON.stringify({
-        generated: context.generatedApplication.files,
-        sources: sourceFiles.map((source) => [source.fileName, source.text]),
-      }),
-    ).toString(16);
+    context.fingerprint = buildFingerprint(context.generatedApplication.files, sourceHashes);
     this.#markGeneratedArtifactsChanged(context.generatedApplication.files);
     context.applicationEntry = `${context.config.projectRoot}/.warbler/generated/build-${context.fingerprint}/application.generated.ts`;
     context.productionEntry = `${context.config.projectRoot}/.warbler/generated/production.generated.ts`;
-    return writeArtifacts(context.config.projectRoot, context.generatedApplication, {
+    const snapshot = Object.freeze({
       fingerprint: context.fingerprint,
       sources: sourceFiles.map((source) =>
         Object.freeze({
@@ -365,10 +371,45 @@ export class Compiler {
         }),
       ),
     });
+    return runtimeOnly
+      ? writeRuntimeSnapshot(context.config.projectRoot, context.generatedApplication, snapshot)
+      : writeArtifacts(context.config.projectRoot, context.generatedApplication, snapshot);
   }
 
-  #sourceSignatures(sourceFiles: readonly ts.SourceFile[]): ReadonlyMap<string, string> {
-    return new Map(sourceFiles.map((source) => [this.#canonicalPath(source.fileName), sourceMetadataSignature(source)]));
+  #sourceFilesByPath(sourceFiles: readonly ts.SourceFile[]): ReadonlyMap<string, ts.SourceFile> {
+    return new Map(sourceFiles.map((source) => [this.#canonicalPath(source.fileName), source]));
+  }
+
+  #sourceSignatures(sourceFilesByPath: ReadonlyMap<string, ts.SourceFile>, changedFiles: readonly string[]): ReadonlyMap<string, string> {
+    if (this.#warblerState === undefined || changedFiles.length === 0) {
+      return new Map([...sourceFilesByPath].map(([fileName, source]) => [fileName, sourceMetadataSignature(source)]));
+    }
+
+    const signatures = new Map(this.#warblerState.sourceSignatures);
+    for (const fileName of signatures.keys()) if (!sourceFilesByPath.has(fileName)) signatures.delete(fileName);
+    for (const [fileName, source] of sourceFilesByPath) if (!signatures.has(fileName)) signatures.set(fileName, sourceMetadataSignature(source));
+    for (const fileName of changedFiles) {
+      const source = sourceFilesByPath.get(fileName);
+      if (source === undefined) signatures.delete(fileName);
+      else signatures.set(fileName, sourceMetadataSignature(source));
+    }
+    return signatures;
+  }
+
+  #sourceHashes(sourceFilesByPath: ReadonlyMap<string, ts.SourceFile>, changedFiles: readonly string[]): ReadonlyMap<string, SourceHash> {
+    if (this.#warblerState === undefined || changedFiles.length === 0) {
+      return new Map([...sourceFilesByPath].map(([fileName, source]) => [fileName, sourceHash(source)]));
+    }
+
+    const hashes = new Map(this.#warblerState.sourceHashes);
+    for (const fileName of hashes.keys()) if (!sourceFilesByPath.has(fileName)) hashes.delete(fileName);
+    for (const [fileName, source] of sourceFilesByPath) if (!hashes.has(fileName)) hashes.set(fileName, sourceHash(source));
+    for (const fileName of changedFiles) {
+      const source = sourceFilesByPath.get(fileName);
+      if (source === undefined) hashes.delete(fileName);
+      else hashes.set(fileName, sourceHash(source));
+    }
+    return hashes;
   }
 
   #classifySourceChange(changedFiles: readonly string[], sourceSignatures: ReadonlyMap<string, string>): SourceChangeKind {
@@ -387,7 +428,7 @@ export class Compiler {
   }
 
   #markGeneratedArtifactsChanged(files: Readonly<Record<string, string>>): void {
-    for (const fileName of Object.keys(files)) this.#changedFiles.add(this.#canonicalPath(`.warbler/generated/${fileName}`));
+    for (const fileName of Object.keys(files)) this.#invalidatedCompilerFiles.add(this.#canonicalPath(`.warbler/generated/${fileName}`));
   }
 
   #canonicalPath(fileName: string): string {
@@ -406,7 +447,13 @@ interface WarblerPipelineState {
   readonly applicationWIR: ApplicationWIR;
   readonly diagnostics: readonly CompilerDiagnostic[];
   readonly sourceSignatures: ReadonlyMap<string, string>;
+  readonly sourceHashes: ReadonlyMap<string, SourceHash>;
   readonly generatedApplication?: GeneratedApplication;
+}
+
+interface SourceHash {
+  readonly fileName: string;
+  readonly hash: string;
 }
 
 /** Compiles a TypeScript project and returns its complete compiler context. */
@@ -462,6 +509,24 @@ function sourceModifiedTime(fileName: string): number | undefined {
 
 function compilerOptionsKey(options: ts.CompilerOptions): string {
   return JSON.stringify(Object.entries(options).sort(([left], [right]) => left.localeCompare(right)));
+}
+
+function sourceHash(source: ts.SourceFile): SourceHash {
+  return Object.freeze({
+    fileName: source.fileName,
+    hash: Bun.hash(source.text).toString(16),
+  });
+}
+
+function buildFingerprint(generated: Readonly<Record<string, string>>, sourceHashes: ReadonlyMap<string, SourceHash>): string {
+  const generatedHashes = Object.entries(generated)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([fileName, content]) => [fileName, Bun.hash(content).toString(16)]);
+  const sources = [...sourceHashes.values()]
+    .sort((left, right) => left.fileName.localeCompare(right.fileName))
+    .map((source) => [source.fileName, source.hash]);
+
+  return Bun.hash(JSON.stringify({ generated: generatedHashes, sources })).toString(16);
 }
 
 function hasTypeScriptErrors(diagnostics: readonly CompilerDiagnostic[]): boolean {

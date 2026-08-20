@@ -49,18 +49,21 @@ export async function writeArtifacts(projectRoot: string, generated: GeneratedAp
   }
   for (const name of Object.keys(generated.files).sort()) await writeIfChanged(`${outputDirectory}/${name}`, generated.files[name]!);
   await removeLegacyWarblerEnvFile(projectRoot);
-  if (snapshot !== undefined) {
-    const snapshotDirectory = `${outputDirectory}/build-${snapshot.fingerprint}`;
-    await mkdir(snapshotDirectory, { recursive: true });
-    for (const source of snapshot.sources) {
-      const relativeSource = relative(projectRoot, source.file).replaceAll("\\", "/");
-      const destination = `${snapshotDirectory}/source/${relativeSource}`;
-      await mkdir(dirname(destination), { recursive: true });
-      await Bun.write(destination, source.text);
-    }
-    for (const name of Object.keys(generated.files).sort()) {
-      await Bun.write(`${snapshotDirectory}/${name}`, snapshotGeneratedSource(generated.files[name]!, outputDirectory, projectRoot));
-    }
+  if (snapshot !== undefined) await writeRuntimeSnapshot(projectRoot, generated, snapshot);
+}
+/** Writes one fingerprinted runtime build snapshot without touching stable generated metadata files. */
+export async function writeRuntimeSnapshot(projectRoot: string, generated: GeneratedApplication, snapshot: DevelopmentArtifactSnapshot): Promise<void> {
+  const outputDirectory = `${projectRoot}/.warbler/generated`;
+  const snapshotDirectory = `${outputDirectory}/build-${snapshot.fingerprint}`;
+  await mkdir(snapshotDirectory, { recursive: true });
+  for (const source of snapshot.sources) {
+    const relativeSource = relative(projectRoot, source.file).replaceAll("\\", "/");
+    const destination = `${snapshotDirectory}/source/${relativeSource}`;
+    await mkdir(dirname(destination), { recursive: true });
+    await Bun.write(destination, source.text);
+  }
+  for (const name of Object.keys(generated.files).sort()) {
+    await Bun.write(`${snapshotDirectory}/${name}`, snapshotGeneratedSource(generated.files[name]!, outputDirectory, projectRoot));
   }
 }
 async function writeIfChanged(path: string, content: string): Promise<void> {

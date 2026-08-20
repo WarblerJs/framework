@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { ManagedDevSession, type DevelopmentRuntimeHandle, type DevelopmentRuntimeLauncher } from "../src/dev/dev-session";
 import { importGeneratedApplication } from "../src/dev/runtime-launcher";
 import { startRuntime, type RuntimeTransportLauncher, type RuntimeTransportStartInput } from "@warbler/runtime";
-import type { CompilerContext } from "@warbler/compiler";
+import { compileProject, type CompilerContext } from "@warbler/compiler";
 import { createTestProject } from "./helpers";
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -172,6 +173,8 @@ describe("managed development reload", () => {
     }, false).start();
 
     const controller = join(project.root, "src/graphs/home/home.controller.ts");
+    const generatedTable = join(project.root, ".warbler/generated/tables.generated.ts");
+    const generatedTableMtime = (await stat(generatedTable)).mtimeMs;
     const source = await Bun.file(controller).text();
     await Bun.write(controller, source.replace('{ message: "Warbler" }', '{ message: "Fresh" }'));
     await session.notifyChanges(["src/graphs/home/home.controller.ts"]);
@@ -183,6 +186,21 @@ describe("managed development reload", () => {
     expect(contexts[1]!.applicationEntry).not.toBe(contexts[0]!.applicationEntry);
     const snapshot = await Bun.file(join(project.root, ".warbler/generated", `build-${contexts[1]!.fingerprint}`, "source/src/graphs/home/home.controller.ts")).text();
     expect(snapshot).toContain('{ message: "Fresh" }');
+    expect((await stat(generatedTable)).mtimeMs).toBe(generatedTableMtime);
+
+    const fresh = await compileProject(project.root, { semanticDiagnostics: false });
+    expect(contexts[1]!.fingerprint).toBe(fresh.fingerprint);
+    expect(contexts[1]!.generatedApplication!.files).toEqual(fresh.generatedApplication!.files);
+
+    const secondSource = await Bun.file(controller).text();
+    await Bun.write(controller, secondSource.replace('{ message: "Fresh" }', '{ message: "Fresh Again" }'));
+    await session.notifyChanges(["src/graphs/home/home.controller.ts"]);
+    expect(contexts).toHaveLength(3);
+    expect(contexts[2]!.applicationWIR).toBe(contexts[0]!.applicationWIR);
+    expect(contexts[2]!.generatedApplication).toBe(contexts[0]!.generatedApplication);
+    expect(contexts[2]!.fingerprint).not.toBe(contexts[1]!.fingerprint);
+    const secondFresh = await compileProject(project.root, { semanticDiagnostics: false });
+    expect(contexts[2]!.fingerprint).toBe(secondFresh.fingerprint);
     await session.stop();
   }, 20_000);
 

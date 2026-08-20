@@ -11,9 +11,9 @@ export default class HomeController {
   readonly #home = inject(HomeService);
   readonly #sockets = inject(SocketPublisher);
 
-  @Get("/op", { name: "home2" }) 
+  @Get("/op2", { name: "home2" }) 
   async test2() {
-    return JsonRes({tr:'true is true no need false'});
+    return JsonRes({tr:'true is true no need false, OOOps'});
   }
   @Get("/", { name: "home" })
   async index(request:AppRequest): Promise<Response> {
