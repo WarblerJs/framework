@@ -1,5 +1,6 @@
 import { resolveColumns } from "../columns/resolve-columns";
 import { DatabaseCompileError } from "../errors";
+import { deriveColumnName } from "../naming";
 import {
   renderCheckConstraint,
   renderColumnDefinition,
@@ -11,7 +12,7 @@ import {
   renderForeignKeyConstraint,
 } from "../schema/ddl-fragments";
 import type { ColumnValue } from "../types/column.types";
-import type { CheckConstraintMetadata, ForeignKeyMetadata, NormalizedColumn } from "../types/model.types";
+import type { CheckConstraintMetadata, ForeignKeyMetadata, IndexPredicateMetadata, NormalizedColumn } from "../types/model.types";
 import { quoteIdentifier, quoteLiteral } from "../utils/sql-identifier";
 import type {
   AlterColumnChanges,
@@ -21,6 +22,8 @@ import type {
   DropOptions,
   DropTableOptions,
 } from "./types";
+
+const SOFT_DELETE_TABLE_COMMENT = "warbler:soft-delete";
 
 interface ExtractedConstraints {
   readonly primaryKey: readonly string[];
@@ -69,6 +72,43 @@ function indexAndCommentStatements(tableName: string, columns: readonly Normaliz
   return statements;
 }
 
+function validateSoftDeleteColumn(tableName: string, columns: readonly NormalizedColumn[]): string {
+  const column = columns.find((candidate) => candidate.fieldName === "deletedAt" && candidate.columnName === "deleted_at");
+  if (column === undefined) {
+    throw new DatabaseCompileError(`createTable(${tableName})`, "`softDelete: true` requires a `deletedAt` column.");
+  }
+  if (column.builder.pgType !== "timestamp" && column.builder.pgType !== "timestamptz") {
+    throw new DatabaseCompileError(`createTable(${tableName})`, "`deletedAt` must be a TIMESTAMP or TIMESTAMPTZ column.");
+  }
+  if (column.builder.nullable !== true) {
+    throw new DatabaseCompileError(`createTable(${tableName})`, "`deletedAt` must be nullable.");
+  }
+  return column.columnName;
+}
+
+function tableCommentStatement(tableName: string, comment: string): string {
+  return `COMMENT ON TABLE ${quoteIdentifier(tableName)} IS ${quoteLiteral(comment)};`;
+}
+
+function compileIndexWhere(table: string, where: CreateIndexOptions["where"]): readonly IndexPredicateMetadata[] {
+  if (where === undefined) return Object.freeze([]);
+  const predicates: IndexPredicateMetadata[] = [];
+  for (const [field, value] of Object.entries(where)) {
+    const column = deriveColumnName(field);
+    if (value === null) {
+      predicates.push(Object.freeze({ column, operator: "isNull" }));
+      continue;
+    }
+    if (typeof value === "object" && value !== null && !Array.isArray(value) && "not" in value && value.not === null && Object.keys(value).length === 1) {
+      predicates.push(Object.freeze({ column, operator: "isNotNull" }));
+      continue;
+    }
+    throw new DatabaseCompileError(`createIndex(${table})`, "Index where predicates support only `{ field: null }` or `{ field: { not: null } }`.");
+  }
+  if (predicates.length === 0) throw new DatabaseCompileError(`createIndex(${table})`, "Index where predicate must contain at least one field.");
+  return Object.freeze(predicates);
+}
+
 /** `createTable`: one `CREATE TABLE` (with inline PRIMARY KEY/CHECK/FOREIGN KEY constraints), then index/comment statements. */
 export function buildCreateTableSql(
   name: string,
@@ -91,9 +131,14 @@ export function buildCreateTableSql(
   for (const foreignKey of foreignKeys) lines.push(renderForeignKeyConstraint(name, foreignKey));
 
   const ifNotExists = options.ifNotExists === true ? "IF NOT EXISTS " : "";
+  const softDeleteStatements = options.softDelete === true
+    ? [tableCommentStatement(name, SOFT_DELETE_TABLE_COMMENT)]
+    : [];
+  if (options.softDelete === true) validateSoftDeleteColumn(name, resolved);
   return Object.freeze([
     `CREATE TABLE ${ifNotExists}${quoteIdentifier(name)} (\n  ${lines.join(",\n  ")}\n);`,
     ...indexAndCommentStatements(name, resolved),
+    ...softDeleteStatements,
   ]);
 }
 
@@ -170,7 +215,7 @@ export function buildCreateIndexSql(table: string, columns: readonly string[], o
   if (columns.length === 0) throw new DatabaseCompileError(`createIndex(${table})`, "At least one column is required.");
   const unique = options.unique === true;
   const indexName = options.name ?? `${table}_${columns.join("_")}_${unique ? "key" : "idx"}`;
-  return renderCreateIndexStatement(table, indexName, columns, unique);
+  return renderCreateIndexStatement(table, indexName, columns, unique, compileIndexWhere(table, options.where));
 }
 
 /** `dropIndex`. */

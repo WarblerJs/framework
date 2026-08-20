@@ -28,6 +28,7 @@ function normalizeDatabaseConfig(config: DatabaseProjectConfig): DatabaseProject
     migrations: Object.freeze({
       ...config.migrations,
       seedTable,
+      softDelete: config.migrations.softDelete ?? true,
     }),
   });
 }

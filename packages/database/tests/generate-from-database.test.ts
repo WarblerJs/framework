@@ -19,7 +19,7 @@ const COLUMN_ROWS = [
     isIdentity: "NO",
   },
 ];
-const INDEX_ROWS = [{ tableName: "users", indexName: "users_pkey", isPrimary: true, isUnique: true, columns: ["id"] }];
+const INDEX_ROWS = [{ tableName: "users", indexName: "users_pkey", isPrimary: true, isUnique: true, columns: ["id"], predicate: null }];
 
 function createFakeSql(): SQL {
   const sql = (strings: TemplateStringsArray): Promise<unknown[]> => {
@@ -31,6 +31,7 @@ function createFakeSql(): SQL {
     if (text.includes("con.contype = 'c'")) return Promise.resolve([]);
     if (text.includes("pg_enum")) return Promise.resolve([]);
     if (text.includes("col_description")) return Promise.resolve([]);
+    if (text.includes("obj_description")) return Promise.resolve([]);
     throw new Error(`Unhandled fake query: ${text.slice(0, 80)}`);
   };
   return sql as unknown as SQL;

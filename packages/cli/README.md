@@ -10,7 +10,7 @@ warbler doctor
 warbler inspect [section]
 warbler new <name>
 warbler generate <kind> <name>
-warbler db:pg migration [<kind>:<name>]
+warbler db:pg migration [<kind>:<name>] [--no-soft-delete]
 warbler db:pg rollback [--step 3]
 warbler db:pg generate
 warbler db:pg migrate:fresh [--seed]

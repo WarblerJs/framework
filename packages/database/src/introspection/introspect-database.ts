@@ -5,6 +5,7 @@ import type {
   ColumnMetadata,
   EnumTypeMetadata,
   ForeignKeyMetadata,
+  IndexPredicateMetadata,
   IndexMetadata,
   TableMetadata,
 } from "../types/model.types";
@@ -33,6 +34,7 @@ interface IndexRow {
   readonly isPrimary: boolean;
   readonly isUnique: boolean;
   readonly columns: readonly string[];
+  readonly predicate: string | null;
 }
 
 const ACTION_BY_CHAR: Readonly<Record<string, "CASCADE" | "SET NULL" | "SET DEFAULT" | "RESTRICT" | "NO ACTION">> = {
@@ -69,7 +71,13 @@ interface CommentRow {
   readonly comment: string;
 }
 
+interface TableCommentRow {
+  readonly tableName: string;
+  readonly comment: string;
+}
+
 const compareText = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
+const SOFT_DELETE_TABLE_COMMENT = "warbler:soft-delete";
 
 function groupBy<T, K>(rows: readonly T[], key: (row: T) => K): Map<K, T[]> {
   const groups = new Map<K, T[]>();
@@ -118,14 +126,15 @@ async function fetchIndexes(sql: SQL): Promise<readonly IndexRow[]> {
       i.relname AS "indexName",
       ix.indisprimary AS "isPrimary",
       ix.indisunique AS "isUnique",
-      array_agg(a.attname ORDER BY array_position(ix.indkey, a.attnum)) AS "columns"
+      array_agg(a.attname ORDER BY array_position(ix.indkey, a.attnum)) AS "columns",
+      pg_get_expr(ix.indpred, ix.indrelid) AS "predicate"
     FROM pg_index ix
     JOIN pg_class t ON t.oid = ix.indrelid
     JOIN pg_class i ON i.oid = ix.indexrelid
     JOIN pg_namespace n ON n.oid = t.relnamespace
     JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(ix.indkey)
     WHERE n.nspname = 'public' AND t.relkind = 'r'
-    GROUP BY t.relname, i.relname, ix.indisprimary, ix.indisunique
+    GROUP BY t.relname, i.relname, ix.indisprimary, ix.indisunique, pg_get_expr(ix.indpred, ix.indrelid)
     ORDER BY t.relname, i.relname
   `;
 }
@@ -190,9 +199,37 @@ async function fetchColumnComments(sql: SQL): Promise<readonly CommentRow[]> {
   `;
 }
 
+async function fetchTableComments(sql: SQL): Promise<readonly TableCommentRow[]> {
+  return sql<TableCommentRow[]>`
+    SELECT c.relname AS "tableName", obj_description(c.oid, 'pg_class') AS "comment"
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r'
+      AND obj_description(c.oid, 'pg_class') IS NOT NULL
+  `;
+}
+
 function stripCheckWrapper(definition: string): string {
   const match = /^CHECK\s*\((.*)\)$/su.exec(definition.trim());
   return match?.[1] ?? definition;
+}
+
+function stripOuterParens(value: string): string {
+  let result = value.trim();
+  while (result.startsWith("(") && result.endsWith(")")) result = result.slice(1, -1).trim();
+  return result;
+}
+
+function parseIndexPredicate(predicate: string | null): readonly IndexPredicateMetadata[] | undefined {
+  if (predicate === null) return undefined;
+  const parts = stripOuterParens(predicate).split(/\s+AND\s+/iu);
+  const parsed: IndexPredicateMetadata[] = [];
+  for (const part of parts) {
+    const match = /^"?([A-Za-z_][A-Za-z0-9_]*)"?\s+IS\s+(NOT\s+)?NULL$/iu.exec(stripOuterParens(part));
+    if (match === null) return undefined;
+    parsed.push(Object.freeze({ column: match[1]!, operator: match[2] === undefined ? "isNull" : "isNotNull" }));
+  }
+  return Object.freeze(parsed);
 }
 
 /** Queries PostgreSQL system catalogs and produces `TableMetadata[]` directly — no `ColumnBuilder`s, no model files. */
@@ -200,7 +237,7 @@ export async function introspectDatabase(sql: SQL, options: IntrospectDatabaseOp
   const excluded = new Set(options.excludeTables);
   const modelNames = options.modelNames ?? {};
 
-  const [tableRows, columnRows, indexRows, foreignKeyRows, checkRows, enumRows, commentRows] = await Promise.all([
+  const [tableRows, columnRows, indexRows, foreignKeyRows, checkRows, enumRows, commentRows, tableCommentRows] = await Promise.all([
     fetchTables(sql),
     fetchColumns(sql),
     fetchIndexes(sql),
@@ -208,6 +245,7 @@ export async function introspectDatabase(sql: SQL, options: IntrospectDatabaseOp
     fetchCheckConstraints(sql),
     fetchEnums(sql),
     fetchColumnComments(sql),
+    fetchTableComments(sql),
   ]);
 
   const tableNames = tableRows.map((row) => row.tableName).filter((name) => !excluded.has(name)).sort(compareText);
@@ -222,6 +260,7 @@ export async function introspectDatabase(sql: SQL, options: IntrospectDatabaseOp
   const foreignKeysByTable = groupBy(foreignKeyRows, (row) => row.tableName);
   const checksByTable = groupBy(checkRows, (row) => row.tableName);
   const commentsByTable = groupBy(commentRows, (row) => row.tableName);
+  const tableCommentByName = new Map(tableCommentRows.map((row) => [row.tableName, row.comment] as const));
 
   return Object.freeze(tableNames.map((tableName) => {
     const commentByColumn = new Map(
@@ -258,11 +297,17 @@ export async function introspectDatabase(sql: SQL, options: IntrospectDatabaseOp
         continue;
       }
       if (row.columns.length !== 1) continue;
-      indexes.push(Object.freeze({ name: row.indexName, column: row.columns[0]!, unique: row.isUnique }));
+      const where = parseIndexPredicate(row.predicate);
+      indexes.push(Object.freeze({
+        name: row.indexName,
+        column: row.columns[0]!,
+        unique: row.isUnique,
+        ...(where === undefined ? {} : { where }),
+      }));
     }
 
     const primaryKeySet = new Set(primaryKey);
-    const uniqueColumns = new Set(indexes.filter((index) => index.unique).map((index) => index.column));
+    const uniqueColumns = new Set(indexes.filter((index) => index.unique && (index.where?.length ?? 0) === 0).map((index) => index.column));
     const indexedColumns = new Set(indexes.map((index) => index.column));
     const columnsWithFlags = columns.map((column) =>
       Object.freeze({
@@ -291,12 +336,17 @@ export async function introspectDatabase(sql: SQL, options: IntrospectDatabaseOp
 
     const tableEnums = new Map<string, EnumTypeMetadata>();
     for (const column of columnsWithFlags) if (column.enum !== undefined) tableEnums.set(column.enum.name, column.enum);
+    const softDeleteColumn = columnsWithFlags.find((column) => column.columnName === "deleted_at" && column.fieldName === "deletedAt");
+    const softDelete = tableCommentByName.get(tableName) === SOFT_DELETE_TABLE_COMMENT && softDeleteColumn !== undefined
+      ? Object.freeze({ enabled: true as const, column: softDeleteColumn.columnName, field: softDeleteColumn.fieldName })
+      : undefined;
 
     return Object.freeze({
       modelName: tableNameToModelName(tableName, modelNames),
       clientKey: tableNameToClientKey(tableName, modelNames),
       tableName,
       columns: Object.freeze(columnsWithFlags),
+      ...(softDelete === undefined ? {} : { softDelete }),
       primaryKey: Object.freeze(primaryKey),
       indexes: Object.freeze(indexes),
       foreignKeys: Object.freeze(foreignKeys),

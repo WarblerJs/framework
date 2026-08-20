@@ -156,6 +156,13 @@ function whereManySql(model: RuntimeModel, where: unknown, operation: string, st
   return predicate;
 }
 
+function softDeleteColumn(model: RuntimeModel, operation: string): RuntimeColumn {
+  if (model.softDelete === undefined) throw new DatabaseQueryError(model.name, `${operation} requires a soft-delete-enabled model.`);
+  const column = columnByField(model, model.softDelete.field);
+  if (column === undefined || column.column !== model.softDelete.column) throw new DatabaseQueryError(model.name, "Soft-delete metadata is invalid.");
+  return column;
+}
+
 async function oneOrThrow<Row>(model: RuntimeModel, operation: string, rows: readonly Row[]): Promise<Row> {
   const row = rows[0];
   if (row === undefined) throw new DatabaseRecordNotFoundError(model.name, operation);
@@ -267,3 +274,50 @@ export async function executeDeleteMany(sql: SQL, schema: RuntimeReadSchema, mod
   );
   return Object.freeze({ count: rows[0]?.count ?? 0 });
 }
+
+export async function executeSoftDelete<Row>(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: WriteQueryArgs): Promise<Row> {
+  const column = softDeleteColumn(model, "softDelete");
+  const state = createCompileState(schema);
+  const where = whereUniqueSql(model, args.where, "softDelete", state);
+  const rows = await sql.unsafe<Row[]>(
+    `UPDATE ${q(model.table)} SET ${q(column.column)} = NOW() WHERE ${where.sql} AND ${q(column.column)} IS NULL RETURNING ${returningSql(model, args.select)}`,
+    [...state.params],
+  );
+  return oneOrThrow(model, "softDelete", rows);
+}
+
+export async function executeSoftDeleteMany(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: WriteQueryArgs): Promise<MutationCountResult> {
+  const column = softDeleteColumn(model, "softDeleteMany");
+  const state = createCompileState(schema);
+  const where = whereManySql(model, args.where, "softDeleteMany", state);
+  const rows = await sql.unsafe<{ count: number }[]>(
+    `WITH updated AS (UPDATE ${q(model.table)} AS ${q("wq0")} SET ${q(column.column)} = NOW() WHERE (${where}) AND ${q("wq0")}.${q(column.column)} IS NULL RETURNING 1) SELECT count(*)::int AS "count" FROM updated`,
+    [...state.params],
+  );
+  return Object.freeze({ count: rows[0]?.count ?? 0 });
+}
+
+export async function executeRestore<Row>(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: WriteQueryArgs): Promise<Row> {
+  const column = softDeleteColumn(model, "restore");
+  const state = createCompileState(schema);
+  const where = whereUniqueSql(model, args.where, "restore", state);
+  const rows = await sql.unsafe<Row[]>(
+    `UPDATE ${q(model.table)} SET ${q(column.column)} = NULL WHERE ${where.sql} AND ${q(column.column)} IS NOT NULL RETURNING ${returningSql(model, args.select)}`,
+    [...state.params],
+  );
+  return oneOrThrow(model, "restore", rows);
+}
+
+export async function executeRestoreMany(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args: WriteQueryArgs): Promise<MutationCountResult> {
+  const column = softDeleteColumn(model, "restoreMany");
+  const state = createCompileState(schema);
+  const where = whereManySql(model, args.where, "restoreMany", state);
+  const rows = await sql.unsafe<{ count: number }[]>(
+    `WITH updated AS (UPDATE ${q(model.table)} AS ${q("wq0")} SET ${q(column.column)} = NULL WHERE (${where}) AND ${q("wq0")}.${q(column.column)} IS NOT NULL RETURNING 1) SELECT count(*)::int AS "count" FROM updated`,
+    [...state.params],
+  );
+  return Object.freeze({ count: rows[0]?.count ?? 0 });
+}
+
+export const executeForceDelete = executeDelete;
+export const executeForceDeleteMany = executeDeleteMany;

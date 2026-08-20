@@ -11,6 +11,10 @@ export interface MigrationScaffoldCommandResult {
   readonly path: string;
 }
 
+export interface MigrationScaffoldCommandOptions {
+  readonly softDelete?: boolean;
+}
+
 export interface MigrationRollbackCommandOptions {
   readonly step: number;
 }
@@ -53,9 +57,9 @@ export async function migrationRollbackCommand(layout: ProjectLayout, options: M
 }
 
 /** `warbler db:pg migration <kind>:<name>`: scaffolds a new timestamped migration file. */
-export async function migrationScaffoldCommand(layout: ProjectLayout, arg: string): Promise<MigrationScaffoldCommandResult> {
+export async function migrationScaffoldCommand(layout: ProjectLayout, arg: string, options: MigrationScaffoldCommandOptions = {}): Promise<MigrationScaffoldCommandResult> {
   const config = await requireDatabaseConfig(layout);
-  const { fileName, content } = scaffoldMigration(arg);
+  const { fileName, content } = scaffoldMigration(arg, new Date(), { softDelete: options.softDelete ?? config.migrations.softDelete ?? true });
   const path = await atomicWrite(layout.root, `${config.migrations.path}/${fileName}`, content, false);
   return Object.freeze({ path });
 }

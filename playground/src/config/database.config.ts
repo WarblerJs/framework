@@ -32,6 +32,7 @@ export const databaseConfig = {
       generated: "database/warbler/pg/generated",
       path: "database/warbler/pg/migrations",
       seeds: "database/warbler/pg/seeds",
+      softDelete: true,
     },
   },
 } as const;

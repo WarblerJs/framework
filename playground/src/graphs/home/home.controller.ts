@@ -14,40 +14,39 @@ export default class HomeController {
   @Get("/", { name: "home" })
   async index(request:AppRequest): Promise<Response> {
 
-    const productId = "000005c1-4692-428b-a38a-8bbf60ace9fe";
-
-    const a = WlbPg.transaction(async (tx) => {
-      await tx.product.findUnique({
-        where: { id: productId },
-        lock: {
-          mode: "update",
-        },
-      });
+    const rows = await WlbPg.products.findMany({
+      distinct: ["brand"],
     
-      console.log("A: LOCKED");
+      select: {
+        brand: true,
+        deletedAt: true,
+      },
     
-      throw new Error("force rollback");
+      orderBy: {
+        brand: "asc",
+      },
     });
     
-    const aResult = await Promise.allSettled([a]);
+    type DistinctRow = {
+      brand: string;
+      deletedAt: Date | null;
+    };
     
-    console.log("A rolled back:", aResult[0]?.status);
+    const simpleRows: readonly DistinctRow[] = rows;
     
-    const b = await WlbPg.transaction(async (tx) => {
-      const row = await tx.product.findUnique({
-        where: { id: productId },
-        lock: {
-          mode: "update",
-          wait: "nowait",
-        },
-      });
+    const leaked = simpleRows.filter(
+      (row) => row.deletedAt !== null
+    );
     
-      console.log("✅ B acquired lock after rollback");
+    console.log("distinct rows:", rows.length);
+    console.log("deleted leaked:", leaked.length);
     
-      return row;
-    });
+    if (leaked.length > 0) {
+      console.table(leaked);
+      throw new Error("Soft-delete DISTINCT leakage detected");
+    }
     
-    console.log(b?.id);
+    console.log("✅ DISTINCT respects soft-delete scope");
     
     return JsonRes(  {result:true} );
   }

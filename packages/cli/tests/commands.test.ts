@@ -169,6 +169,26 @@ describe("database", () => {
       generated: "database/warbler/pg/generated",
       path: "database/warbler/pg/migrations",
       seeds: "database/warbler/pg/seeds",
+      softDelete: true,
+    },
+  },
+};
+`,
+    );
+
+  const writeDatabaseConfigWithoutSoftDelete = (root: string) =>
+    Bun.write(
+      join(root, "src/config/database.config.ts"),
+      `export const databaseConfig = {
+  pg: {
+    connection: {},
+    migrations: {
+      table: "_wrbls_migrations",
+      seedTable: "_warbler_seeds",
+      generated: "database/warbler/pg/generated",
+      path: "database/warbler/pg/migrations",
+      seeds: "database/warbler/pg/seeds",
+      softDelete: false,
     },
   },
 };
@@ -227,6 +247,34 @@ describe("database", () => {
     expect(files[0]).toMatch(/^\d{14}_create_table_user\.ts$/u);
     const content = await Bun.file(join(project.root, "database/warbler/pg/migrations", files[0]!)).text();
     expect(content).toContain('pgm.createTable("users"');
+    expect(content).toContain("deletedAt: PgTypes.Timestamp({ nullable: true })");
+    expect(content).toContain("{ softDelete: true }");
+  });
+
+  test("db:pg migration create:table supports --no-soft-delete without connecting to a database", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    await writeDatabaseConfig(project.root);
+    const capture = captureOutput();
+    const code = await runCLI(["db:pg", "migration", "create:table:log", "--no-soft-delete", "--project", project.root], { output: capture.output });
+    expect(code).toBe(0);
+    const files = [...new Bun.Glob("*.ts").scanSync({ cwd: join(project.root, "database/warbler/pg/migrations") })];
+    const content = await Bun.file(join(project.root, "database/warbler/pg/migrations", files[0]!)).text();
+    expect(content).toContain('pgm.createTable("logs"');
+    expect(content).not.toContain("deletedAt");
+    expect(content).toContain("{ softDelete: false }");
+  });
+
+  test("db:pg migration create:table honors migrations.softDelete false", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    await writeDatabaseConfigWithoutSoftDelete(project.root);
+    const capture = captureOutput();
+    const code = await runCLI(["db:pg", "migration", "create:table:audit_log", "--project", project.root], { output: capture.output });
+    expect(code).toBe(0);
+    const files = [...new Bun.Glob("*.ts").scanSync({ cwd: join(project.root, "database/warbler/pg/migrations") })];
+    const content = await Bun.file(join(project.root, "database/warbler/pg/migrations", files[0]!)).text();
+    expect(content).toContain('pgm.createTable("audit_logs"');
+    expect(content).not.toContain("deletedAt");
+    expect(content).toContain("{ softDelete: false }");
   });
 
   test("db:pg rejects an unknown action", async () => {

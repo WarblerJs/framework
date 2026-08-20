@@ -198,7 +198,7 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
           writeResult(output, context.format, { command: "db:pg", status: "success", action: "migration", executed: result.executed }, message);
           return ExitCode.SUCCESS;
         }
-        const scaffold = await migrationScaffoldCommand(layout, target);
+        const scaffold = await migrationScaffoldCommand(layout, target, context.flags["no-soft-delete"] === true ? { softDelete: false } : {});
         writeResult(output, context.format, { command: "db:pg", status: "success", action: "migration", file: scaffold.path }, `Generated ${scaffold.path}`);
         return ExitCode.SUCCESS;
       }
@@ -304,7 +304,7 @@ function validateCommandFlags(context: CLIContext): void {
     inspect: [...common, "project"],
     new: [...common, "dry-run"],
     generate: [...common, "project", "dry-run", "force"],
-    "db:pg": [...common, "project", "seed", "step", "only"],
+    "db:pg": [...common, "project", "seed", "step", "only", "no-soft-delete"],
     clean: [...common, "project", "dry-run"],
     version: common,
     help: common,
@@ -330,7 +330,7 @@ Usage:
   warbler inspect [graphs|routes|providers|transports|config]
   warbler new <name>
   warbler generate <kind> <name>
-  warbler db:pg migration [<kind>:<name>]
+  warbler db:pg migration [<kind>:<name>] [--no-soft-delete]
   warbler db:pg rollback [--step 3]
   warbler db:pg generate
   warbler db:pg migrate:fresh [--seed]
