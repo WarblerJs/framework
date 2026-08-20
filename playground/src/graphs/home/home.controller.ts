@@ -23,7 +23,7 @@ export default class HomeController {
       orderBy: {
         brand: "asc",
       },
-      take: 42
+      take: 100
     });
      
     
