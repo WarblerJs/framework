@@ -1,6 +1,5 @@
-import type { CompilerContext } from "@warbler/compiler";
-import { compileProject } from "@warbler/compiler";
-import { atomicWrite, resolveInside } from "../filesystem";
+import { Compiler, type CompilerContext } from "@warbler/compiler";
+import { atomicWrite } from "../filesystem";
 import { CLIError, describeErrorChain } from "../errors";
 import { ExitCode } from "../types";
 import { SourceWatcher } from "./source-watcher";
@@ -56,6 +55,7 @@ export class ManagedDevSession implements DevSession {
   #state: DevSessionState = "starting";
   #runtime: DevelopmentRuntimeHandle | undefined;
   #activeCompiler: CompilerContext | undefined;
+  readonly #compiler: Compiler;
   #activePreparation: unknown;
   #watcher: SourceWatcher | undefined;
   #views: DevelopmentViewPipeline | undefined;
@@ -66,6 +66,7 @@ export class ManagedDevSession implements DevSession {
   /** Creates an unstarted development session. */
   public constructor(projectRoot: string, launcher: DevelopmentRuntimeLauncher, watchEnabled: boolean, overrides: DevelopmentRuntimeOverrides = {}, report: DevelopmentReporter = () => {}) {
     this.#projectRoot = projectRoot; this.#launcher = launcher; this.#watchEnabled = watchEnabled; this.#overrides = Object.freeze({ ...overrides }); this.#report = report;
+    this.#compiler = new Compiler(projectRoot);
   }
   public get state(): DevSessionState { return this.#state; }
   public get projectRoot(): string { return this.#projectRoot; }
@@ -111,7 +112,7 @@ export class ManagedDevSession implements DevSession {
   }
   async #compile(): Promise<CompilerContext> {
     this.#emit("compiler", "started", "Compiling application.");
-    const compiler = await compileProject(this.#projectRoot);
+    const compiler = await this.#compiler.compile({ semanticDiagnostics: false });
     const errors = compiler.diagnostics.filter((diagnostic) => diagnostic.category === "error");
     await atomicWrite(this.#projectRoot, ".warbler/diagnostics/compiler.json", `${JSON.stringify(compiler.diagnostics, null, 2)}\n`, true);
     if (errors.length > 0) {
@@ -161,6 +162,7 @@ export class ManagedDevSession implements DevSession {
       const preparation = configurationChange
         ? await this.#launcher.prepare?.(this.#projectRoot, this.#overrides, this.#report)
         : this.#activePreparation;
+      this.#compiler.markChangedFiles(paths);
       this.#state = "compiling";
       const compiler = await this.#compile();
       this.#emit("bindings", "success", "Generated bindings updated on disk.", {

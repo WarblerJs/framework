@@ -94,6 +94,44 @@ describe("compiler foundation", () => {
     expect(first).not.toBe(second);
     expect(first.program).not.toBe(second.program);
   });
+
+  test("semantic diagnostics remain strict by default and can be skipped for development", async () => {
+    const root = await project(`const value: string = 1; void value;`);
+    const fast = await new Compiler(root).compile({ semanticDiagnostics: false });
+    const strict = await new Compiler(root).compile();
+    const semanticMessage = "Type 'number' is not assignable to type 'string'";
+
+    expect(fast.diagnostics.some((diagnostic) => diagnostic.message.includes(semanticMessage))).toBe(false);
+    expect(strict.diagnostics.some((diagnostic) => diagnostic.message.includes(semanticMessage))).toBe(true);
+  });
+
+  test("persistent compiler invalidates only changed source files", async () => {
+    const root = await project(`
+      import "./support";
+      import { Graph } from "@warbler/core";
+      @Graph() class AppGraph {}
+    `);
+    await Bun.write(join(root, "src", "support.ts"), `export const support = "stable";`);
+
+    const compiler = new Compiler(root);
+    const first = await compiler.compile({ semanticDiagnostics: false });
+    const applicationPath = join(root, "src", "application.ts");
+    const supportPath = join(root, "src", "support.ts");
+    const firstApplication = first.program.getSourceFile(applicationPath);
+    const firstSupport = first.program.getSourceFile(supportPath);
+
+    await Bun.write(applicationPath, `
+      import "./support";
+      import { Graph } from "@warbler/core";
+      @Graph() class ChangedGraph {}
+    `);
+    compiler.markChanged("src/application.ts");
+    const second = await compiler.compile({ semanticDiagnostics: false });
+
+    expect(second.program.getSourceFile(applicationPath)).not.toBe(firstApplication);
+    expect(second.program.getSourceFile(applicationPath)?.text).toContain("ChangedGraph");
+    expect(second.program.getSourceFile(supportPath)).toBe(firstSupport);
+  });
 });
 
 describe("validation diagnostics", () => {
