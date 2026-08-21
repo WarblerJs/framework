@@ -1,6 +1,6 @@
 export const httpConfig = {
   host: "0.0.0.0",
-  port: 3000,
+  port: 3000, 
   allowedHosts: ["127.0.0.1","192.168.1.100", "localhost", '0.0.0.0'],
   request: {
     body: {
@@ -24,7 +24,7 @@ export const httpConfig = {
     query: { maxParameters: 100, maxDepth: 8 },
     cookies: { maxCount: 50, maxSize: "8kb" },
     path: { maxSize: "8kb", maxParameters: 32 },
-    timeouts: { headers: 5_000, body: 30_000, request: 60_000, idle: 10_000 },
+    timeouts: { headers: 5_000, body: 30_000, request: 60_000, idle: 30_000 },
   },
   csrf: {
     enabled: false,
