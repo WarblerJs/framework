@@ -5,10 +5,10 @@ describe("public API", () => {
   test("exports only stable root contracts", () => {
     expect(Object.keys(api).sort()).toEqual([
       "ArchiveRes", "Controller", "Delete", "DownloadRes", "EmptyRes", "FileRes", "Get",
-      "Head", "HtmlRes", "HtmlStreamRes", "ImageRes", "JsonRes", "Options", "Patch", "PdfRes",
+      "Head", "HtmlRes", "HtmlStreamRes", "HttpMethod", "ImageRes", "JsonRes", "Options", "Patch", "PdfRes",
       "Post", "Put", "RESERVED_VIEW_BUILTIN_NAMES", "RedirectRes", "RequestContextFrozenError",
       "Sse", "SseRes", "TextRes",
-      "createHttpRuntimeLauncher", "csrf", "prepareHttpValidationInput", "redirect", "redirectTo", "view",
+      "createHttpRuntimeLauncher", "csrf", "defineHttpGraph", "prepareHttpValidationInput", "redirect", "redirectTo", "view",
     ]);
   });
 });

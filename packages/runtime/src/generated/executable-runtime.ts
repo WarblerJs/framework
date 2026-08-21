@@ -66,7 +66,7 @@ export class ExecutableBindingsRuntime {
     const binding = this.#handlerBindings[handlerId];
     if (binding === undefined || typeof binding.invoke !== "function") throw new GeneratedArtifactError(`Generated handler binding not found: ${handlerId}`);
     const invoke = binding.invoke as (controller: unknown, ...values: readonly unknown[]) => unknown;
-    return invoke(this.controller(binding.controllerId), ...input);
+    return invoke(binding.controllerId === undefined ? undefined : this.controller(binding.controllerId), ...this.#handlerInput(binding, input));
   }
 
   /** Creates Bun-native route objects whose functions dispatch by precompiled route ID. */
@@ -105,6 +105,19 @@ export class ExecutableBindingsRuntime {
     const graph = this.#graphs.get(graphId);
     if (graph === undefined) throw new RuntimeProviderNotFoundError(`Generated Graph container not found: ${graphId}`);
     return graph;
+  }
+  #handlerInput(binding: HandlerBinding, input: readonly unknown[]): readonly unknown[] {
+    const providerIds = binding.useCaseProviderIds;
+    if (providerIds === undefined || providerIds.length === 0) return input;
+    const keys = binding.useCaseKeys;
+    if (keys === undefined || keys.length !== providerIds.length || binding.graphId === undefined) throw new GeneratedArtifactError(`Generated handler use-case metadata is invalid: ${binding.id}`);
+    const useCases: Record<string, unknown> = Object.create(null);
+    for (let index = 0, length = providerIds.length; index < length; index++) useCases[keys[index]!] = this.resolveProvider(binding.graphId, providerIds[index]!);
+    const inputLength = input.length;
+    const result = new Array<unknown>(inputLength + 1);
+    for (let index = 0; index < inputLength; index++) result[index] = input[index];
+    result[inputLength] = Object.freeze(useCases);
+    return Object.freeze(result);
   }
 }
 

@@ -1,4 +1,13 @@
 export { Controller } from "./controller";
+export {
+  defineHttpGraph,
+  HttpMethod,
+  type HttpGraphDefinition,
+  type HttpGraphRoute,
+  type HttpMethod as HttpMethodType,
+  type HttpRouteKey,
+  type HttpRouteTable,
+} from "./graph";
 export { Delete, Get, Head, Options, Patch, Post, Put, Sse } from "./route";
 export {
   prepareHttpValidationInput, RequestContextFrozenError,

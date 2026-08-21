@@ -11,6 +11,7 @@ import type {
   RouteWIR,
   SocketEventWIR,
   SourceLocationWIR,
+  HandlerUseCaseWIR,
 } from "../wir/wir";
 import { DiagnosticCode, type CompilerDiagnostic } from "../diagnostics/diagnostic";
 
@@ -22,6 +23,9 @@ const ROUTE_DECORATORS = new Map([
 const SOCKET_LIFECYCLES = new Map([
   ["OnOpen", "open"], ["OnMessage", "message"], ["OnClose", "close"], ["OnDrain", "drain"], ["OnError", "error"],
 ]);
+const DECLARATIVE_SOCKET_LIFECYCLES = new Map([["OPEN", "open"], ["DRAIN", "drain"], ["CLOSE", "close"]]);
+const SUPPORTED_HTTP_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]);
+const SOCKET_LIFECYCLE_NAMES = new Set(["open", "message", "close", "drain", "error"]);
 const PROVIDERS: ReadonlyMap<string, ProviderWIR["kind"]> = new Map([
   ["Service", "service"], ["Repository", "repository"], ["Factory", "factory"],
   ["Resolver", "resolver"], ["Gateway", "gateway"], ["Injectable", "injectable"],
@@ -35,6 +39,7 @@ export interface AnalyzedGraph extends SourceLocationWIR {
 }
 /** Complete single-pass analysis output. */
 export interface AnalysisResult {
+  readonly transports: readonly string[];
   readonly middleware: readonly string[];
   readonly graphs: readonly AnalyzedGraph[];
   readonly controllers: ReadonlyMap<string, ControllerWIR>;
@@ -44,6 +49,17 @@ export interface AnalysisResult {
   readonly eventListeners: ReadonlyMap<string, EventListenerWIR>;
   readonly eventInterceptors: ReadonlyMap<string, EventInterceptorWIR>;
 }
+interface HandlerOptions {
+  readonly validator?: string;
+  readonly middleware: readonly string[];
+  readonly guards: readonly string[];
+  readonly useCases: readonly HandlerUseCaseWIR[];
+}
+const EMPTY_HANDLER_OPTIONS: HandlerOptions = Object.freeze({
+  middleware: Object.freeze([]),
+  guards: Object.freeze([]),
+  useCases: Object.freeze([]),
+});
 /** Framework-owned provider imported by application code and registered by generated bindings. */
 export interface FrameworkProviderReference extends SourceLocationWIR {
   readonly module: "@warbler/email" | "@warbler/events" | "@warbler/websocket";
@@ -54,6 +70,7 @@ export interface FrameworkProviderReference extends SourceLocationWIR {
 /** Traverses every application SourceFile once and records all Phase 1 declarations. */
 export function analyzeProgram(context: CompilerContext): AnalysisResult {
   const graphs: AnalyzedGraph[] = [];
+  const transports: string[] = [];
   const middleware: string[] = [];
   const controllers = new Map<string, ControllerWIR>();
   const providers = new Map<string, ProviderWIR>();
@@ -61,12 +78,24 @@ export function analyzeProgram(context: CompilerContext): AnalysisResult {
   const events = new Map<string, EventWIR>();
   const eventListeners = new Map<string, EventListenerWIR>();
   const eventInterceptors = new Map<string, EventInterceptorWIR>();
+  const sourceAliases = new Map<ts.SourceFile, ReadonlyMap<string, string>>();
+  const handlerOptions = new Map<string, HandlerOptions>();
+  const csrfValidators = new Set<string>();
 
   for (const sourceFile of context.sourceFiles) {
     const aliases = collectAliases(sourceFile);
-    middleware.push(...collectApplicationMiddleware(sourceFile, aliases));
+    sourceAliases.set(sourceFile, aliases);
+    collectHandlerDefinitions(sourceFile, aliases, handlerOptions, context.diagnostics);
+    collectValidatorDefinitions(sourceFile, aliases, csrfValidators);
+  }
+
+  for (const sourceFile of context.sourceFiles) {
+    const aliases = sourceAliases.get(sourceFile) ?? collectAliases(sourceFile);
+    transports.push(...collectApplicationTransports(sourceFile, aliases));
+    middleware.push(...collectApplicationMiddleware(sourceFile, aliases, context.diagnostics));
     for (const reference of collectFrameworkProviders(sourceFile)) frameworkProviders.set(reference.local, reference);
     collectEventDeclarations(sourceFile, aliases, context.typeChecker, events, eventListeners, eventInterceptors, context.diagnostics);
+    analyzeDeclarativeGraphs(sourceFile, aliases, graphs, controllers, providers, handlerOptions, csrfValidators, context.diagnostics);
     const visit = (node: ts.Node): void => {
       if (ts.isClassDeclaration(node) && node.name !== undefined) {
         analyzeClass(node, sourceFile, aliases, graphs, controllers, providers, context.diagnostics);
@@ -77,6 +106,7 @@ export function analyzeProgram(context: CompilerContext): AnalysisResult {
     visit(sourceFile);
   }
   return Object.freeze({
+    transports: Object.freeze(unique(transports)),
     middleware: Object.freeze(middleware),
     graphs: Object.freeze(graphs),
     controllers,
@@ -86,6 +116,213 @@ export function analyzeProgram(context: CompilerContext): AnalysisResult {
     eventListeners,
     eventInterceptors,
   });
+}
+
+function collectHandlerDefinitions(
+  source: ts.SourceFile,
+  aliases: ReadonlyMap<string, string>,
+  output: Map<string, HandlerOptions>,
+  diagnostics: CompilerDiagnostic[],
+): void {
+  for (const statement of source.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined || !ts.isCallExpression(declaration.initializer)) continue;
+      if (callName(declaration.initializer.expression, aliases) !== "defineHandler") continue;
+      const object = objectArgument(declaration.initializer, 0);
+      if (object === undefined) continue;
+      rejectSingularMiddleware(object, declaration, source, diagnostics);
+      output.set(declaration.name.text, Object.freeze({
+        ...(objectReference(object, "validator") === undefined ? {} : { validator: objectReference(object, "validator")! }),
+        middleware: Object.freeze(objectReferenceArray(object, "middlewares")),
+        guards: Object.freeze(objectReferenceArray(object, "guards")),
+        useCases: Object.freeze(objectReferenceMap(object, "useCase")),
+      }));
+    }
+  }
+}
+
+function collectValidatorDefinitions(source: ts.SourceFile, aliases: ReadonlyMap<string, string>, output: Set<string>): void {
+  for (const statement of source.statements) {
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined || !ts.isCallExpression(declaration.initializer)) continue;
+      if (callName(declaration.initializer.expression, aliases) !== "defineValidator") continue;
+      if (objectBoolean(objectArgument(declaration.initializer, 0), "csrf")) output.add(declaration.name.text);
+    }
+  }
+}
+
+function analyzeDeclarativeGraphs(
+  source: ts.SourceFile,
+  aliases: ReadonlyMap<string, string>,
+  graphs: AnalyzedGraph[],
+  controllers: Map<string, ControllerWIR>,
+  providers: Map<string, ProviderWIR>,
+  handlerOptions: ReadonlyMap<string, HandlerOptions>,
+  csrfValidators: ReadonlySet<string>,
+  diagnostics: CompilerDiagnostic[],
+): void {
+  for (const statement of source.statements) {
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined || !ts.isCallExpression(declaration.initializer)) continue;
+        analyzeDeclarativeGraphCall(declaration.name.text, declaration.initializer, declaration, source, aliases, graphs, controllers, providers, handlerOptions, csrfValidators, diagnostics);
+      }
+      continue;
+    }
+    if (ts.isExportAssignment(statement) && ts.isCallExpression(statement.expression)) {
+      analyzeDeclarativeGraphCall(defaultGraphName(source), statement.expression, statement, source, aliases, graphs, controllers, providers, handlerOptions, csrfValidators, diagnostics);
+    }
+  }
+}
+
+function analyzeDeclarativeGraphCall(
+  graphName: string,
+  call: ts.CallExpression,
+  node: ts.Node,
+  source: ts.SourceFile,
+  aliases: ReadonlyMap<string, string>,
+  graphs: AnalyzedGraph[],
+  controllers: Map<string, ControllerWIR>,
+  providers: Map<string, ProviderWIR>,
+  handlerOptions: ReadonlyMap<string, HandlerOptions>,
+  csrfValidators: ReadonlySet<string>,
+  diagnostics: CompilerDiagnostic[],
+): void {
+  const callee = callName(call.expression, aliases);
+  if (callee !== "defineHttpGraph" && callee !== "defineWebSocketGraph") return;
+  const object = objectArgument(call, 0);
+  if (object === undefined) {
+    diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `${callee}("${graphName}") requires an object literal.`, call, source, [graphName]);
+    return;
+  }
+  rejectSingularMiddleware(object, node, source, diagnostics);
+  const transport = callee === "defineHttpGraph" ? "http" : "websocket";
+  const controllerName = `${graphName}${transport === "http" ? "$http" : "$websocket"}`;
+  const routes = transport === "http" ? declarativeHttpRoutes(object, source, handlerOptions, csrfValidators, diagnostics) : [];
+  const socketEvents = transport === "websocket" ? declarativeSocketEvents(object, source, handlerOptions, diagnostics) : [];
+  graphs.push(Object.freeze({
+    ...location(node, source),
+    name: graphName,
+    prefix: objectString(object, "prefix", ""),
+    transport,
+    middleware: Object.freeze(objectReferenceArray(object, "middlewares")),
+    controllerNames: Object.freeze([controllerName]),
+    providerNames: Object.freeze(unique([
+      ...providerElementNames(object, graphName, aliases, providers, source, diagnostics),
+      ...routes.flatMap((route) => route.useCases.map((item) => item.provider)),
+      ...socketEvents.flatMap((event) => event.useCases.map((item) => item.provider)),
+    ])),
+  }));
+  const controller: ControllerWIR = Object.freeze({
+    ...location(node, source),
+    name: controllerName,
+    kind: transport,
+    synthetic: true,
+    prefix: "",
+    middleware: Object.freeze([]),
+    providerNames: Object.freeze([]),
+    providers: Object.freeze([]),
+    dependencies: Object.freeze([]),
+    routes: Object.freeze(routes),
+    socketEvents: Object.freeze(socketEvents),
+  });
+  if (controllers.has(controllerName)) diagnostic(diagnostics, DiagnosticCode.DUPLICATE_CONTROLLER, `Duplicate generated controller "${controllerName}".`, node, source, [controllerName]);
+  else controllers.set(controllerName, controller);
+}
+
+function declarativeHttpRoutes(
+  object: ts.ObjectLiteralExpression,
+  source: ts.SourceFile,
+  handlerOptions: ReadonlyMap<string, HandlerOptions>,
+  csrfValidators: ReadonlySet<string>,
+  diagnostics: CompilerDiagnostic[],
+): readonly RouteWIR[] {
+  const routesObject = objectChildObject(object, "routes");
+  if (routesObject === undefined) return Object.freeze([]);
+  const routes: RouteWIR[] = [];
+  for (const property of routesObject.properties) {
+    if (!ts.isPropertyAssignment(property)) continue;
+    const key = propertyName(property.name) ?? "";
+    const parsed = parseRouteKey(key);
+    if (parsed === undefined) {
+      diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Invalid HTTP route key "${key}". Use METHOD /path with a supported uppercase method.`, property, source, [key]);
+      continue;
+    }
+    const options = ts.isObjectLiteralExpression(property.initializer) && findProperty(property.initializer, "handler") !== undefined ? property.initializer : undefined;
+    if (options !== undefined) {
+      rejectSingularMiddleware(options, property, source, diagnostics);
+      rejectForbiddenDeclarativeOptions(options, ["validator", "guards", "useCase", "providers"], property, source, diagnostics);
+    }
+    const handler = options === undefined ? expressionReference(property.initializer) : objectReference(options, "handler");
+    if (handler === undefined) {
+      diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `HTTP route "${key}" is missing a handler.`, property, source, [key]);
+      continue;
+    }
+    const inherited = handlerOptionsFor(handlerOptions, handler);
+    const validator = inherited.validator;
+    routes.push(Object.freeze({
+      ...location(property, source),
+      method: parsed.method,
+      path: parsed.path,
+      handler,
+      ...(validator === undefined ? {} : { validator }),
+      ...(options === undefined ? {} : objectStringOrUndefined(options, "name") === undefined ? {} : { name: objectStringOrUndefined(options, "name")! }),
+      middleware: Object.freeze(options === undefined ? inherited.middleware : [...objectReferenceArray(options, "middlewares"), ...inherited.middleware]),
+      guards: inherited.guards,
+      useCases: inherited.useCases,
+      csrf: validator === undefined ? false : csrfValidators.has(lastReferenceSegment(validator)),
+      viewContext: false,
+    }));
+  }
+  return Object.freeze(routes);
+}
+
+function declarativeSocketEvents(
+  object: ts.ObjectLiteralExpression,
+  source: ts.SourceFile,
+  handlerOptions: ReadonlyMap<string, HandlerOptions>,
+  diagnostics: CompilerDiagnostic[],
+): readonly SocketEventWIR[] {
+  const eventsObject = objectChildObject(object, "events");
+  if (eventsObject === undefined) return Object.freeze([]);
+  const events: SocketEventWIR[] = [];
+  for (const property of eventsObject.properties) {
+    if (!ts.isPropertyAssignment(property)) continue;
+    const key = propertyName(property.name) ?? "";
+    const parsed = parseSocketEventKey(key);
+    if (parsed === undefined) {
+      diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Invalid WebSocket event key "${key}". Use OPEN, DRAIN, CLOSE, MSG name, or SUB name.`, property, source, [key]);
+      continue;
+    }
+    const options = ts.isObjectLiteralExpression(property.initializer) && findProperty(property.initializer, "handler") !== undefined ? property.initializer : undefined;
+    if (options !== undefined) {
+      rejectSingularMiddleware(options, property, source, diagnostics);
+      rejectForbiddenDeclarativeOptions(options, ["validator", "guards", "useCase", "providers"], property, source, diagnostics);
+    }
+    const handler = options === undefined ? expressionReference(property.initializer) : objectReference(options, "handler");
+    if (handler === undefined) {
+      diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `WebSocket event "${key}" is missing a handler.`, property, source, [key]);
+      continue;
+    }
+    const inherited = handlerOptionsFor(handlerOptions, handler);
+    events.push(Object.freeze({
+      ...location(property, source),
+      kind: parsed.kind,
+      event: parsed.event,
+      handler,
+      ...(inherited.validator === undefined ? {} : { validator: inherited.validator }),
+      middleware: Object.freeze(options === undefined ? inherited.middleware : [...objectReferenceArray(options, "middlewares"), ...inherited.middleware]),
+      guards: inherited.guards,
+      useCases: inherited.useCases,
+      compression: false,
+      binary: false,
+      authentication: false,
+      rateLimit: false,
+    }));
+  }
+  return Object.freeze(events);
 }
 
 function analyzeClass(
@@ -129,6 +366,7 @@ function analyzeClass(
           ...(routeName === undefined ? {} : { name: routeName }),
           middleware: Object.freeze(objectReferenceArray(options, "middleware")),
           guards: Object.freeze(objectReferenceArray(options, "guards")),
+          useCases: Object.freeze([]),
           csrf: objectBoolean(options, "csrf"),
           viewContext: usesHttpViewContext(member, aliases),
           ...(stream === undefined ? {} : { stream }),
@@ -151,6 +389,7 @@ function analyzeClass(
           ...(validator === undefined ? {} : { validator }),
           middleware: Object.freeze(objectReferenceArray(options, "middleware")),
           guards: Object.freeze(objectReferenceArray(options, "guards")),
+          useCases: Object.freeze([]),
           compression: objectBoolean(options, "compression"),
           binary: objectBoolean(options, "binary"),
           authentication: objectBoolean(options, "authentication"),
@@ -307,11 +546,34 @@ function analyzeProviderRegistration(
   return undefined;
 }
 
-function collectApplicationMiddleware(source: ts.SourceFile, aliases: ReadonlyMap<string, string>): readonly string[] {
+function collectApplicationTransports(source: ts.SourceFile, aliases: ReadonlyMap<string, string>): readonly string[] {
+  const transports: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && callName(node.expression, aliases) === "createApp") {
+      const property = findPropertySafe(objectArgument(node, 0), "transports");
+      if (property !== undefined && ts.isPropertyAssignment(property) && ts.isArrayLiteralExpression(property.initializer)) {
+        for (const element of property.initializer.elements) {
+          const transport = transportName(element);
+          if (transport !== undefined) transports.push(transport);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return transports;
+}
+
+function collectApplicationMiddleware(source: ts.SourceFile, aliases: ReadonlyMap<string, string>, diagnostics: CompilerDiagnostic[]): readonly string[] {
   const middleware: string[] = [];
   const visit = (node: ts.Node): void => {
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && (aliases.get(node.expression.text) ?? node.expression.text) === "createApp") {
-      middleware.push(...objectReferenceArray(objectArgument(node, 0), "middleware"));
+    if (ts.isCallExpression(node) && callName(node.expression, aliases) === "createApp") {
+      const object = objectArgument(node, 0);
+      if (object !== undefined) {
+        if (findProperty(object, "middleware") !== undefined || findProperty(object, "middlewares") !== undefined) {
+          diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `createApp() does not accept application-level middleware. Move middlewares to graphs or handlers.`, node, source, ["createApp"]);
+        }
+      }
     }
     ts.forEachChild(node, visit);
   };
@@ -355,6 +617,11 @@ function decoratorInfo(decorator: ts.Decorator, aliases: ReadonlyMap<string, str
   if (ts.isIdentifier(target)) name = aliases.get(target.text) ?? target.text;
   else if (ts.isPropertyAccessExpression(target)) name = target.name.text;
   return call === undefined ? { name } : { name, call };
+}
+function callName(expression: ts.Expression, aliases: ReadonlyMap<string, string>): string {
+  if (ts.isIdentifier(expression)) return aliases.get(expression.text) ?? expression.text;
+  if (ts.isPropertyAccessExpression(expression)) return expression.name.text;
+  return "";
 }
 function getDecorators(node: ts.Node): readonly ts.Decorator[] {
   return ts.canHaveDecorators(node) ? ts.getDecorators(node) ?? [] : [];
@@ -552,14 +819,30 @@ function objectArgument(call: ts.CallExpression | undefined, index: number): ts.
   const argument = call?.arguments[index];
   return argument !== undefined && ts.isObjectLiteralExpression(argument) ? argument : undefined;
 }
+function objectChildObject(object: ts.ObjectLiteralExpression | undefined, key: string): ts.ObjectLiteralExpression | undefined {
+  const property = object === undefined ? undefined : findProperty(object, key);
+  return property !== undefined && ts.isPropertyAssignment(property) && ts.isObjectLiteralExpression(property.initializer) ? property.initializer : undefined;
+}
 function objectReference(object: ts.ObjectLiteralExpression | undefined, key: string): string | undefined {
   const property = object === undefined ? undefined : findProperty(object, key);
-  return property !== undefined && ts.isPropertyAssignment(property) ? referenceName(property.initializer) : undefined;
+  return property !== undefined && ts.isPropertyAssignment(property) ? expressionReference(property.initializer) : undefined;
 }
 function objectReferenceArray(object: ts.ObjectLiteralExpression | undefined, key: string): string[] {
   const property = object === undefined ? undefined : findProperty(object, key);
   if (property === undefined || !ts.isPropertyAssignment(property) || !ts.isArrayLiteralExpression(property.initializer)) return [];
   return property.initializer.elements.map(referenceName);
+}
+function objectReferenceMap(object: ts.ObjectLiteralExpression | undefined, key: string): HandlerUseCaseWIR[] {
+  const property = object === undefined ? undefined : findProperty(object, key);
+  if (property === undefined || !ts.isPropertyAssignment(property) || !ts.isObjectLiteralExpression(property.initializer)) return [];
+  const result: HandlerUseCaseWIR[] = [];
+  for (const item of property.initializer.properties) {
+    if (!ts.isPropertyAssignment(item)) continue;
+    const name = propertyName(item.name);
+    if (name === undefined) continue;
+    result.push(Object.freeze({ key: name, provider: referenceName(item.initializer) }));
+  }
+  return result;
 }
 function objectBoolean(object: ts.ObjectLiteralExpression | undefined, key: string): boolean {
   const property = object === undefined ? undefined : findProperty(object, key);
@@ -574,9 +857,74 @@ function objectEnum<T extends string>(object: ts.ObjectLiteralExpression | undef
 function findProperty(object: ts.ObjectLiteralExpression, key: string): ts.ObjectLiteralElementLike | undefined {
   return object.properties.find((property) => propertyName(property.name) === key);
 }
+function findPropertySafe(object: ts.ObjectLiteralExpression | undefined, key: string): ts.ObjectLiteralElementLike | undefined {
+  return object === undefined ? undefined : findProperty(object, key);
+}
+function rejectSingularMiddleware(object: ts.ObjectLiteralExpression, node: ts.Node, source: ts.SourceFile, diagnostics: CompilerDiagnostic[]): void {
+  if (findProperty(object, "middleware") !== undefined || findProperty(object, "middleWares") !== undefined || findProperty(object, "middleWears") !== undefined) {
+    diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Declarative Warbler APIs use "middlewares"; legacy middleware spellings are not accepted here.`, node, source, ["middlewares"]);
+  }
+}
+function rejectForbiddenDeclarativeOptions(
+  object: ts.ObjectLiteralExpression,
+  keys: readonly string[],
+  node: ts.Node,
+  source: ts.SourceFile,
+  diagnostics: CompilerDiagnostic[],
+): void {
+  for (const key of keys) {
+    if (findProperty(object, key) !== undefined) diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Declarative route/event option "${key}" is not allowed here. Put it on defineHandler() or the graph as appropriate.`, node, source, [key]);
+  }
+}
 function stringArgument(call: ts.CallExpression | undefined, index: number, fallback: string): string {
   const argument = call?.arguments[index];
   return argument !== undefined && ts.isStringLiteralLike(argument) ? argument.text : fallback;
+}
+function parseRouteKey(key: string): { readonly method: string; readonly path: string } | undefined {
+  if (key !== key.trim() || key.includes("  ")) return undefined;
+  const space = key.indexOf(" ");
+  if (space <= 0) return undefined;
+  const method = key.slice(0, space);
+  const path = key.slice(space + 1);
+  if (!SUPPORTED_HTTP_METHODS.has(method) || !path.startsWith("/") || path.length < 2) return undefined;
+  return Object.freeze({ method, path });
+}
+function parseSocketEventKey(key: string): { readonly kind: "event" | "lifecycle"; readonly event: string } | undefined {
+  if (key !== key.trim()) return undefined;
+  const lifecycle = DECLARATIVE_SOCKET_LIFECYCLES.get(key);
+  if (lifecycle !== undefined) return Object.freeze({ kind: "lifecycle", event: lifecycle });
+  if (key.startsWith("MSG ")) {
+    const name = key.slice(4);
+    return name.trim().length === name.length && name.length > 0 ? Object.freeze({ kind: "event", event: name }) : undefined;
+  }
+  if (key.startsWith("SUB ")) {
+    const name = key.slice(4);
+    return name.trim().length === name.length && name.length > 0 ? Object.freeze({ kind: "event", event: name }) : undefined;
+  }
+  return undefined;
+}
+function handlerOptionsFor(options: ReadonlyMap<string, HandlerOptions>, handler: string): HandlerOptions {
+  return options.get(handler) ?? options.get(lastReferenceSegment(handler)) ?? EMPTY_HANDLER_OPTIONS;
+}
+function lastReferenceSegment(value: string): string {
+  const dot = value.lastIndexOf(".");
+  return dot < 0 ? value : value.slice(dot + 1);
+}
+function transportName(node: ts.Node): string | undefined {
+  if (ts.isStringLiteralLike(node)) return node.text;
+  if (ts.isPropertyAccessExpression(node)) return node.name.text.toLowerCase();
+  return undefined;
+}
+function expressionReference(node: ts.Node): string | undefined {
+  if (ts.isIdentifier(node) || ts.isPropertyAccessExpression(node)) return node.getText();
+  if (ts.isStringLiteralLike(node)) return JSON.stringify(node.text);
+  return undefined;
+}
+function defaultGraphName(source: ts.SourceFile): string {
+  const file = source.fileName.replaceAll("\\", "/").split("/").pop()?.replace(/\.[cm]?tsx?$/u, "") ?? "graph";
+  const words = file.split(/[^A-Za-z0-9]+/u).filter(Boolean);
+  const base = words.length === 0 ? "Graph" : words.map((word) => `${word[0]?.toUpperCase() ?? ""}${word.slice(1)}`).join("");
+  return `${base}Graph`;
 }
 /**
  * Resolves a WIR-level reference name. String literals are JSON-encoded (e.g. `"cache"`) rather than
@@ -594,6 +942,7 @@ function propertyName(node: ts.PropertyName | undefined): string | undefined {
   if (ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) return node.text;
   return undefined;
 }
+function unique(values: readonly string[]): string[] { return [...new Set(values)]; }
 function location(node: ts.Node, source: ts.SourceFile): SourceLocationWIR {
   const point = source.getLineAndCharacterOfPosition(node.getStart(source));
   return { file: source.fileName, line: point.line + 1, column: point.character + 1 };

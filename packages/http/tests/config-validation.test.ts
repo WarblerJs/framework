@@ -7,7 +7,7 @@ describe("HTTP config", () => {
     const config = normalizeHttpConfig(httpConfig);
     expect(config.maxRequestBodySize).toBe(20 * 1024 ** 2);
     expect(config.body.json.maxSize).toBe(1024 ** 2);
-    expect(config.idleTimeoutSeconds).toBe(10);
+    expect(config.idleTimeoutSeconds).toBe(30);
     expect(Object.isFrozen(config.body.multipart)).toBe(true);
   });
 

@@ -30,6 +30,8 @@ export type ValidatorDefinition<
    * Falls back to Warbler's default validation-error response when omitted.
    */
   onValidationError?: ValidationErrorHandler;
+  /** Enables existing HTTP CSRF verification for handlers using this validator. */
+  csrf?: boolean;
   /** @deprecated use `bodyRules` */
   rules?: TRules;
   /** @deprecated use `paramRules` */

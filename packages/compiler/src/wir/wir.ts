@@ -4,6 +4,11 @@ export interface SourceLocationWIR {
   readonly line: number;
   readonly column: number;
 }
+/** Handler-local use case dependency resolved from the owning Graph container. */
+export interface HandlerUseCaseWIR {
+  readonly key: string;
+  readonly provider: string;
+}
 /** HTTP route metadata. */
 export interface RouteWIR extends SourceLocationWIR {
   readonly method: string;
@@ -14,6 +19,7 @@ export interface RouteWIR extends SourceLocationWIR {
   readonly validator?: string;
   readonly middleware: readonly string[];
   readonly guards: readonly string[];
+  readonly useCases: readonly HandlerUseCaseWIR[];
   readonly csrf: boolean;
   readonly viewContext: boolean;
   readonly stream?: "sse" | "html";
@@ -27,6 +33,7 @@ export interface SocketEventWIR extends SourceLocationWIR {
   readonly validator?: string;
   readonly middleware: readonly string[];
   readonly guards: readonly string[];
+  readonly useCases: readonly HandlerUseCaseWIR[];
   readonly compression: boolean;
   readonly binary: boolean;
   readonly authentication: boolean;
@@ -36,6 +43,7 @@ export interface SocketEventWIR extends SourceLocationWIR {
 export interface ControllerWIR extends SourceLocationWIR {
   readonly name: string;
   readonly kind: "http" | "websocket";
+  readonly synthetic?: boolean;
   readonly prefix: string;
   readonly middleware: readonly string[];
   readonly providerNames: readonly string[];
@@ -101,6 +109,7 @@ export interface EventInterceptorWIR extends SourceLocationWIR {
 export interface ApplicationWIR {
   readonly version: 1;
   readonly projectRoot: string;
+  readonly transports: readonly string[];
   readonly middleware: readonly string[];
   readonly graphs: readonly GraphWIR[];
   readonly rootProviders: readonly ProviderWIR[];

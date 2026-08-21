@@ -204,6 +204,49 @@ describe("managed development reload", () => {
     await session.stop();
   }, 20_000);
 
+  test("repeated declarative graph reloads do not retain unbounded compiler or runtime state", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    await Bun.write(join(project.root, "src/main.ts"), `import { createApp, Transport } from "@warbler/core";
+export default createApp({
+  transports: [Transport.HTTP],
+  graphs: "src/graphs/**/*.graph.ts",
+});
+`);
+    await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), declarativeHandlerSource(0));
+    await Bun.write(join(project.root, "src/graphs/test/test.graph.ts"), `import { defineHttpGraph } from "@warbler/http";
+import * as handlers from "./test.handlers";
+export default defineHttpGraph({
+  prefix: "/api",
+  routes: {
+    "GET /test": handlers.getTest,
+  },
+});
+`);
+    let starts = 0;
+    let stops = 0;
+    const samples: number[] = [];
+    const session = await new ManagedDevSession(project.root, {
+      start() {
+        starts++;
+        return { stop() { stops++; } };
+      },
+    }, false).start();
+
+    forceGc();
+    samples.push(process.memoryUsage().heapUsed);
+    for (let index = 1; index <= 12; index++) {
+      await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), declarativeHandlerSource(index));
+      await session.notifyChanges(["src/graphs/test/test.handlers.ts"]);
+      forceGc();
+      samples.push(process.memoryUsage().heapUsed);
+    }
+
+    await session.stop();
+    expect(starts).toBe(13);
+    expect(stops).toBe(13);
+    expect(Math.max(...samples) - Math.min(...samples)).toBeLessThan(64 * 1024 * 1024);
+  }, 30_000);
+
   test("imports fresh compiled validator bindings after a full Runtime restart", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
     const controller = join(project.root, "src/graphs/home/home.controller.ts");
@@ -291,6 +334,18 @@ export default class HomeController {
   }, 20_000);
 });
 
+function declarativeHandlerSource(version: number): string {
+  return `import { defineHandler } from "@warbler/core";
+import { JsonRes, type AppRequest } from "@warbler/http";
+export const getTest = defineHandler({
+  run: (_ctx: AppRequest) => JsonRes({ version: ${version} }),
+});
+`;
+}
+function forceGc(): void {
+  const gc = Bun.gc;
+  if (typeof gc === "function") gc(true);
+}
 function jsonRequest(value: string): Request {
   return new Request("http://127.0.0.1/", {
     method: "POST",

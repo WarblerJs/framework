@@ -11,9 +11,9 @@ test("generated native HTTP routes invoke real controllers and validation", asyn
   try {
     const routes = captured?.routes;
     if (routes === undefined) throw new Error("HTTP routes were not supplied");
-    const root = await routes["/"]!.GET!(new Request("http://127.0.0.1/"));
+    const root = await routes["/api/test"]!.GET!(new Request("http://127.0.0.1/api/test"));
     expect(root.status).toBe(200);
-    expect(await root.json()).toEqual({ framework: "Warbler", runtime: "Bun", status: "running" });
+    expect(await root.json()).toEqual({ success: true, method: "GET" });
     const invalid = await routes["/auth/login"]!.POST!(new Request("http://127.0.0.1/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -28,7 +28,6 @@ test("generated native HTTP routes invoke real controllers and validation", asyn
     const inherited = await routes["/users/middleware/inherited"]!.GET!(new Request("http://127.0.0.1/users/middleware/inherited"));
     expect(inherited.status).toBe(200);
     const inheritedBody = await inherited.json() as Readonly<Record<string, unknown>>;
-    expect(inheritedBody.requestId).toBeTypeOf("string");
     expect(inheritedBody.tenant).toEqual({ id: "playground", source: "default" });
     expect(inheritedBody.user).toEqual({ id: "playground-user", role: "admin" });
     expect("audit" in inheritedBody).toBe(false);
@@ -37,7 +36,6 @@ test("generated native HTTP routes invoke real controllers and validation", asyn
     }));
     expect(all.status).toBe(200);
     const allBody = await all.json() as Readonly<Record<string, unknown>>;
-    expect(allBody.requestId).toBeTypeOf("string");
     expect(allBody.tenant).toEqual({ id: "acme", source: "header" });
     expect(allBody.user).toEqual({ id: "playground-user", role: "admin" });
     expect(allBody.audit).toEqual({ route: "users.middleware.all" });

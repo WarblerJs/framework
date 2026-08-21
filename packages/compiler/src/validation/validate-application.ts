@@ -79,6 +79,7 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
       }
       controllers.push(Object.freeze({
         ...copyLocation(controller), name: controller.name, kind: controller.kind, prefix: controller.prefix,
+        ...(controller.synthetic === true ? { synthetic: true } : {}),
         middleware: controller.middleware,
         providerNames: controller.providerNames,
         providers: Object.freeze(controllerProviders), dependencies: controller.dependencies, routes: controller.routes, socketEvents: controller.socketEvents,
@@ -129,6 +130,7 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
   return Object.freeze({
     version: 1,
     projectRoot,
+    transports: Object.freeze(analysis.transports),
     middleware: analysis.middleware,
     graphs: Object.freeze(result),
     rootProviders: Object.freeze([...rootProviders.values()]),

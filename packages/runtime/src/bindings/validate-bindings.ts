@@ -86,8 +86,28 @@ export function validateApplicationBindings(application: GeneratedApplicationBin
     }
   }
   for (const binding of application.handlers) {
-    if (controllers[binding.controllerId] === undefined || typeof binding.invoke !== "function") {
-      fail(RuntimeDiagnosticCode.HANDLER_BINDING_INVALID, "Handler binding references an invalid Controller or invocation.", { handlerId: binding.id, controllerId: binding.controllerId });
+    if (binding.kind === "function") {
+      if (binding.graphId === undefined || !graphIds.has(binding.graphId) || typeof binding.invoke !== "function") {
+        fail(RuntimeDiagnosticCode.HANDLER_BINDING_INVALID, "Function handler binding references an invalid Graph or invocation.", { handlerId: binding.id, graphId: binding.graphId ?? -1 });
+      }
+      if ((binding.useCaseKeys?.length ?? 0) !== (binding.useCaseProviderIds?.length ?? 0)) {
+        fail(RuntimeDiagnosticCode.HANDLER_BINDING_INVALID, "Function handler binding has mismatched use-case metadata.", { handlerId: binding.id });
+      }
+      for (const providerId of binding.useCaseProviderIds ?? Object.freeze([])) {
+        safeId(providerId, "providerId");
+        const provider = providers[providerId];
+        if (provider === undefined) fail(RuntimeDiagnosticCode.PROVIDER_NOT_FOUND, "Function handler use-case provider is missing.", { handlerId: binding.id, providerId });
+        if (provider.scope !== "root" && provider.graphId !== binding.graphId) {
+          fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Function handler use-case provider belongs to another Graph.", { handlerId: binding.id, providerId });
+        }
+        if (provider.scope === "controller") {
+          fail(RuntimeDiagnosticCode.PROVIDER_SCOPE_VIOLATION, "Function handler cannot use a controller-scoped provider.", { handlerId: binding.id, providerId });
+        }
+      }
+      continue;
+    }
+    if (binding.controllerId === undefined || controllers[binding.controllerId] === undefined || typeof binding.invoke !== "function") {
+      fail(RuntimeDiagnosticCode.HANDLER_BINDING_INVALID, "Handler binding references an invalid Controller or invocation.", { handlerId: binding.id, controllerId: binding.controllerId ?? -1 });
     }
   }
   validateRouteRecords(application, handlers);
@@ -103,7 +123,8 @@ function validateRouteRecords(application: GeneratedApplicationBindings, handler
     ids.add(routeId);
     const handlerId = field(record, "handlerId");
     const controllerId = field(record, "controllerId");
-    if (handlers[handlerId] === undefined || handlers[handlerId]!.controllerId !== controllerId) fail(RuntimeDiagnosticCode.HANDLER_BINDING_INVALID, "HTTP route handler reference is invalid.", { routeId, handlerId, controllerId });
+    const handler = handlers[handlerId];
+    if (handler === undefined || (handler.kind !== "function" && handler.controllerId !== controllerId)) fail(RuntimeDiagnosticCode.HANDLER_BINDING_INVALID, "HTTP route handler reference is invalid.", { routeId, handlerId, controllerId });
     validateOptionalId(record, "validatorId", application.validators.length, routeId);
     validateRange(record, "guardStart", "guardCount", application.application.routeGuards, application.guards.length, routeId);
     validateRange(record, "middlewareStart", "middlewareCount", application.application.routeMiddleware, application.middleware.length, routeId);
@@ -157,7 +178,6 @@ function dense<T extends { readonly id: number }>(values: readonly T[], kind: st
   const result: Array<T | undefined> = [];
   for (const value of values) {
     safeId(value.id, `${kind}Id`);
-    if (value.id >= values.length) fail(RuntimeDiagnosticCode.INVALID_APPLICATION_BINDINGS, `Generated ${kind} binding ID is out of bounds.`, { bindingId: value.id });
     if (result[value.id] !== undefined) fail(RuntimeDiagnosticCode.DUPLICATE_BINDING_ID, `Duplicate generated ${kind} binding ID.`, { bindingId: value.id });
     result[value.id] = value;
   }

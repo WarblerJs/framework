@@ -54,7 +54,7 @@ describe("compiler foundation", () => {
         middleware: [graphMiddleware],
       })
       class UsersGraph {}
-      export default createApp({ graphs: [UsersGraph], middleware: [globalMiddleware] });
+      export default createApp({ graphs: [UsersGraph] });
     `);
 
     const context = await compileProject(root);
@@ -64,7 +64,7 @@ describe("compiler foundation", () => {
     const wir = context.applicationWIR!;
     expect(Object.isFrozen(wir)).toBe(true);
     expect(wir.graphs).toHaveLength(1);
-    expect(wir.middleware).toEqual(["globalMiddleware"]);
+    expect(wir.middleware).toEqual([]);
     expect(wir.rootProviders.map((provider) => provider.name)).toEqual(["LoggerService"]);
     const graph = wir.graphs[0]!;
     expect(graph.name).toBe("UsersGraph");
@@ -135,6 +135,49 @@ describe("compiler foundation", () => {
 });
 
 describe("validation diagnostics", () => {
+  test("reports declarative graph key and placement errors with source coordinates", async () => {
+    const root = await project(`
+      import { defineHandler, createApp } from "@warbler/core";
+      import { defineHttpGraph } from "@warbler/http";
+      import { defineWebSocketGraph } from "@warbler/websocket";
+      const validator = {};
+      const handler = defineHandler({ run: (_ctx: unknown) => undefined });
+      export const http = defineHttpGraph({
+        routes: {
+          "GETW /test": handler,
+          "get /test": handler,
+          "GET test": handler,
+          "POST /test": { handler, validator },
+        },
+      });
+      export const socket = defineWebSocketGraph({
+        events: {
+          DRAINE: handler,
+          "MSG ": handler,
+          "SUB crash": { handler, guards: [] },
+        },
+      });
+      export default createApp({ graphs: [http, socket] });
+    `);
+
+    const context = await compileProject(root, { semanticDiagnostics: false });
+    const declarative = context.diagnostics.filter((diagnostic) => diagnostic.code === "WARBLER1008");
+    expect(declarative.map((diagnostic) => diagnostic.message)).toEqual(expect.arrayContaining([
+      expect.stringContaining('Invalid HTTP route key "GETW /test"'),
+      expect.stringContaining('Invalid HTTP route key "get /test"'),
+      expect.stringContaining('Invalid HTTP route key "GET test"'),
+      expect.stringContaining('Declarative route/event option "validator" is not allowed'),
+      expect.stringContaining('Invalid WebSocket event key "DRAINE"'),
+      expect.stringContaining('Invalid WebSocket event key "MSG "'),
+      expect.stringContaining('Declarative route/event option "guards" is not allowed'),
+    ]));
+    for (const diagnostic of declarative) {
+      expect(diagnostic.sourceFile.endsWith("src/application.ts")).toBe(true);
+      expect(diagnostic.line).toBeGreaterThan(0);
+      expect(diagnostic.column).toBeGreaterThan(0);
+    }
+  });
+
   test("reports duplicate routes and socket events with source coordinates", async () => {
     const root = await project(`
       import { Graph } from "@warbler/core";

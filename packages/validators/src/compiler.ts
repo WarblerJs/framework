@@ -26,7 +26,7 @@ const selectedHeaderKeys = new WeakMap<z.ZodType, readonly string[]>();
 
 export function compileValidator<T extends RequestValidator>(definition: T, id = 0): CompiledValidator {
   if (!isRecord(definition) || !Number.isSafeInteger(id) || id < 0) throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, "Validator definition or ID is invalid.");
-  const allowed = new Set(["rules", "bodyRules", "queryRules", "pathRules", "paramRules", "headerRules", "cookieRules", "messageRules", "metadataRules", "mapV", "mapK", "onValidationError"]);
+  const allowed = new Set(["rules", "bodyRules", "queryRules", "pathRules", "paramRules", "headerRules", "cookieRules", "messageRules", "metadataRules", "mapV", "mapK", "onValidationError", "csrf"]);
   if (Object.keys(definition).some((key) => !allowed.has(key))) throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, "Validator definition contains an unknown property.");
   const normalized = {
     rules: resolveAliasedSection(definition.bodyRules as RuleShape | undefined, definition.rules as RuleShape | undefined, "bodyRules", "rules"),

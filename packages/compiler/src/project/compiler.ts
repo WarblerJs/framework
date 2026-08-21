@@ -1,4 +1,5 @@
 import ts from "typescript";
+import { readFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { Console, createCorrelationId } from "@warbler/console";
 import { analyzeProgram } from "../analyzer/analyze-program";
@@ -110,7 +111,7 @@ export class Compiler {
       const changedSourceFiles = this.#evictInvalidatedCompilerFiles();
       const host = this.#compilerHost(parsed.options);
       const program = ts.createProgram({
-        rootNames: parsed.fileNames,
+        rootNames: applicationRootNames(parsed.fileNames, config.projectRoot),
         options: parsed.options,
         host,
 
@@ -275,6 +276,7 @@ export class Compiler {
       context.applicationWIR = Object.freeze({
         version: 1,
         projectRoot: config.projectRoot,
+        transports: Object.freeze([]),
         middleware: Object.freeze([]),
         graphs: Object.freeze([]),
         rootProviders: Object.freeze([]),
@@ -474,6 +476,7 @@ export async function compileApplication(
   return context.applicationWIR ?? Object.freeze({
     version: 1,
     projectRoot: context.config.projectRoot,
+    transports: Object.freeze([]),
     middleware: Object.freeze([]),
     graphs: Object.freeze([]),
     rootProviders: Object.freeze([]),
@@ -549,7 +552,70 @@ function isGraphShapingSignature(signature: string): boolean {
     signature.includes("@Resolver") ||
     signature.includes("@Gateway") ||
     signature.includes("@Injectable") ||
+    signature.includes("defineHttpGraph") ||
+    signature.includes("defineWebSocketGraph") ||
+    signature.includes("defineHandler") ||
+    signature.includes("defineValidator") ||
+    signature.includes("createApp") ||
     signature.includes("inject:");
+}
+
+function applicationRootNames(fileNames: readonly string[], projectRoot: string): readonly string[] {
+  const roots = new Set(fileNames.map((fileName) => fileName.replaceAll("\\", "/")));
+  for (const fileName of fileNames) {
+    let text = "";
+    try { text = readFileSync(fileName, "utf8"); } catch { continue; }
+    if (!text.includes("createApp")) continue;
+    const source = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    for (const pattern of createAppGraphGlobs(source)) {
+      for (const match of expandGraphGlob(projectRoot, pattern)) roots.add(match);
+    }
+  }
+  return Object.freeze([...roots]);
+}
+
+function createAppGraphGlobs(source: ts.SourceFile): readonly string[] {
+  const result: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && callExpressionName(node.expression) === "createApp") {
+      const object = node.arguments[0];
+      if (object !== undefined && ts.isObjectLiteralExpression(object)) {
+        const property = object.properties.find((item) => propertyName(item.name) === "graphs");
+        if (property !== undefined && ts.isPropertyAssignment(property)) {
+          const value = property.initializer;
+          if (ts.isStringLiteralLike(value)) result.push(value.text);
+          if (ts.isArrayLiteralExpression(value)) {
+            for (const element of value.elements) if (ts.isStringLiteralLike(element)) result.push(element.text);
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return Object.freeze(result);
+}
+
+function expandGraphGlob(projectRoot: string, pattern: string): readonly string[] {
+  const glob = new Bun.Glob(pattern);
+  const matches: string[] = [];
+  for (const fileName of glob.scanSync({ cwd: projectRoot, onlyFiles: true })) {
+    if (!/\.[cm]?tsx?$/u.test(fileName) || /\.d\.[cm]?ts$/u.test(fileName)) continue;
+    matches.push(`${projectRoot}/${fileName}`.replaceAll("\\", "/"));
+  }
+  return Object.freeze(matches);
+}
+
+function callExpressionName(expression: ts.Expression): string {
+  if (ts.isIdentifier(expression)) return expression.text;
+  if (ts.isPropertyAccessExpression(expression)) return expression.name.text;
+  return "";
+}
+
+function propertyName(node: ts.PropertyName | undefined): string | undefined {
+  if (node === undefined) return undefined;
+  if (ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) return node.text;
+  return undefined;
 }
 
 function normalizeTypeScriptDiagnostic(input: ts.Diagnostic): CompilerDiagnostic {

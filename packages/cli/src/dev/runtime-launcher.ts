@@ -7,7 +7,7 @@ import {
   type RuntimeTransportLauncher,
 } from "@warbler/runtime";
 import { pathToFileURL } from "node:url";
-import { loadCLIConfig, loadEnabledTransportConfigs, resolveEnabledTransports } from "../config";
+import { applyApplicationTransports, loadCLIConfig, loadEnabledTransportConfigs, resolveEnabledTransports } from "../config";
 import { CLIError, describeErrorChain } from "../errors";
 import { ExitCode } from "../types";
 import type { DevelopmentReporter, DevelopmentRuntimeHandle, DevelopmentRuntimeLauncher, DevelopmentRuntimeOverrides } from "./dev-session";
@@ -41,7 +41,11 @@ export class GeneratedBindingsRuntimeLauncher implements DevelopmentRuntimeLaunc
     const prepared = isRuntimePreparation(preparation)
       ? preparation
       : await this.prepare(projectRoot, overrides, report);
-    const { runtimeConfig, enabledTransports, transportConfigs } = prepared;
+    const runtimeConfig = applyApplicationTransports(prepared.runtimeConfig, compiler.applicationWIR?.transports);
+    const enabledTransports = resolveEnabledTransports(runtimeConfig);
+    const transportConfigs = runtimeConfig === prepared.runtimeConfig
+      ? prepared.transportConfigs
+      : await loadEnabledTransportConfigs(runtimeConfig, projectRoot);
     report(event("bindings", "started", `Importing ${compiler.applicationEntry}?build=${compiler.fingerprint}.`, {
       entry: compiler.applicationEntry,
       fingerprint: compiler.fingerprint,

@@ -5,6 +5,7 @@ export * from "./di";
 export * from "./either";
 export * from "./errors";
 export * from "./graph";
+export * from "./handler";
 export * from "./metadata";
 export * from "./transport";
 export * from "./types";
