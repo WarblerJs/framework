@@ -32,24 +32,23 @@ describe("onValidationError compilation", () => {
   test("rejects a non-function onValidationError", () => {
     expect(() => compileValidator({
       bodyRules: { name: v.string() },
-      // @ts-expect-error deliberately invalid for the runtime check below
       onValidationError: "not-a-function",
-    })).toThrow("VALIDATOR1001");
+    } as never)).toThrow("VALIDATOR1001");
   });
 
   test("survives compilation independently across every rule source, and combined", () => {
     const handler = () => new Response(null);
     const sections = [
       { bodyRules: { name: v.string() } },
-      { queryRules: { page: v.coerce.number() } },
+      { queryRules: { page: v.number() } },
       { paramRules: { id: v.string() } },
-      { headerRules: { "x-retries": v.coerce.number() } },
+      { headerRules: { "x-retries": v.number() } },
       { cookieRules: { session: v.string() } },
       {
         bodyRules: { name: v.string() },
-        queryRules: { page: v.coerce.number() },
+        queryRules: { page: v.number() },
         paramRules: { id: v.string() },
-        headerRules: { "x-retries": v.coerce.number() },
+        headerRules: { "x-retries": v.number() },
         cookieRules: { session: v.string() },
       },
     ] as const;
@@ -66,6 +65,7 @@ describe("onValidationError compilation", () => {
       onValidationError: () => new Response(null),
     });
     const result = compiled.execute({ value: { name: 1 }, path: { id: "not-a-uuid" } });
+    if (result instanceof Promise) throw new Error("Expected synchronous validation result");
     expect(result.valid).toBe(false);
     if (result.valid) return;
     expect(Object.keys(result.errors)).toEqual(["body.name", "path.id"]);

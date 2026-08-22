@@ -1,6 +1,15 @@
 
-import { defineValidator, v } from "@warbler/validators";
+import { defineValidator, v, type ValidationErrors, type ValidationIssue, type ValidationRequest } from "@warbler/validators";
 import { JsonRes, view } from "@warbler/http";
+
+function firstIssue(errors: ValidationErrors): ValidationIssue | undefined {
+  const groups = Object.values(errors);
+  for (let index = 0; index < groups.length; index += 1) {
+    const issue = groups[index]?.[0];
+    if (issue !== undefined) return issue;
+  }
+  return undefined;
+}
 
 export const postUserValidatore = defineValidator({
   bodyRules: {
@@ -8,12 +17,12 @@ export const postUserValidatore = defineValidator({
     password: v.string('id_invalid_uuid'),
   },
   // headerRules: {
-  //   "x-retries": v.coerce.number("validators.invalid_retries").int("validators.invalid_retries").nonnegative("validators.invalid_retries"),
+  //   "x-retries": v.number("validators.invalid_retries").int("validators.invalid_retries").gte(0, "validators.invalid_retries"),
   // },
-  onValidationError(req, errors) {
-    const [firstIssue] = Object.values(errors).flat();
-    console.log('firstIssue',firstIssue)
-    return JsonRes(firstIssue)
+  onValidationError(req: ValidationRequest, errors: ValidationErrors) {
+    const issue = firstIssue(errors);
+    console.log('firstIssue', issue)
+    return JsonRes(issue)
     // return view("user.invalid-id", {
     //   title: "Invalid user id",
     //   id: String(req.params.id ?? ""),

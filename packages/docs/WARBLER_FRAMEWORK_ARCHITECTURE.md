@@ -1047,10 +1047,10 @@ export const validateUserId = defineValidator({
     id: v.uuid("id_invalid_uuid"),
   },
   headerRules: {
-    "x-retries": v.coerce
+    "x-retries": v
       .number("validators.invalid_retries")
       .int("validators.invalid_retries")
-      .nonnegative("validators.invalid_retries"),
+      .gte(0, "validators.invalid_retries"),
   },
   onValidationError(req, errors) {
     return view("auth.login", {
