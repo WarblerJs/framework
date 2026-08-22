@@ -21,7 +21,7 @@ export default defineHttpGraph({
       handler: handlers.getTest
     },
 
-    "POST /test": {
+    "POST /test/:id": {
       handler: handlers.postTest,
       name: "test.create",
     },
