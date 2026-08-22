@@ -1,0 +1,24 @@
+import { inject, left, right, Service, type Either } from "@warbler/core";
+import type { AuthTranslationKey } from "src/graphs/auth/application/types/auth-translation-key";
+import { FindUserRepositoryPort } from "../../domain/ports/user.repository.port";
+
+
+@Service()
+export class GetUserUseCase {
+     readonly #repository = inject(FindUserRepositoryPort);
+    // readonly #sessions = inject(SessionRepositoryPort);
+
+    async execute(): Promise<Either<AuthTranslationKey, {user:any,sessionId:string}>> {
+        
+        if (true) {
+            return right({
+                user: { habib:'bel from excute'},
+                sessionId: 'rpepee from excute',
+                usersList: await this.#repository.findUsers()
+            }); 
+        } else {
+            return left('emailOrPassNotCorrect');
+        }
+
+    }
+}

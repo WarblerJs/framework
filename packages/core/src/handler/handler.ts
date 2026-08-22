@@ -30,14 +30,20 @@ export type HandlerDefinition<
   ? HandlerDefinitionWithUseCase<TContext, TUseCase, TResult>
   : HandlerDefinitionWithoutUseCase<TContext, TResult>;
 type AnyHandlerDefinition = HandlerBase & Readonly<{
-  readonly useCase?: UseCaseMap;
-  readonly run: (...args: any[]) => unknown;
+  readonly useCase?: unknown;
+  readonly run: unknown;
 }>;
 
 /** Defines one transport-neutral handler while preserving the author's context and use-case types. */
-export function defineHandler<const TDefinition extends AnyHandlerDefinition>(
-  definition: TDefinition,
-): Readonly<TDefinition> {
+export function defineHandler<const TUseCase extends UseCaseMap, TContext, TResult>(
+  definition: HandlerDefinitionWithUseCase<TContext, TUseCase, TResult>,
+): Readonly<HandlerDefinitionWithUseCase<TContext, TUseCase, TResult>>;
+export function defineHandler<TContext, TResult>(
+  definition: HandlerDefinitionWithoutUseCase<TContext, TResult>,
+): Readonly<HandlerDefinitionWithoutUseCase<TContext, TResult>>;
+export function defineHandler(
+  definition: AnyHandlerDefinition,
+): Readonly<AnyHandlerDefinition> {
   return Object.freeze({
     ...definition,
     ...(definition.guards === undefined ? {} : { guards: Object.freeze([...definition.guards]) }),

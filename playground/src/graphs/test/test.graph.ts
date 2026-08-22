@@ -1,15 +1,25 @@
 import { defineHttpGraph } from "@warbler/http";
 
-import * as handlers from "./test.handlers";
+import * as handlers from "./presentation/http/handlers/test.handlers";
+import { Provider } from "@warbler/core";
+import { FindUserRepositoryPort } from "./domain/ports/user.repository.port";
+import { WlbPgFindUserRepository } from "./infrastructure/persistence/wlb-pg-user.repository";
 
 export default defineHttpGraph({
   prefix: "/api",
 
   middlewares: [],
-  providers: [],
+  providers: [
+    Provider({provide: FindUserRepositoryPort ,useExisting: WlbPgFindUserRepository })
+  ],
+  
+
 
   routes: {
-    "GET /test": handlers.getTest,
+    "GET /test": {
+      name: 'test.index',
+      handler: handlers.getTest
+    },
 
     "POST /test": {
       handler: handlers.postTest,
