@@ -5,7 +5,7 @@ export const benchValidator = defineValidator({
     id: v.string('id_invalid_uuid')
   },
   // headerRules: {
-  //   "x-retries": v.number("validators.invalid_retries").int("validators.invalid_retries").gte(0, "validators.invalid_retries"),
+  //   "x-retries": v.coerce.number("validators.invalid_retries").int("validators.invalid_retries").nonnegative("validators.invalid_retries"),
   // },
 //   onValidationError(req, errors) {
 //     const [firstIssue] = Object.values(errors).flat();

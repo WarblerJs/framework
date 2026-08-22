@@ -15,15 +15,14 @@ export const getTest = defineHandler({
   validator: validateRequest,
   guards: [ guestGuardTest ],
   middlewares: [ authMiddleware ],
-  run: async (_ctx: AppRequest<typeof validateRequest>,{getUser}) => {
+  run: async (_ctx: AppRequest,{getUser}) => {
 
-   return  JsonRes({ pp: _ctx.query })
-   // const res = await getUser.execute();
+    const res = await getUser.execute();
 
-    // return res.match({
-    //   right: ( c) => JsonRes({ pp: _ctx.body }),
-    //   left: ( d) => JsonRes({  error: d }),
-    // })
+    return res.match({
+      right: ( c) => JsonRes({ pp: _ctx.context, vbn:c  }),
+      left: ( d) => JsonRes({  error: d }),
+    })
 
 
   },
@@ -40,8 +39,6 @@ export const postTest = defineHandler({
       success: true,
       method: "POST",
       body: ctx.body,
-      q: ctx.query,
-      p: ctx.params,
     });
   },
 });

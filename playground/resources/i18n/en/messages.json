@@ -1,9 +1,6 @@
 {
   "welcome": "Welcome, :name!",
   "auth_failed": "Authentication failed.",
-  "notValidId": "Not valid feild",
-  "notValidType": "Not valid type",
-  "shouldGreate": "should Greate :gt",
   "invalid_string": "This value must be a string.",
   "max_message": "Maximum length is :allowed. You entered :entered.",
   "type_not_existe": "Type is not exist .",
