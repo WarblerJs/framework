@@ -19,7 +19,7 @@ export async function createStarterProject(cwd: string, name: string | undefined
     }, null, 2) + "\n",
     "tsconfig.json": JSON.stringify({ compilerOptions: { lib: ["ESNext"], target: "ESNext", module: "Preserve", moduleResolution: "Bundler", strict: true, skipLibCheck: true, noEmit: true, types: ["bun"] }, include: ["src", ".warbler/generated/context.generated.d.ts"] }, null, 2) + "\n",
     ".gitignore": "node_modules/\ndist/\n.warbler/\n",
-    "src/main.ts": `import { createApp } from "@warbler/core";\nimport HomeGraph from "./graphs/home/home.graph";\n\nexport default createApp({ graphs: [HomeGraph] });\n`,
+    "src/main.ts": `import { createApp, Transport } from "@warbler/core";\n\nexport default createApp({\n  transports: [Transport.HTTP],\n  graphs: "src/graphs/**/*.graph.ts",\n});\n`,
     "src/config/runtime.config.ts": `export default {\n  network: { host: "127.0.0.1" },\n  transports: {\n    http: { enabled: true, port: 3000 },\n    websocket: { enabled: false }, tcp: { enabled: false }, udp: { enabled: false },\n    mcp: { enabled: false }, webrtc: { enabled: false },\n  },\n  telemetry: {\n    metrics: { enabled: false, host: "127.0.0.1", port: 9090, path: "/metrics" },\n    healthCheck: { enabled: false, host: "127.0.0.1", port: 9091, path: "/health" },\n  },\n} as const;\n`,
     "src/config/transports/http.config.ts": `export const httpConfig = {
   request: {

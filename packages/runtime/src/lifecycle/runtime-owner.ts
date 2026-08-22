@@ -13,7 +13,7 @@ import {
 } from "@warbler/config";
 import { Console } from "@warbler/console";
 import { loadProjectTranslator, localizeRequest, type CatalogTranslator } from "@warbler/i18n";
-import { RequestContextStore, runInRequestContext } from "@warbler/core";
+import { getActiveContainer, RequestContextStore, runInRequestContext } from "@warbler/core";
 import { validateApplicationBindings, type ValidatedBindingIndexes } from "../bindings";
 import { RootProviderContainer, GraphProviderContainer, RequestProviderContainer } from "../container/generated-provider-containers";
 import { ControllerInstanceTable } from "../controllers";
@@ -216,7 +216,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
   public invokeHandler(handlerId: number, input: readonly unknown[]): unknown {
     const binding = this.#indexes?.handlers[handlerId];
     if (binding === undefined || this.#controllers === undefined) throw new RuntimeBootstrapError(`Generated Handler not found: ${handlerId}`);
-    return executeHandler(binding, this.#controllers.get(binding.controllerId), input);
+    return executeHandler(binding, binding.controllerId === undefined ? undefined : this.#controllers.get(binding.controllerId), handlerInput(binding, input));
   }
   /** Idempotently stops transports, Controllers, Graph providers, then Root providers. */
   public stop(options: RuntimeStopOptions = {}): Promise<void> {
@@ -358,7 +358,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     const handler = this.#indexes?.handlers[handlerId];
     const validator = this.#indexes?.validators[validatorId];
     const parameterCount = typeof handler?.parameterCount === "number" ? handler.parameterCount : 1;
-    const graphId = this.#indexes!.controllers[controllerId]?.graphId;
+    const graphId = handler?.graphId ?? this.#indexes!.controllers[controllerId]?.graphId;
     if (graphId === undefined) throw new RuntimeBootstrapError(`Generated Controller has no Graph: ${controllerId}`);
     const hasRequestScoped = registry.requestScopedGraphs.has(graphId);
     const needsValidation = validatorId >= 0 || (flags & COMPILER_ROUTE_VALIDATION) !== 0;
@@ -447,7 +447,7 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     // Route/socket pipelines run with the owning Graph as the ambient DI resolver so guards,
     // middleware, validators, and handlers can call `inject()` during execution. Only swap
     // in a fresh request-scoped container when the Graph actually declares request providers.
-    const graphId = this.#indexes!.controllers[controllerId]?.graphId;
+    const graphId = this.#indexes!.handlers[handlerId]?.graphId ?? this.#indexes!.controllers[controllerId]?.graphId;
     if (graphId === undefined) throw new RuntimeBootstrapError(`Generated Controller has no Graph: ${controllerId}`);
     const graph = this.#graphMap.get(graphId);
     if (graph === undefined) throw new RuntimeBootstrapError(`Generated Graph container not found: ${graphId}`);
@@ -459,10 +459,10 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
     const controllerStart = performance.now();
     const binding = this.#indexes?.handlers[handlerId];
     if (binding === undefined || this.#controllers === undefined) throw new RuntimeBootstrapError(`Generated Handler not found: ${handlerId}`);
-    const controller = this.#controllers.get(binding.controllerId);
+    const controller = binding.controllerId === undefined ? undefined : this.#controllers.get(binding.controllerId);
     profiler.record("diController", performance.now() - controllerStart);
     const handlerStart = performance.now();
-    const result = executeHandler(binding, controller, input);
+    const result = executeHandler(binding, controller, handlerInput(binding, input));
     if (isThenable(result)) {
       return result.then((value) => {
         profiler.record("handlerExecution", performance.now() - handlerStart);
@@ -517,6 +517,20 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
 /** Starts one Compiler-generated executable application manifest. */
 export async function startRuntime(options: StartRuntimeOptions): Promise<RuntimeHandle> {
   return new GeneratedRuntimeOwner(options).start();
+}
+function handlerInput(binding: import("../generated/executable-bindings").HandlerBinding, input: readonly unknown[]): readonly unknown[] {
+  const providerIds = binding.useCaseProviderIds;
+  if (providerIds === undefined || providerIds.length === 0) return input;
+  const keys = binding.useCaseKeys;
+  if (keys === undefined || keys.length !== providerIds.length) throw new RuntimeBootstrapError(`Generated Handler use-case metadata is invalid: ${binding.id}`);
+  const resolver = getActiveContainer() as unknown as { resolve(key: number): unknown };
+  const useCases: Record<string, unknown> = Object.create(null);
+  for (let index = 0, length = providerIds.length; index < length; index++) useCases[keys[index]!] = resolver.resolve(providerIds[index]!);
+  const inputLength = input.length;
+  const result = new Array<unknown>(inputLength + 1);
+  for (let index = 0; index < inputLength; index++) result[index] = input[index];
+  result[inputLength] = Object.freeze(useCases);
+  return Object.freeze(result);
 }
 function runValidated(
   validator: import("../generated/executable-bindings").ValidatorBinding | undefined,

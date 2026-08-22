@@ -85,7 +85,16 @@ function parameterCount(node: ts.ClassElement): number {
 function compilerRelevantCallFact(node: ts.CallExpression): string | undefined {
   const expression = node.expression;
   const name = callName(expression);
-  if (name === "createApp" || name === "event" || name === "listen" || name === "interceptEvent") return `${name}:${node.arguments.map((argument) => argument.getText()).join(",")}`;
+  if (
+    name === "createApp" ||
+    name === "defineHttpGraph" ||
+    name === "defineWebSocketGraph" ||
+    name === "defineHandler" ||
+    name === "defineValidator" ||
+    name === "event" ||
+    name === "listen" ||
+    name === "interceptEvent"
+  ) return `${name}:${node.arguments.map((argument) => argument.getText()).join(",")}`;
   if (name === "inject") return `inject:${argumentText(node, 0)}`;
   if (name === "view" || name === "csrf") return `${name}:${argumentText(node, 0)}`;
   if (name === "context.set" || name.endsWith(".set")) return `context-set:${argumentText(node, 0)}:${argumentText(node, 1)}`;

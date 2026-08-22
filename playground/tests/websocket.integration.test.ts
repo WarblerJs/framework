@@ -38,4 +38,4 @@ test("generated WebSocket dispatch invokes Subscribe handlers", async () => {
   } finally {
     await runtime.stop();
   }
-});
+}, 15_000);

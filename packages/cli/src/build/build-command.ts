@@ -1,7 +1,7 @@
 import { compileProject } from "@warbler/compiler";
 import { Console, createCorrelationId } from "@warbler/console";
 import { mkdir } from "node:fs/promises";
-import { loadCLIConfig, loadEnabledTransportConfigs, resolveEnabledTransports } from "../config";
+import { applyApplicationTransports, loadCLIConfig, loadEnabledTransportConfigs, resolveEnabledTransports } from "../config";
 import { CLIError } from "../errors";
 import { atomicWrite, copyTree, removeGeneratedDirectory, resolveInside } from "../filesystem";
 import type { ProjectLayout } from "../project";
@@ -21,12 +21,12 @@ export async function buildCommand(layout: ProjectLayout, options: Readonly<{ ou
   const timer = Console.timer("Build");
   const buildId = createCorrelationId("build");
   Console.build({ build: 1, buildId, status: "started" });
-  const runtime = await loadCLIConfig(layout.root);
-  await loadEnabledTransportConfigs(runtime, layout.root);
-  const enabledTransports = resolveEnabledTransports(runtime);
   const compiler = await compileProject(layout.root);
   const errors = compiler.diagnostics.filter((diagnostic) => diagnostic.category === "error");
   if (errors.length > 0) throw new CLIError("CLI2201", `Compilation failed with ${errors.length} error(s).`, ExitCode.FAILURE);
+  const runtime = applyApplicationTransports(await loadCLIConfig(layout.root), compiler.applicationWIR?.transports);
+  await loadEnabledTransportConfigs(runtime, layout.root);
+  const enabledTransports = resolveEnabledTransports(runtime);
   const outRelative = options.out ?? "dist";
   const outDirectory = resolveInside(layout.root, outRelative);
   if (outRelative === "dist") await removeGeneratedDirectory(layout.root, "dist");

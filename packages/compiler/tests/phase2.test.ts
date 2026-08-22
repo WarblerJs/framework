@@ -106,20 +106,17 @@ describe("Phase 2 optimization", () => {
     await Bun.write(sourcePath, source
       .replace("import { Graph, Service, ProviderScope, inject } from \"@warbler/core\";", "import { createApp, Graph, Service, ProviderScope, inject } from \"@warbler/core\";")
       .replace("export const AuditMiddleware = (_request: any, _context: any, next: any) => next();", `export const AuditMiddleware = (_request: any, _context: any, next: any) => next();
-    export const GlobalMiddleware = (_request: any, _context: any, next: any) => next();
     export const GraphMiddleware = (_request: any, _context: any, next: any) => next();
     export const ControllerMiddleware = (_request: any, _context: any, next: any) => next();
     export const SharedMiddleware = (_request: any, _context: any, next: any) => next();`)
       .replace("@Controller(\"/users\") export class UsersController", "@Controller({ prefix: \"/users\", middleware: [ControllerMiddleware, SharedMiddleware] }) export class UsersController")
       .replace("providers: [Logger, UsersService] })", "providers: [Logger, UsersService], middleware: [GraphMiddleware] })")
-      .replace("export class UsersGraph {}", "export class UsersGraph {}\n    export const app = createApp({ graphs: [UsersGraph], middleware: [GlobalMiddleware, SharedMiddleware] });"));
+      .replace("export class UsersGraph {}", "export class UsersGraph {}\n    export const app = createApp({ graphs: [UsersGraph] });"));
     const optimized = (await compileProject(root)).generatedApplication!.optimized;
     const name = (id: number): string => optimized.strings[optimized.middlewares[id]!.nameId]!;
     const routeName = (route: typeof optimized.routes[number]): string => optimized.strings[route.methodId]!;
     const get = optimized.routes.find((route) => routeName(route) === "GET")!;
     expect(optimized.routeMiddleware.slice(get.middlewareStart, get.middlewareStart + get.middlewareCount).map(name)).toEqual([
-      "GlobalMiddleware",
-      "SharedMiddleware",
       "GraphMiddleware",
       "ControllerMiddleware",
       "SharedMiddleware",
@@ -127,8 +124,6 @@ describe("Phase 2 optimization", () => {
     ]);
     const post = optimized.routes.find((route) => routeName(route) === "POST")!;
     expect(optimized.routeMiddleware.slice(post.middlewareStart, post.middlewareStart + post.middlewareCount).map(name)).toEqual([
-      "GlobalMiddleware",
-      "SharedMiddleware",
       "GraphMiddleware",
       "ControllerMiddleware",
       "SharedMiddleware",

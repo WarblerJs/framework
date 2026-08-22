@@ -28,8 +28,12 @@ export interface ControllerBinding<T = unknown> {
 }
 export interface HandlerBinding<TController = unknown> {
   readonly id: number;
-  readonly controllerId: number;
+  readonly kind?: "method" | "function";
+  readonly controllerId?: number;
+  readonly graphId?: number;
   readonly parameterCount?: number;
+  readonly useCaseKeys?: readonly string[];
+  readonly useCaseProviderIds?: readonly number[];
   readonly invoke: unknown;
 }
 export type RuntimeGuardResult = boolean | Response;

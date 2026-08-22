@@ -79,31 +79,20 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
       }
       controllers.push(Object.freeze({
         ...copyLocation(controller), name: controller.name, kind: controller.kind, prefix: controller.prefix,
+        ...(controller.synthetic === true ? { synthetic: true } : {}),
         middleware: controller.middleware,
         providerNames: controller.providerNames,
         providers: Object.freeze(controllerProviders), dependencies: controller.dependencies, routes: controller.routes, socketEvents: controller.socketEvents,
       }));
     }
     for (const name of graph.providerNames) {
-      const provider = analysis.providers.get(name);
-      if (provider === undefined) {
-        add(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Graph "${graph.name}" references unknown provider "${name}".`, graph, [graph.name, name]);
-        continue;
-      }
       if (localProviderNames.has(name)) {
-        add(diagnostics, DiagnosticCode.DUPLICATE_PROVIDER, `Graph "${graph.name}" declares provider "${name}" more than once.`, provider, [graph.name, name]);
+        const provider = analysis.providers.get(name);
+        add(diagnostics, DiagnosticCode.DUPLICATE_PROVIDER, `Graph "${graph.name}" declares provider "${name}" more than once.`, provider ?? graph, [graph.name, name]);
         continue;
       }
       localProviderNames.add(name);
-      if (provider.provide === "graph" || provider.provide === "request") {
-        const owner = providerOwners.get(name);
-        if (owner !== undefined && owner !== graph) {
-          add(diagnostics, DiagnosticCode.DUPLICATE_PROVIDER, `Graph provider "${name}" belongs to both "${owner.name}" and "${graph.name}".`, provider, [name, owner.name, graph.name]);
-          continue;
-        }
-        providerOwners.set(name, graph);
-        providers.push(provider);
-      }
+      addGraphProvider(name, graph, providers, providerOwners, analysis.providers, diagnostics);
     }
     validateRoutes(graph, controllers, diagnostics);
     validateSocketEvents(controllers, diagnostics);
@@ -129,6 +118,7 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
   return Object.freeze({
     version: 1,
     projectRoot,
+    transports: Object.freeze(analysis.transports),
     middleware: analysis.middleware,
     graphs: Object.freeze(result),
     rootProviders: Object.freeze([...rootProviders.values()]),
@@ -136,6 +126,41 @@ export function validateApplication(projectRoot: string, analysis: AnalysisResul
     eventListeners: Object.freeze([...analysis.eventListeners.values()]),
     eventInterceptors: Object.freeze([...analysis.eventInterceptors.values()]),
   });
+}
+
+function addGraphProvider(
+  name: string,
+  graph: AnalyzedGraph,
+  providers: ProviderWIR[],
+  providerOwners: Map<string, AnalyzedGraph>,
+  analyzedProviders: ReadonlyMap<string, ProviderWIR>,
+  diagnostics: CompilerDiagnostic[],
+): void {
+  const provider = analyzedProviders.get(name);
+  if (provider === undefined) {
+    add(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Graph "${graph.name}" references unknown provider "${name}".`, graph, [graph.name, name]);
+    return;
+  }
+  if (provider.provide === "graph" || provider.provide === "request") {
+    const owner = providerOwners.get(name);
+    if (owner !== undefined && owner !== graph) {
+      add(diagnostics, DiagnosticCode.DUPLICATE_PROVIDER, `Graph provider "${name}" belongs to both "${owner.name}" and "${graph.name}".`, provider, [name, owner.name, graph.name]);
+      return;
+    }
+    if (owner === graph) return;
+    providerOwners.set(name, graph);
+    if (!isRedundantUseExistingAlias(provider, analyzedProviders)) providers.push(provider);
+  }
+  if (provider.registration !== "useExisting" || provider.existing === undefined) return;
+  const existing = analyzedProviders.get(provider.existing);
+  if (existing !== undefined && (existing.provide === "graph" || existing.provide === "request")) {
+    addGraphProvider(existing.name, graph, providers, providerOwners, analyzedProviders, diagnostics);
+  }
+}
+
+function isRedundantUseExistingAlias(provider: ProviderWIR, analyzedProviders: ReadonlyMap<string, ProviderWIR>): boolean {
+  if (provider.registration !== "useExisting" || provider.existing === undefined || provider.token === undefined) return false;
+  return analyzedProviders.get(provider.existing)?.token === provider.token;
 }
 
 function controllerScopedProvider(provider: ProviderWIR): ProviderWIR {

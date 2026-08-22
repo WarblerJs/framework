@@ -25,6 +25,19 @@ export async function loadDatabaseConfig(projectRoot: string): Promise<DatabaseP
 export function resolveEnabledTransports(config: RuntimeConfig): readonly TransportName[] {
   return Object.freeze(TRANSPORTS.filter((transport) => config.transports[transport].enabled));
 }
+/** Applies createApp({ transports }) as the application-level transport allowlist. */
+export function applyApplicationTransports(config: RuntimeConfig, transports: readonly string[] | undefined): RuntimeConfig {
+  const requested = new Set((transports ?? []).filter(isTransportName));
+  if (requested.size === 0) return config;
+  const normalized = normalizeRuntimeConfig(config);
+  return Object.freeze({
+    ...normalized,
+    transports: Object.freeze(Object.fromEntries(TRANSPORTS.map((transport) => [
+      transport,
+      Object.freeze({ ...normalized.transports[transport], enabled: requested.has(transport) }),
+    ]))) as RuntimeConfig["transports"],
+  });
+}
 /** Loads only enabled transport configuration modules. */
 export async function loadEnabledTransportConfigs(config: RuntimeConfig, projectRoot: string): Promise<ReadonlyMap<TransportName, Readonly<unknown>>> {
   const result = new Map<TransportName, Readonly<unknown>>();
@@ -38,6 +51,9 @@ export async function loadEnabledTransportConfigs(config: RuntimeConfig, project
     result.set(transport, Object.freeze(value));
   }
   return result;
+}
+function isTransportName(value: string): value is TransportName {
+  return (TRANSPORTS as readonly string[]).includes(value);
 }
 function select(module: Readonly<Record<string, unknown>>, names: readonly string[]): unknown {
   for (const name of names) if (name in module) return module[name];

@@ -1,15 +1,15 @@
-import { relative } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import ts from "typescript";
 import { BindingDiagnosticCode, bindingDiagnostic } from "../diagnostics/binding-diagnostics";
 import type { OptimizedApplication } from "../output/artifact-types";
 import type { CompilerContext } from "../project/compiler-context";
-import type { ApplicationWIR, CapturedExpressionWIR, ControllerWIR, ProviderWIR } from "../wir/wir";
+import type { ApplicationWIR, CapturedExpressionWIR, ControllerWIR, HandlerUseCaseWIR, ProviderWIR } from "../wir/wir";
 
 /** One deterministic ESM value import required by generated executable code. */
 export interface BindingImport {
   readonly local: string;
   readonly imported: string;
-  readonly kind: "default" | "named";
+  readonly kind: "default" | "named" | "namespace";
   readonly module: string;
 }
 /** A verbatim-captured expression plus the resolved imports its free identifiers require. */
@@ -37,9 +37,9 @@ export interface ProviderBindingPlan {
 export interface ControllerBindingPlan {
   readonly id: number; readonly graphId: number; readonly transport: "http" | "websocket"; readonly symbol: BindingImport; readonly providerIds: readonly number[];
 }
-export interface HandlerBindingPlan {
-  readonly id: number; readonly controllerId: number; readonly method: string; readonly controller: BindingImport; readonly parameterCount: number;
-}
+export type HandlerBindingPlan =
+  | { readonly kind: "method"; readonly id: number; readonly controllerId: number; readonly method: string; readonly controller: BindingImport; readonly parameterCount: number }
+  | { readonly kind: "function"; readonly id: number; readonly graphId: number; readonly expression: CapturedBindingExpression; readonly parameterCount: number; readonly useCaseKeys: readonly string[]; readonly useCaseProviderIds: readonly number[] };
 export interface ExecutableBindingPlan {
   readonly providers: readonly ProviderBindingPlan[];
   readonly controllers: readonly ControllerBindingPlan[];
@@ -59,6 +59,7 @@ export function analyzeExecutableBindings(
   optimized: OptimizedApplication,
 ): ExecutableBindingPlan | undefined {
   const declarations = collectDeclarations(context);
+  const namespaceImports = collectNamespaceImports(context);
   const providerOwners = new Map<string, { readonly graph: string; readonly provider: ProviderWIR }>();
   for (const provider of wir.rootProviders) providerOwners.set(`root:${provider.name}`, { graph: "", provider });
   for (const graph of wir.graphs) for (const provider of graph.providers) providerOwners.set(`${graph.name}:${provider.name}`, { graph: graph.name, provider });
@@ -67,11 +68,25 @@ export function analyzeExecutableBindings(
   }
   const controllerOwners = new Map<string, { readonly graph: string; readonly controller: ControllerWIR }>();
   for (const graph of wir.graphs) for (const controller of graph.controllers) controllerOwners.set(`${graph.name}:${controller.name}`, { graph: graph.name, controller });
+  const handlerOwners = new Map<string, { readonly graph: string; readonly controller: ControllerWIR; readonly file: string; readonly handler: string; readonly useCases: readonly HandlerUseCaseWIR[] }>();
+  for (const graph of wir.graphs) for (const controller of graph.controllers) {
+    for (const route of controller.routes) handlerOwners.set(`${graph.name}:${controller.name}.${route.handler}`, { graph: graph.name, controller, file: route.file, handler: route.handler, useCases: route.useCases });
+    for (const event of controller.socketEvents) handlerOwners.set(`${graph.name}:${controller.name}.${event.handler}`, { graph: graph.name, controller, file: event.file, handler: event.handler, useCases: event.useCases });
+  }
 
   const imports = new Map<string, BindingImport>();
   const resolveValue = (name: string, preferredFile?: string, silent = false): BindingImport | undefined => {
     const framework = resolveFrameworkValue(name, preferredFile, imports);
     if (framework !== undefined) return framework;
+    const namespace = namespaceImports.get(name)?.find((item) => preferredFile === undefined || item.file === preferredFile);
+    if (namespace !== undefined) {
+      const key = `${namespace.module}:*:${name}`;
+      const existing = imports.get(key);
+      if (existing !== undefined) return existing;
+      const value = Object.freeze({ local: safeLocal(name, imports.size), imported: "*", kind: "namespace" as const, module: namespace.module });
+      imports.set(key, value);
+      return value;
+    }
     const candidates = (declarations.get(name) ?? []).filter((node) => preferredFile === undefined || node.getSourceFile().fileName === preferredFile);
     if (candidates.length !== 1) {
       if (!silent) context.diagnostics.push(bindingDiagnostic(
@@ -152,6 +167,7 @@ export function analyzeExecutableBindings(
   for (const row of optimized.controllers) {
     const name = optimized.strings[row.nameId]!;
     const owner = controllerOwners.get(`${graphName(optimized, row.graphId)}:${name}`);
+    if (owner?.controller.synthetic === true) continue;
     const symbol = owner === undefined ? undefined : resolveValue(name, owner.controller.file);
     if (owner === undefined || symbol === undefined) { failed = true; continue; }
     const providerIds = optimized.providers.filter((provider) => provider.scope === "controller" && provider.controllerId === row.id).map((provider) => provider.id);
@@ -160,6 +176,28 @@ export function analyzeExecutableBindings(
   const handlers: HandlerBindingPlan[] = [];
   for (const row of optimized.handlers) {
     const qualified = optimized.strings[row.nameId]!;
+    const handlerOwner = handlerOwners.get(qualified);
+    if (handlerOwner?.controller.synthetic === true) {
+      const expression = resolveHandlerExpression(handlerOwner.handler, handlerOwner.file, resolveValue);
+      if (expression === undefined) { failed = true; continue; }
+      const graphId = optimized.graphIds[handlerOwner.graph]!;
+      const useCaseProviderIds = resolveUseCaseProviderIds(optimized, handlerOwner.useCases, graphId);
+      if (useCaseProviderIds.length !== handlerOwner.useCases.length) {
+        context.diagnostics.push(bindingDiagnostic(BindingDiagnosticCode.SYMBOL_NOT_FOUND, `Executable handler "${qualified}" references an unknown use case provider.`, handlerOwner.file, qualified));
+        failed = true;
+        continue;
+      }
+      handlers.push(Object.freeze({
+        kind: "function",
+        id: row.id,
+        graphId,
+        expression,
+        parameterCount: handlerOwner.useCases.length === 0 ? 1 : 2,
+        useCaseKeys: Object.freeze(handlerOwner.useCases.map((item) => item.key)),
+        useCaseProviderIds: Object.freeze(useCaseProviderIds),
+      }));
+      continue;
+    }
     const dot = qualified.lastIndexOf(".");
     const ownerName = qualified.slice(0, dot);
     const method = qualified.slice(dot + 1);
@@ -173,7 +211,7 @@ export function analyzeExecutableBindings(
       context.diagnostics.push(bindingDiagnostic(BindingDiagnosticCode.HANDLER_NOT_FOUND, `Executable handler "${qualified}" is missing or invalid.`, declaration?.getSourceFile().fileName ?? "", qualified));
       failed = true; continue;
     }
-    handlers.push(Object.freeze({ id: row.id, controllerId: controller.id, method, controller: controller.symbol, parameterCount: member.parameters.length }));
+    handlers.push(Object.freeze({ kind: "method", id: row.id, controllerId: controller.id, method, controller: controller.symbol, parameterCount: member.parameters.length }));
   }
   const namedBindings = (rows: readonly { readonly id: number; readonly nameId: number }[]) => rows.map((row) => {
     const name = optimized.strings[row.nameId]!;
@@ -244,6 +282,61 @@ export function collectDeclarations(context: CompilerContext): ReadonlyMap<strin
     }
   }
   return result;
+}
+interface NamespaceImportReference {
+  readonly file: string;
+  readonly module: string;
+}
+function collectNamespaceImports(context: CompilerContext): ReadonlyMap<string, readonly NamespaceImportReference[]> {
+  const result = new Map<string, NamespaceImportReference[]>();
+  for (const source of context.sourceFiles) {
+    for (const statement of source.statements) {
+      if (!ts.isImportDeclaration(statement) || statement.importClause?.namedBindings === undefined || !ts.isStringLiteralLike(statement.moduleSpecifier)) continue;
+      const bindings = statement.importClause.namedBindings;
+      if (!ts.isNamespaceImport(bindings)) continue;
+      const current = result.get(bindings.name.text) ?? [];
+      current.push(Object.freeze({ file: source.fileName, module: namespaceImportModule(context.config.projectRoot, source.fileName, statement.moduleSpecifier.text) }));
+      result.set(bindings.name.text, current);
+    }
+  }
+  return result;
+}
+function namespaceImportModule(root: string, sourceFile: string, specifier: string): string {
+  if (!specifier.startsWith(".")) return specifier;
+  const absolute = resolve(dirname(sourceFile), specifier);
+  return generatedImportPath(root, absolute);
+}
+function resolveHandlerExpression(
+  text: string,
+  preferredFile: string,
+  resolveValue: (name: string, preferredFile?: string, silent?: boolean) => BindingImport | undefined,
+): CapturedBindingExpression | undefined {
+  const root = /^[$A-Z_a-z][$\w]*/u.exec(text)?.[0];
+  if (root === undefined) return undefined;
+  const binding = resolveValue(root, preferredFile, true) ?? resolveValue(root);
+  if (binding === undefined) return undefined;
+  const suffix = text.slice(root.length);
+  return Object.freeze({ text: `${binding.local}${suffix}`, imports: Object.freeze([binding]) });
+}
+function resolveUseCaseProviderIds(
+  optimized: OptimizedApplication,
+  useCases: readonly HandlerUseCaseWIR[],
+  graphId: number,
+): readonly number[] {
+  const result: number[] = [];
+  for (const useCase of useCases) {
+    const id = providerIdFor(optimized, useCase.provider, graphId);
+    if (id === undefined) return Object.freeze(result);
+    result.push(id);
+  }
+  return Object.freeze(result);
+}
+function providerIdFor(optimized: OptimizedApplication, name: string, graphId: number): number | undefined {
+  for (const provider of optimized.providers) {
+    if (optimized.strings[provider.nameId] !== name) continue;
+    if (provider.scope === "root" || provider.graphId === graphId) return provider.id;
+  }
+  return undefined;
 }
 /** Determines whether a declaration is exported, and if so, whether it's the module's default export. */
 export function exportKind(node: ts.Declaration): BindingImport["kind"] | undefined {

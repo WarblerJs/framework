@@ -98,6 +98,44 @@ describe("token-based provider resolution", () => {
     expect(optimized.providerDependencies).not.toContain(-1);
   });
 
+  test("owns graph-local useExisting implementations referenced by explicit Provider registrations", async () => {
+    const root = await tokenProject(`
+      import { Graph, Provider, Repository, Service, inject } from "@warbler/core";
+
+      export abstract class UserRepositoryPort {
+        abstract find(): string;
+      }
+
+      @Repository({ provide: UserRepositoryPort })
+      export class PgUserRepository extends UserRepositoryPort {
+        find(): string { return "user"; }
+      }
+
+      @Service()
+      export class GetUserUseCase {
+        readonly repository = inject(UserRepositoryPort);
+        execute(): string { return this.repository.find(); }
+      }
+
+      @Graph({
+        providers: [
+          Provider({ provide: UserRepositoryPort, useExisting: PgUserRepository }),
+          GetUserUseCase,
+        ],
+      })
+      export class AppGraph {}
+    `);
+
+    const context = await compileProject(root);
+    expect(context.diagnostics).toEqual([]);
+    const graph = context.applicationWIR!.graphs[0]!;
+    expect(graph.providers.map((provider) => provider.name).sort()).toEqual([
+      "GetUserUseCase",
+      "PgUserRepository",
+    ]);
+    expect(context.generatedApplication!.optimized.providerDependencies).not.toContain(-1);
+  });
+
   test("emits providers.generated.ts with token-aliased and use* factories", async () => {
     const root = await tokenProject(FIXTURE);
     await compileProject(root);
