@@ -1,5 +1,9 @@
 {
   "login": "Login",
+  "invalidMessage": "Message Content invalid",
+  "languageHeader": "Headers language not valid",
+  "languageHeaderNotAllowed": "Headers language not allowed",
+  "languageHeaderNotAllowed2": "Headers language not allowed 2",
   "username_not_valid": "Username is invalid.",
   "email_not_valid": "Email is invalid.",
   "invalid_page": "Page must be a positive number.",
