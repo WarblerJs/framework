@@ -11,7 +11,7 @@ test("generated native HTTP routes invoke real controllers and validation", asyn
   try {
     const routes = captured?.routes;
     if (routes === undefined) throw new Error("HTTP routes were not supplied");
-    const root = await routes["/api/test"]!.GET!(new Request("http://127.0.0.1/api/test"));
+    const root = await routes["/api/test"]!.GET!(new Request("http://127.0.0.1/api/test?id=5"));
     expect(root.status).toBe(200);
     const rootBody = await root.json() as Readonly<Record<string, unknown>>;
     expect(rootBody.pp).toEqual({
