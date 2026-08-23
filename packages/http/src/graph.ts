@@ -124,10 +124,6 @@ type DefineHttpRouteWithUseCase<TValidator extends AnyRequestValidator | undefin
 type TypedHttpGraphRoute<TKey extends HttpRouteKey, TEntry> =
   TEntry extends DefinedHttpInlineGraphRoute<infer TValidator, infer _TUseCase, infer _TResult>
     ? TEntry & ValidateRouteParams<TKey, TValidator>
-    : TEntry extends { readonly run: unknown }
-    ? TEntry extends { readonly validator: infer TValidator }
-      ? Omit<TEntry, "run"> & Readonly<{ readonly run: ValidatorOnlyRun<TValidator, RouteUseCases<TEntry>> }> & ValidateRouteParams<TKey, TValidator>
-      : Omit<TEntry, "run"> & Readonly<{ readonly run: InlineRouteRun<TKey, undefined, RouteUseCases<TEntry>> }>
     : TEntry;
 
 export interface HttpGraphDefinition<
