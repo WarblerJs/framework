@@ -22,7 +22,7 @@ interface CompiledField {
   readonly rejectIf: readonly Readonly<{ readonly predicate: (value: unknown) => boolean | Promise<boolean>; readonly message?: string }>[];
   readonly maps: readonly ((value: unknown) => unknown)[];
 }
-interface SourcePlan { readonly source: ValidationSource; readonly inputKey: keyof ValidationInput; readonly fields: readonly CompiledField[]; readonly keys: ReadonlySet<string>; readonly headerKeys?: readonly string[] }
+interface SourcePlan { readonly source: ValidationSource; readonly inputKey: keyof ValidationInput; readonly fields: readonly CompiledField[]; readonly keys: ReadonlySet<string>; readonly allowedKeys: ReadonlySet<string>; readonly headerKeys?: readonly string[] }
 interface RootBodyPlan { readonly source: "body"; readonly inputKey: "value"; readonly field: CompiledField }
 interface CompiledPlan {
   readonly id: number; readonly flags: number; readonly sources: readonly SourcePlan[]; readonly rootBody?: RootBodyPlan;
@@ -115,20 +115,49 @@ function compileSource(shape: RuleShape, source: ValidationSource, inputKey: key
   if (total === 0) throw new ValidatorError(ValidatorErrorCode.INVALID_RULES, "Rule sections must be non-empty objects.");
   const fields = new Array<CompiledField>(total);
   const keys = new Set<string>();
+  const allowedKeys = new Set<string>();
   const outputs = new Set<string>();
-  const headerKeys = normalizeHeaders ? new Array<string>(total) : undefined;
+  const headerKeys = normalizeHeaders ? new Array<string>() : undefined;
   for (let index = 0; index < total; index += 1) {
     const rawKey = names[index]!;
     const key = normalizeHeaders ? rawKey.toLowerCase() : rawKey;
-    if (headerKeys !== undefined) headerKeys[index] = key;
+    if (headerKeys !== undefined) headerKeys.push(key);
     const value = shape[rawKey];
     if (!safeKey(key) || !isWarblerField(value) || keys.has(key)) throw new ValidatorError(ValidatorErrorCode.INVALID_RULES, "Rule section contains an invalid key or field validator.");
     const field = compileField(key, value);
+    collectPresenceKeys(field, allowedKeys, normalizeHeaders);
+    if (headerKeys !== undefined) collectHeaderPresenceKeys(field, headerKeys);
     if (outputs.has(field.outputKey) || (field.outputKey !== key && keys.has(field.outputKey))) throw new ValidatorError(ValidatorErrorCode.DUPLICATE_MAPPED_KEY, `Mapped target "${field.outputKey}" already exists.`);
-    keys.add(key); outputs.add(field.outputKey); fields[index] = field;
+    keys.add(key); allowedKeys.add(key); outputs.add(field.outputKey); fields[index] = field;
   }
   validatePresence(fields, keys);
-  return Object.freeze({ source, inputKey, fields: Object.freeze(fields), keys: Object.freeze(keys), ...(headerKeys === undefined ? {} : { headerKeys: Object.freeze(headerKeys) }) });
+  return Object.freeze({ source, inputKey, fields: Object.freeze(fields), keys: Object.freeze(keys), allowedKeys: Object.freeze(allowedKeys), ...(headerKeys === undefined ? {} : { headerKeys: Object.freeze(headerKeys) }) });
+}
+function collectPresenceKeys(field: CompiledField, output: Set<string>, normalize: boolean): void {
+  const presence = field.presence;
+  const total = presence.length;
+  for (let index = 0; index < total; index += 1) {
+    const rule = presence[index]!;
+    if (rule.op === "requiredWhen") output.add(normalize ? rule.field.toLowerCase() : rule.field);
+    else {
+      const fields = rule.fields;
+      const fieldTotal = fields.length;
+      for (let fieldIndex = 0; fieldIndex < fieldTotal; fieldIndex += 1) output.add(normalize ? fields[fieldIndex]!.toLowerCase() : fields[fieldIndex]!);
+    }
+  }
+}
+function collectHeaderPresenceKeys(field: CompiledField, output: string[]): void {
+  const presence = field.presence;
+  const total = presence.length;
+  for (let index = 0; index < total; index += 1) {
+    const rule = presence[index]!;
+    if (rule.op === "requiredWhen") output.push(rule.field.toLowerCase());
+    else {
+      const fields = rule.fields;
+      const fieldTotal = fields.length;
+      for (let fieldIndex = 0; fieldIndex < fieldTotal; fieldIndex += 1) output.push(fields[fieldIndex]!.toLowerCase());
+    }
+  }
 }
 function compileField(key: string, field: AnyField): CompiledField {
   const spec = field.__warblerSpec;
@@ -186,14 +215,14 @@ function validatePresence(fields: readonly CompiledField[], keys: ReadonlySet<st
     for (let presenceIndex = 0; presenceIndex < presenceTotal; presenceIndex += 1) {
       const rule = presence[presenceIndex]!;
       if (rule.op === "requiredWhen") {
-        if (!safeKey(rule.field) || !keys.has(rule.field) || rule.field === field.key) throw new ValidatorError(ValidatorErrorCode.INVALID_PRESENCE_DEPENDENCY, "Invalid requiredWhen dependency.");
+        if (!safeKey(rule.field) || rule.field === field.key) throw new ValidatorError(ValidatorErrorCode.INVALID_PRESENCE_DEPENDENCY, "Invalid requiredWhen dependency.");
       } else {
         const deps = rule.fields;
         const depTotal = deps.length;
         if (depTotal === 0) throw new ValidatorError(ValidatorErrorCode.INVALID_PRESENCE_DEPENDENCY, "Presence dependency list cannot be empty.");
         for (let depIndex = 0; depIndex < depTotal; depIndex += 1) {
           const dep = deps[depIndex]!;
-          if (!safeKey(dep) || !keys.has(dep) || dep === field.key) throw new ValidatorError(ValidatorErrorCode.INVALID_PRESENCE_DEPENDENCY, "Invalid presence dependency.");
+          if (!safeKey(dep) || dep === field.key) throw new ValidatorError(ValidatorErrorCode.INVALID_PRESENCE_DEPENDENCY, "Invalid presence dependency.");
         }
       }
     }
@@ -232,7 +261,7 @@ function executeSource(plan: SourcePlan, input: ValidationInput, state: Executio
     return;
   }
   const output: Record<string, unknown> = Object.create(null);
-  for (const key in candidate) if (!plan.keys.has(key)) addIssue(state, plan.source, Object.freeze([key]), key, "unrecognized_key", "validators.unrecognized", undefined, key);
+  for (const key in candidate) if (!plan.allowedKeys.has(key)) addIssue(state, plan.source, Object.freeze([key]), key, "unrecognized_key", "validators.unrecognized", undefined, key);
   const fields = plan.fields;
   const total = fields.length;
   for (let index = 0; index < total; index += 1) {
@@ -551,7 +580,7 @@ function evaluatePresence(plan: SourcePlan, raw: Readonly<Record<string, unknown
   }
 }
 function presenceRequires(rule: PresenceOp, raw: Readonly<Record<string, unknown>>, output: Readonly<Record<string, unknown>>): boolean {
-  if (rule.op === "requiredWhen") return Object.is(output[rule.field], rule.value);
+  if (rule.op === "requiredWhen") return Object.is(hasOwn(output, rule.field) ? output[rule.field] : raw[rule.field], rule.value);
   const fields = rule.fields;
   const total = fields.length;
   if (rule.op === "requiredWith") { for (let index = 0; index < total; index += 1) if (hasOwn(raw, fields[index]!)) return true; return false; }

@@ -145,6 +145,27 @@ describe("presence, rejection, and stages", () => {
     expect(result.errors["body.password"]![0]!.message.key).toBe("password_required");
   });
 
+  test("allows presence dependencies on safe raw input keys that are not declared fields", () => {
+    const validator = compileValidator({
+      headerRules: {
+        "x-pow": v.string("pow_required").requiredWith("x-al"),
+        "x-mode": v.string("mode_required").requiredWhen("x-raw-mode", "strict"),
+      },
+    });
+
+    const requiredWith = syncResult(validator.execute({ headers: { "x-al": "1" } }));
+    expect(requiredWith.valid).toBe(false);
+    if (requiredWith.valid) return;
+    expect(requiredWith.errors["headers.x-pow"]![0]!.message.key).toBe("pow_required");
+    expect(requiredWith.errors["headers.x-al"]).toBeUndefined();
+
+    const requiredWhen = syncResult(validator.execute({ headers: { "x-raw-mode": "strict" } }));
+    expect(requiredWhen.valid).toBe(false);
+    if (requiredWhen.valid) return;
+    expect(requiredWhen.errors["headers.x-mode"]![0]!.message.key).toBe("mode_required");
+    expect(requiredWhen.errors["headers.x-raw-mode"]).toBeUndefined();
+  });
+
   test("runs rejectIf, after, field mappings, patch, and map in deterministic order", () => {
     const order: string[] = [];
     const validator = compileValidator(defineValidator({
