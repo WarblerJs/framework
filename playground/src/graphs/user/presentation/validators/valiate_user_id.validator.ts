@@ -2,8 +2,9 @@ import { defineValidator, v, type ValidationErrors, type ValidationIssue, type V
 import { view } from "@warbler/http";
 
 function firstIssue(errors: ValidationErrors): ValidationIssue | undefined {
-  for (const key in errors) {
-    const issue = errors[key]?.[0];
+  const groups = Object.values(errors);
+  for (let index = 0; index < groups.length; index += 1) {
+    const issue = groups[index]?.[0];
     if (issue !== undefined) return issue;
   }
   return undefined;

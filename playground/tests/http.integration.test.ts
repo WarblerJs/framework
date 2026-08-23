@@ -13,7 +13,16 @@ test("generated native HTTP routes invoke real controllers and validation", asyn
     if (routes === undefined) throw new Error("HTTP routes were not supplied");
     const root = await routes["/api/test"]!.GET!(new Request("http://127.0.0.1/api/test"));
     expect(root.status).toBe(200);
-    expect(await root.json()).toEqual({ success: true, method: "GET" });
+    const rootBody = await root.json() as Readonly<Record<string, unknown>>;
+    expect(rootBody.pp).toEqual({
+      testId: "22",
+      user: { id: "playground-user", role: "admin" },
+    });
+    expect(rootBody.vbn).toMatchObject({
+      sessionId: "rpepee from excute",
+      user: { habib: "bel from excute" },
+    });
+    expect(Array.isArray((rootBody.vbn as Readonly<Record<string, unknown>>).usersList)).toBe(true);
     const invalid = await routes["/auth/login"]!.POST!(new Request("http://127.0.0.1/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },

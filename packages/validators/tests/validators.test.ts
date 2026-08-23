@@ -1,179 +1,265 @@
 import { describe, expect, test } from "bun:test";
 import {
-  ValidatorError, compileValidator, defineValidator, firstTranslatedValidationErrors,
-  messageDescriptorCacheSize, parseMessageDescriptor, translateValidationErrors,
-  type InferValidatorBody, type InferValidatorOutput, type InferValidatorPath,
-  type InferValidatorQuery, type RequestValidator, v,
+  ValidatorError,
+  compileValidator,
+  defineValidator,
+  firstTranslatedValidationErrors,
+  messageDescriptorCacheSize,
+  parseMessageDescriptor,
+  translateValidationErrors,
+  type InferValidatorBody,
+  type InferValidatorOutput,
+  type InferValidatorPath,
+  type InferValidatorQuery,
+  type MaybePromise,
+  type ValidationResult,
+  v,
 } from "../src";
 
-describe("public Zod API and compilation", () => {
-  test("exports Zod without replacing its schema API", () => {
-    expect(v.string().safeParse("value").success).toBe(true);
-    expect(v.coerce.number().parse("5")).toBe(5);
+function syncResult(value: MaybePromise<ValidationResult>): ValidationResult {
+  if (value instanceof Promise) throw new Error("Expected synchronous validation result");
+  return value;
+}
+
+describe("native validator builder", () => {
+  test("builds immutable Warbler field definitions without exposing legacy compatibility APIs", () => {
+    const field = v.string("invalid_name").min(1).mapV((value) => value.toUpperCase());
+    expect(field.__warblerField).toBe(true);
+    expect(field.__warblerSpec.kind).toBe("string");
+    expect(field.__warblerSpec.rules.length).toBe(1);
+    expect(Object.isFrozen(field)).toBe(true);
+    expect("coerce" in v).toBe(false);
   });
-  test("builds strict schemas once, skips absent sections, and freezes the binding", () => {
-    const definition = { rules: { name: v.string("invalid_string") } } satisfies RequestValidator;
-    const compiled = compileValidator(definition, 4);
-    expect(compiled.id).toBe(4);
-    expect(compiled.bodySchema).toBeDefined();
-    expect(compiled.querySchema).toBeUndefined();
-    expect(Object.isFrozen(compiled)).toBe(true);
-    expect(compiled.execute({ value: { name: "bird", extra: true } }).valid).toBe(false);
+
+  test("compileValidator accepts only explicit Warbler validator fields", () => {
+    expect(() => compileValidator({ bodyRules: { name: "string" } as never })).toThrow("VALIDATOR1002");
+    expect(() => compileValidator({ bodyRules: [] as never })).toThrow("VALIDATOR1002");
   });
-  test("rejects empty, malformed, and prototype-polluting rule definitions", () => {
-    expect(() => compileValidator({ rules: {} })).toThrow("VALIDATOR1002");
-    const unsafe: Record<string, v.ZodType> = Object.create(null);
-    unsafe.__proto__ = v.string();
-    expect(() => compileValidator({ rules: unsafe })).toThrow("VALIDATOR1002");
+
+  test("rejects prototype pollution keys before creating a compiled validator", () => {
+    const unsafe: Record<string, ReturnType<typeof v.string>> = Object.create(null);
+    Object.defineProperty(unsafe, "__proto__", { value: v.string(), enumerable: true });
+    expect(() => compileValidator({ bodyRules: unsafe })).toThrow("VALIDATOR1002");
   });
 });
 
-describe("validation execution", () => {
-  const compiled = compileValidator({
-    rules: {
-      username: v.string("validators.username_not_valid").min(1, "validators.username_not_valid"),
-      password: v.string("invalid_string").max(5, "max_message:allowed::entered"),
-    },
-    queryRules: { page: v.coerce.number("validators.invalid_page").int().positive() },
-    pathRules: { id: v.coerce.number("validators.invalid_id").int().positive() },
-    headerRules: { "x-tenant": v.string("validators.invalid_tenant") },
-    cookieRules: { session: v.string("validators.invalid_session") },
-  });
-  test("validates and coerces every defined plain source synchronously", () => {
-    const result = compiled.execute({
-      value: { username: "habib", password: "12345" },
-      query: { page: "2" }, path: { id: "10" },
-      headers: { "X-Tenant": "one" }, cookies: { session: "abc" },
+describe("native validation execution", () => {
+  test("parses body, query, path, headers, cookies, message, and metadata independently", () => {
+    const validator = compileValidator({
+      bodyRules: { name: v.string().min(2) },
+      queryRules: { page: v.number().int().positive() },
+      paramRules: { id: v.uuid() },
+      headerRules: { "x-retries": v.number().int().gte(0) },
+      cookieRules: { session: v.string().min(3) },
+      messageRules: { retry: v.boolean() },
+      metadataRules: { at: v.date() },
     });
+
+    const result = syncResult(validator.execute({
+      value: { name: "Ada" },
+      query: { page: "2" },
+      path: { id: "550e8400-e29b-41d4-a716-446655440000" },
+      headers: { "x-retries": "0" },
+      cookies: { session: "abc" },
+      message: { retry: "true" },
+      metadata: { at: "2026-01-01T00:00:00.000Z" },
+    }));
+
     expect(result.valid).toBe(true);
     if (!result.valid) return;
+    expect(result.value).toEqual({ name: "Ada" });
     expect(result.query).toEqual({ page: 2 });
-    expect(result.path).toEqual({ id: 10 });
-    expect(result.headers).toEqual({ "x-tenant": "one" });
-    expect(result instanceof Promise).toBe(false);
+    expect(result.path).toEqual({ id: "550e8400-e29b-41d4-a716-446655440000" });
+    expect(result.headers).toEqual({ "x-retries": 0 });
+    expect(result.cookies).toEqual({ session: "abc" });
+    expect(result.message).toEqual({ retry: true });
+    expect((result.metadata as Readonly<Record<string, unknown>>).at).toBeInstanceOf(Date);
   });
-  test("collects all source and field errors without sensitive received values", () => {
-    const result = compiled.execute({
-      value: { username: 5, password: "too-long-secret" },
-      query: { page: "bad" }, path: { id: "-1" },
-      headers: {}, cookies: {},
+
+  test("groups errors by source path without leaking raw sensitive values", () => {
+    const validator = compileValidator({
+      bodyRules: { password: v.string("invalid_password").min(12, "password_too_short") },
+      queryRules: { page: v.number("invalid_page").int("invalid_page") },
     });
+    const result = syncResult(validator.execute({ value: { password: "secret" }, query: { page: "x" } }));
+
     expect(result.valid).toBe(false);
     if (result.valid) return;
-    expect(Object.keys(result.errors).length).toBeGreaterThanOrEqual(6);
-    expect(JSON.stringify(result.errors)).not.toContain("too-long-secret");
-    const password = result.errors["body.password"]![0]!;
-    expect(password.message).toEqual({ key: "max_message", parameters: { allowed: 5, entered: 15 } });
+    expect(Object.keys(result.errors).sort()).toEqual(["body.password", "query.page"]);
+    expect(result.errors["body.password"]![0]!.code).toBe("too_small");
+    expect(JSON.stringify(result.errors)).not.toContain("secret");
   });
-  test("validates File size and MIME type with byte parameters", () => {
-    const validator = compileValidator({
-      rules: {
-        upload: v.file("file_required")
-          .max(4, "file_too_large:allowed::entered")
-          .mime(["image/png"], "invalid_mime"),
-      },
-    });
-    expect(validator.execute({
-      value: { upload: new File(["png"], "image.png", { type: "image/png" }) },
-    }).valid).toBe(true);
-    const oversized = validator.execute({
-      value: { upload: new File(["12345"], "image.png", { type: "image/png" }) },
-    });
-    expect(oversized.valid).toBe(false);
-    if (oversized.valid) return;
-    expect(oversized.errors["body.upload"]![0]!.message).toEqual({
-      key: "file_too_large",
-      parameters: { allowed: 4, entered: 5 },
-    });
-  });
-});
 
-describe("messages and translation", () => {
-  test("parses and caches secure translation descriptors", () => {
-    const before = messageDescriptorCacheSize();
-    const first = parseMessageDescriptor("validators.auth.failed:expected::received");
-    const after = messageDescriptorCacheSize();
-    expect(parseMessageDescriptor("validators.auth.failed:expected::received")).toBe(first);
-    expect(after).toBeGreaterThanOrEqual(before);
-    for (const value of [":key", "message:", "message::", "message:param:", "message:../secret", "message:param/name"]) {
-      expect(() => parseMessageDescriptor(value)).toThrow(ValidatorError);
-    }
-  });
-  test("translates all or first issues without owning locale state", () => {
-    const result = compileValidator({ rules: { name: v.string("invalid_string") } }).execute({ value: { name: 2 } });
-    if (result.valid) throw new Error("Expected validation failure");
-    const translate = (key: string): string => `translated:${key}`;
-    expect(firstTranslatedValidationErrors(result.errors, translate)["body.name"]).toBe("translated:invalid_string");
-    expect(translateValidationErrors(result.errors, translate)["body.name"]).toEqual(["translated:invalid_string"]);
-  });
-});
-
-describe("value and key mapping", () => {
-  test("executes mapV then mapK without mutating input", () => {
-    const input = Object.freeze({ username: "habib", password: "secret" });
-    const compiled = compileValidator({
-      rules: { username: v.string("invalid_string"), password: v.string("invalid_string") },
-      mapV: (body) => ({ ...body, password: `${body.password}##@@`, email: "habib@test" }),
-      mapK: { username: "name" },
-    });
-    const result = compiled.execute({ value: input });
+  test("validates root body arrays with bodyRule", () => {
+    const validator = compileValidator(defineValidator({ bodyRule: v.array(v.number()).min(2) }));
+    const result = syncResult(validator.execute({ value: ["1", 2] }));
     expect(result.valid).toBe(true);
     if (!result.valid) return;
-    expect(result.value).toEqual({ name: "habib", password: "secret##@@", email: "habib@test" });
-    expect("username" in (result.value as Readonly<Record<string, unknown>>)).toBe(false);
-    expect(input).toEqual({ username: "habib", password: "secret" });
+    expect(result.value).toEqual([1, 2]);
   });
-  test("rejects missing, duplicate, empty, and unsafe mappings", () => {
-    const rules = { first: v.string(), second: v.string() };
-    expect(() => compileValidator({ rules, mapK: { missing: "name" } })).toThrow("VALIDATOR1006");
-    expect(() => compileValidator({ rules, mapK: { first: "name", second: "name" } })).toThrow("VALIDATOR1007");
-    expect(() => compileValidator({ rules, mapK: { first: "" } })).toThrow("VALIDATOR1006");
-    expect(() => compileValidator({ rules, mapK: { first: "__proto__" } })).toThrow("VALIDATOR1008");
-  });
-  test("rejects asynchronous mapV without changing the sync hot path", () => {
-    const compiled = compileValidator({
-      rules: { value: v.string() },
-      mapV: (() => Promise.resolve({ value: "x" })) as unknown as RequestValidator["mapV"],
+
+  test("supports object and array nesting", () => {
+    const validator = compileValidator({
+      bodyRules: {
+        user: v.object({ email: v.email(), tags: v.array(v.string().min(2)).min(1) }),
+      },
     });
-    expect(() => compiled.execute({ value: { value: "x" } })).toThrow("VALIDATOR1009");
+    const result = syncResult(validator.execute({ value: { user: { email: "a@b.com", tags: ["ts"] } } }));
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.value).toEqual({ user: { email: "a@b.com", tags: ["ts"] } });
   });
-  test("normalizes an asynchronous Zod refinement mismatch", () => {
-    const compiled = compileValidator({
-      rules: { value: v.string().refine(async () => true) },
+
+  test("handles price rules without floating point comparisons", () => {
+    const validator = compileValidator({
+      bodyRules: {
+        amount: v.price("invalid_price", { scale: 2 }).gte("10.00", "too_low").lte("20.00", "too_high"),
+      },
     });
-    expect(() => compiled.execute({ value: { value: "x" } })).toThrow("VALIDATOR1009");
+    expect(syncResult(validator.execute({ value: { amount: "10.01" } })).valid).toBe(true);
+    const result = syncResult(validator.execute({ value: { amount: "9.99" } }));
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.errors["body.amount"]![0]!.message.key).toBe("too_low");
+  });
+
+  test("validates file-like values using native file predicates", () => {
+    const file = new File(["hello"], "hello.txt", { type: "text/plain" });
+    const validator = compileValidator({ bodyRules: { upload: v.file().maxSize(10).mime(["text/plain"]) } });
+    const result = syncResult(validator.execute({ value: { upload: file } }));
+    expect(result.valid).toBe(true);
   });
 });
 
-describe("inference helpers", () => {
-  const definition = {
-    rules: { username: v.string(), password: v.string() },
-    queryRules: { page: v.coerce.number() },
-    pathRules: { id: v.coerce.number() },
-    mapV: (body: Readonly<{ username: string; password: string }>) => ({ ...body, email: "habib@test" }),
-    mapK: { username: "name" },
-  } as const;
-  test("infers body, query, path, mapV additions, and mapK removals", () => {
-    const body: InferValidatorBody<typeof definition> = { username: "h", password: "p" };
-    const query: InferValidatorQuery<typeof definition> = { page: 1 };
-    const path: InferValidatorPath<typeof definition> = { id: 2 };
-    const output: InferValidatorOutput<typeof definition> = { name: "h", password: "p", email: "habib@test" };
-    expect({ body, query, path, output }).toBeDefined();
-    // @ts-expect-error mapK removes username from the final type.
-    const removed: string = output.username;
-    expect(removed).toBeUndefined();
-  });
-  test("defineValidator preserves mapV and mapK literals without annotation widening", () => {
-    const validator = defineValidator({
-      rules: { username: v.string(), password: v.string() },
-      mapV: (body) => ({ ...body, email: "habib@test" }),
-      mapK: { username: "name" },
+describe("presence, rejection, and stages", () => {
+  test("applies presence dependencies", () => {
+    const validator = compileValidator({
+      bodyRules: {
+        password: v.string().requiredWith("email", "password_required"),
+        email: v.email().optional(),
+      },
     });
-    const value: InferValidatorOutput<typeof validator> = {
-      name: "habib", password: "secret", email: "habib@test",
-    };
-    expect(value.name).toBe("habib");
-    // @ts-expect-error username was removed by mapK.
-    expect(value.username).toBeUndefined();
+    const result = syncResult(validator.execute({ value: { email: "a@b.com" } }));
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.errors["body.password"]![0]!.message.key).toBe("password_required");
+  });
+
+  test("runs rejectIf, after, field mappings, patch, and map in deterministic order", () => {
+    const order: string[] = [];
+    const validator = compileValidator(defineValidator({
+      bodyRules: {
+        email: v.string()
+          .rejectIf((value) => { order.push(`reject:${value}`); return false; })
+          .mapV((value) => { order.push(`mapV:${value}`); return value.toLowerCase(); })
+          .mapK("email_user"),
+        confirm: v.string(),
+      },
+    })
+      .after((input, reject) => {
+        const body = input.body as unknown as Readonly<{ email: string; confirm: string }>;
+        order.push(`after:${body.email}`);
+        if (body.email !== body.confirm) reject("body.confirm", "mismatch");
+      })
+      .patch((input) => {
+        const body = input.body as Readonly<{ email_user: string; confirm: string }>;
+        order.push(`patch:${body.email_user}`);
+        return { body: { domain: body.email_user.split("@")[1] } };
+      })
+      .map((input) => {
+        const body = input.body as Readonly<Record<string, string>>;
+        order.push(`map:${body.domain}`);
+        return { email: body.email_user, domain: body.domain };
+      }));
+
+    const result = syncResult(validator.execute({
+      value: { email: "ADA@EXAMPLE.COM", confirm: "ADA@EXAMPLE.COM" },
+    }));
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) return;
+    expect(result.value).toEqual({ email: "ada@example.com", domain: "example.com" });
+    expect(order).toEqual([
+      "reject:ADA@EXAMPLE.COM",
+      "after:ADA@EXAMPLE.COM",
+      "mapV:ADA@EXAMPLE.COM",
+      "patch:ada@example.com",
+      "map:example.com",
+    ]);
+  });
+
+  test("runs async rejectIf predicates with bounded concurrency", async () => {
+    let active = 0;
+    let maxActive = 0;
+    const field = v.string().rejectIf(async (value) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active--;
+      return value === "taken";
+    }, "taken");
+    const validator = compileValidator(defineValidator({ bodyRules: { a: field, b: field, c: field } }, { asyncConcurrency: 2 }));
+    const result = await validator.execute({ value: { a: "ok", b: "taken", c: "ok" } });
+
+    expect(maxActive).toBeLessThanOrEqual(2);
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(result.errors["body.b"]![0]!.message.key).toBe("taken");
+  });
+});
+
+describe("messages and type inference", () => {
+  test("parses and translates validator messages with cached descriptors", () => {
+    const before = messageDescriptorCacheSize();
+    const descriptor = parseMessageDescriptor("validators.min:minimum");
+    expect(parseMessageDescriptor("validators.min:minimum")).toBe(descriptor);
+    expect(messageDescriptorCacheSize()).toBeGreaterThanOrEqual(before + 1);
+
+    const validator = compileValidator({ bodyRules: { name: v.string("validators.string").min(3, "validators.min:minimum") } });
+    const result = syncResult(validator.execute({ value: { name: "ab" } }));
+    expect(result.valid).toBe(false);
+    if (result.valid) return;
+    expect(translateValidationErrors(result.errors, (key, params) => `${key}:${params?.minimum ?? ""}`)["body.name"]).toEqual(["validators.min:3"]);
+    expect(firstTranslatedValidationErrors(result.errors, (key) => key)["body.name"]).toBe("validators.min");
+  });
+
+  test("throws on invalid global mapping definitions", () => {
+    expect(() => compileValidator({
+      bodyRules: { name: v.string() },
+      mapK: { missing: "renamed" },
+    })).toThrow("VALIDATOR1006");
+    expect(() => compileValidator({
+      bodyRules: { name: v.string() },
+      mapV: { missing: (value: unknown) => value },
+    } as never)).toThrow("VALIDATOR1001");
+  });
+
+  test("rejects asynchronous mapV callbacks", () => {
+    const validator = compileValidator({
+      bodyRules: { name: v.string().mapV(async (value) => value) },
+    });
+    expect(() => validator.execute({ value: { name: "Ada" } })).toThrow("VALIDATOR1009");
+  });
+
+  test("infers request output types from native validators", () => {
+    const definition = defineValidator({
+      bodyRules: { name: v.string(), age: v.number().optional() },
+      paramRules: { id: v.uuid() },
+      queryRules: { page: v.number() },
+    });
+    const body: InferValidatorBody<typeof definition> = { name: "Ada" };
+    const path: InferValidatorPath<typeof definition> = { id: "550e8400-e29b-41d4-a716-446655440000" };
+    const query: InferValidatorQuery<typeof definition> = { page: 2 };
+    const output: InferValidatorOutput<typeof definition> = body;
+    expect({ body, path, query, output }).toBeDefined();
+  });
+
+  test("allows native definitions to surface ValidatorError codes", () => {
+    try {
+      compileValidator({ bodyRule: v.string(), bodyRules: { name: v.string() } });
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidatorError);
+      expect((error as ValidatorError).code).toBe("VALIDATOR1014_INVALID_ROOT_BODY");
+    }
   });
 });

@@ -40,3 +40,28 @@ test("prepares body validation input asynchronously and parses the body once", a
   expect(await input).toMatchObject({ value: { name: "Ada" }, query: undefined });
   expect(parses).toBe(1);
 });
+
+test("preserves repeated urlencoded body fields as arrays", async () => {
+  const request = new Request("http://localhost/users", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: "tag=ts&tag=bun&name=Ada",
+  });
+
+  const input = await prepareHttpValidationInput(request, ValidatorSourceFlag.BODY);
+
+  expect(input.value).toEqual({ tag: ["ts", "bun"], name: "Ada" });
+});
+
+test("returns binary request bodies as ArrayBuffer values", async () => {
+  const request = new Request("http://localhost/upload", {
+    method: "POST",
+    headers: { "content-type": "application/octet-stream" },
+    body: new Uint8Array([1, 2, 3]),
+  });
+
+  const input = await prepareHttpValidationInput(request, ValidatorSourceFlag.BODY);
+
+  expect(input.value).toBeInstanceOf(ArrayBuffer);
+  expect(Array.from(new Uint8Array(input.value as ArrayBuffer))).toEqual([1, 2, 3]);
+});

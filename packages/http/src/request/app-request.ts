@@ -1,5 +1,5 @@
 import type { TranslationParameters } from "@warbler/i18n";
-import type { InferValidatorBody, InferValidatorPath, InferValidatorQuery, RequestValidator } from "@warbler/validators";
+import type { InferValidatorBody, InferValidatorOutput, InferValidatorPath, InferValidatorQuery, RequestValidator } from "@warbler/validators";
 import type { WarblerRequestContext } from "./warbler-request-context";
 
 /**
@@ -26,7 +26,9 @@ type ParamsFor<TBody> = TBody extends AnyRequestValidator
 type QueryFor<TBody> = TBody extends AnyRequestValidator
   ? InferValidatorQuery<TBody>
   : Readonly<Record<string, string | readonly string[]>>;
-type BodyFor<TBody> = TBody extends AnyRequestValidator ? InferValidatorBody<TBody> : TBody;
+type IsUnknown<T> = unknown extends T ? keyof T extends never ? true : false : false;
+type KnownOrFallback<TValue, TFallback> = IsUnknown<TValue> extends true ? TFallback : TValue;
+type BodyFor<TBody> = TBody extends AnyRequestValidator ? KnownOrFallback<InferValidatorOutput<TBody>, InferValidatorBody<TBody>> : TBody;
 
 /** Immutable request representation passed to Warbler controller handlers. */
 export interface AppRequest<

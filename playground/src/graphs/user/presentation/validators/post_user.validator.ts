@@ -1,10 +1,11 @@
 
 import { defineValidator, v, type ValidationErrors, type ValidationIssue, type ValidationRequest } from "@warbler/validators";
-import { JsonRes } from "@warbler/http";
+import { JsonRes, view } from "@warbler/http";
 
 function firstIssue(errors: ValidationErrors): ValidationIssue | undefined {
-  for (const key in errors) {
-    const issue = errors[key]?.[0];
+  const groups = Object.values(errors);
+  for (let index = 0; index < groups.length; index += 1) {
+    const issue = groups[index]?.[0];
     if (issue !== undefined) return issue;
   }
   return undefined;
@@ -18,7 +19,7 @@ export const postUserValidatore = defineValidator({
   // headerRules: {
   //   "x-retries": v.number("validators.invalid_retries").int("validators.invalid_retries").gte(0, "validators.invalid_retries"),
   // },
-  onValidationError(_req: ValidationRequest, errors: ValidationErrors) {
+  onValidationError(req: ValidationRequest, errors: ValidationErrors) {
     const issue = firstIssue(errors);
     console.log('firstIssue', issue)
     return JsonRes(issue)

@@ -29,8 +29,8 @@ describe("route decorators", () => {
   test("infers body/params/query from a single AppRequest<typeof validator> generic", () => {
     const loginValidator = defineValidator({
       bodyRules: { email: v.string() },
-      paramRules: { id: v.coerce.number() },
-      queryRules: { page: v.coerce.number() },
+      paramRules: { id: v.number() },
+      queryRules: { page: v.number() },
     });
     let observedEmail: string | undefined;
     let observedId: number | undefined;
@@ -57,7 +57,7 @@ describe("route decorators", () => {
   });
 
   test("guards/middleware type-check against the route's inferred AppRequest shape", () => {
-    const idValidator = defineValidator({ paramRules: { id: v.coerce.number() } });
+    const idValidator = defineValidator({ paramRules: { id: v.number() } });
     let guardSawId: number | undefined;
     class Controller {
       @Get("/:id", {
