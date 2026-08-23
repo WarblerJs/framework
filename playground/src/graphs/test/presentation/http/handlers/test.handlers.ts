@@ -36,8 +36,9 @@ export const postTest = defineHandler({
 
   run: (ctx: AppRequest) => {
     return JsonRes({
-      success: true,
-      method: "POST",
+      q: ctx.query,
+      p: ctx.params,
+      h: ctx.headers,
       body: ctx.body,
     });
   },
