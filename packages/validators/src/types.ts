@@ -73,7 +73,7 @@ export interface CompiledValidator<TOutput = unknown> {
   readonly id: number; readonly flags: number; readonly onValidationError?: ValidationErrorHandler;
   execute(input: ValidationInput): MaybePromise<ValidationResult<TOutput>>;
 }
-type MapValueOutput<T> = "mapV" extends keyof T ? NonNullable<T["mapV"]> extends (...input: any[]) => infer O ? O : InferValidatorBody<T> : InferValidatorBody<T>;
+type MapValueOutput<T> = "mapV" extends keyof T ? NonNullable<T["mapV"]> extends (...input: never[]) => infer O ? O : InferValidatorBody<T> : InferValidatorBody<T>;
 type MapRecord<T> = "mapK" extends keyof T ? NonNullable<T["mapK"]> extends Readonly<Record<string, string>> ? NonNullable<T["mapK"]> : {} : {};
 type MapTargets<M> = M[keyof M] & string;
 type RenameKeys<T, M extends Readonly<Record<string, string>>> = T extends Readonly<Record<string, unknown>> ? Omit<T, Extract<keyof M, keyof T>> & { readonly [K in MapTargets<M>]: T[Extract<{ [S in keyof M]: M[S] extends K ? S : never }[keyof M], keyof T>] } : T;

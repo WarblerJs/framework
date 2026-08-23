@@ -1,8 +1,9 @@
 import { inject } from "@warbler/core";
 import { Controller, Get, JsonRes, Post, view, type AppRequest } from "@warbler/http";
+import { serializeCookie } from "@warbler/http/cookies";
 import { LoginUseCase } from "../../application/use-case/login.use-case";
 import { loginValidators } from "../validators/login.validator";
-import { sessionMiddleware } from "src/shared/middlewares/auth.middleware";
+import { sessionCookieValidator, sessionMiddleware } from "src/shared/middlewares/auth.middleware";
 import { env } from "@warbler/config";
 import { authGuard, guestGuard } from "src/shared/guards/auth.guard";
 
@@ -17,6 +18,7 @@ export class LoginController {
 
     @Get("/", {
         name: "login",
+        validator: sessionCookieValidator,
         middleware: [ sessionMiddleware ],
         guards: [ guestGuard ],
     })
@@ -27,6 +29,7 @@ export class LoginController {
 
     @Get("/protected", {
         name: "protected",
+        validator: sessionCookieValidator,
         middleware: [ sessionMiddleware ],
         guards: [ authGuard ],
     })
@@ -47,14 +50,17 @@ export class LoginController {
                 { status: 409 },
             ),
             right: (login) => {
-                request.cookies.set("session", login.sessionId, {
-                    httpOnly: true,
-                    secure: env('APP_ENV') === 'production' ? true : false,
-                    sameSite: "lax",
-                    path: "/",
+                return JsonRes(login.user, {
+                    status: 200,
+                    headers: {
+                        "set-cookie": serializeCookie("session", login.sessionId, {
+                            httpOnly: true,
+                            secure: env('APP_ENV') === 'production',
+                            sameSite: "Lax",
+                            path: "/",
+                        }),
+                    },
                 });
-
-                return JsonRes(login.user, { status: 200 });
             },
         });
     }

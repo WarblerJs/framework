@@ -31,16 +31,26 @@ describe("route decorators", () => {
       bodyRules: { email: v.string() },
       paramRules: { id: v.number() },
       queryRules: { page: v.number() },
+      headerRules: { "x-language": v.string() },
+      cookieRules: { session: v.string() },
     });
     let observedEmail: string | undefined;
     let observedId: number | undefined;
     let observedPage: number | undefined;
+    let observedLanguage: string | undefined;
+    let observedSession: string | undefined;
     class Controller {
       @Post("/login/:id", { validator: loginValidator })
       login(req: AppRequest<typeof loginValidator>) {
         observedEmail = req.body.email;
         observedId = req.params.id;
         observedPage = req.query.page;
+        observedLanguage = req.headers["x-language"];
+        observedSession = req.cookies.session;
+        // @ts-expect-error native Request is not available to production handlers
+        req.native;
+        // @ts-expect-error undeclared raw headers are not present on validated headers
+        req.headers["content-type"];
       }
     }
     const metadata = getRouteMetadata(Controller.prototype.login);
@@ -49,11 +59,13 @@ describe("route decorators", () => {
     // not something callers of `getRouteMetadata` narrow at the type level.
     expect(metadata?.validator as unknown).toBe(loginValidator);
     new Controller().login({
-      body: { email: "a@b.com" }, params: { id: 1 }, query: { page: 2 },
+      body: { email: "a@b.com" }, params: { id: 1 }, query: { page: 2 }, headers: { "x-language": "en" }, cookies: { session: "s1" },
     } as AppRequest<typeof loginValidator>);
     expect(observedEmail).toBe("a@b.com");
     expect(observedId).toBe(1);
     expect(observedPage).toBe(2);
+    expect(observedLanguage).toBe("en");
+    expect(observedSession).toBe("s1");
   });
 
   test("guards/middleware type-check against the route's inferred AppRequest shape", () => {

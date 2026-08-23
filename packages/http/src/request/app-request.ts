@@ -1,5 +1,17 @@
 import type { TranslationParameters } from "@warbler/i18n";
-import type { InferValidatorBody, InferValidatorOutput, InferValidatorPath, InferValidatorQuery, RequestValidator } from "@warbler/validators";
+import type {
+  InferValidatorBody,
+  InferValidatorCookies,
+  InferValidatorHeaders,
+  InferValidatorMessage,
+  InferValidatorMetadata,
+  InferValidatorOutput,
+  InferValidatorPath,
+  InferValidatorQuery,
+  RequestValidator,
+  RuleShape,
+  AnyField,
+} from "@warbler/validators";
 import type { WarblerRequestContext } from "./warbler-request-context";
 
 /**
@@ -11,7 +23,7 @@ import type { WarblerRequestContext } from "./warbler-request-context";
  * bottom type, assignable to everything — makes every concrete `mapV` satisfy it.
  */
 export type AnyRequestValidator =
-  & Omit<RequestValidator<any, any, any, any, any, any, any, any>, "mapV">
+  & Omit<RequestValidator<RuleShape, RuleShape, RuleShape, RuleShape, RuleShape, RuleShape, RuleShape, AnyField | undefined, unknown>, "mapV">
   & { readonly mapV?: (value: never) => unknown };
 
 /**
@@ -22,13 +34,21 @@ export type AnyRequestValidator =
  */
 type ParamsFor<TBody> = TBody extends AnyRequestValidator
   ? (InferValidatorPath<TBody> extends Record<string, unknown> ? InferValidatorPath<TBody> : Record<string, string>)
-  : Record<string, string>;
+  : Readonly<Record<never, never>>;
 type QueryFor<TBody> = TBody extends AnyRequestValidator
   ? InferValidatorQuery<TBody>
-  : Readonly<Record<string, string | readonly string[]>>;
+  : Readonly<Record<never, never>>;
 type IsUnknown<T> = unknown extends T ? keyof T extends never ? true : false : false;
 type KnownOrFallback<TValue, TFallback> = IsUnknown<TValue> extends true ? TFallback : TValue;
 type BodyFor<TBody> = TBody extends AnyRequestValidator ? KnownOrFallback<InferValidatorOutput<TBody>, InferValidatorBody<TBody>> : TBody;
+type HeadersFor<TBody> = TBody extends AnyRequestValidator ? InferValidatorHeaders<TBody> : Readonly<Record<never, never>>;
+type CookiesFor<TBody> = TBody extends AnyRequestValidator ? InferValidatorCookies<TBody> : Readonly<Record<never, never>>;
+type MessageFor<TBody> = TBody extends AnyRequestValidator ? InferValidatorMessage<TBody> : Readonly<Record<never, never>>;
+type MetadataFor<TBody> = TBody extends AnyRequestValidator ? InferValidatorMetadata<TBody> : Readonly<Record<never, never>>;
+
+export interface AppRequestDevelopment {
+  readonly native: Request;
+}
 
 /** Immutable request representation passed to Warbler controller handlers. */
 export interface AppRequest<
@@ -36,15 +56,19 @@ export interface AppRequest<
   TParams extends Record<string, unknown> = ParamsFor<TBody>,
   TQuery = QueryFor<TBody>,
   TContext = WarblerRequestContext,
-  THeaders = Headers,
-  TCookies = Bun.CookieMap,
+  THeaders = HeadersFor<TBody>,
+  TCookies = CookiesFor<TBody>,
+  TMessage = MessageFor<TBody>,
+  TMetadata = MetadataFor<TBody>,
 > {
-  readonly native: Request;
+  readonly dev?: AppRequestDevelopment;
   readonly body: BodyFor<TBody>;
   readonly params: Readonly<TParams>;
   readonly query: TQuery;
   readonly headers: THeaders;
   readonly cookies: TCookies;
+  readonly message: TMessage;
+  readonly metadata: TMetadata;
   readonly context: TContext;
   readonly locale: string;
   tr(key: string, parameters?: TranslationParameters): string;
@@ -56,4 +80,4 @@ export interface AppRequest<
  * a generic constraint bound (e.g. by `Guard`/`Middleware`) where the exact per-route
  * shape isn't known ahead of time.
  */
-export type AnyAppRequest = AppRequest<unknown, Record<string, unknown>, unknown, unknown, unknown, unknown>;
+export type AnyAppRequest = AppRequest<unknown, Readonly<Record<never, never>>, Readonly<Record<never, never>>, unknown, unknown, unknown, unknown, unknown>;

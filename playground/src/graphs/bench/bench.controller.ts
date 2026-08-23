@@ -1,7 +1,7 @@
 import { inject } from "@warbler/core";
 import { Controller, Get, type AppRequest } from "@warbler/http";
 import { BenchService } from "./bench.service";
-import { benchValidator } from "./bench.validator";
+import { benchValidator, optionalBenchQueryValidator } from "./bench.validator";
 
 @Controller("/bench")
 export default class Benchontroller {
@@ -25,7 +25,7 @@ export default class Benchontroller {
     }
 
     @Get("/validation", {
-        //validator: benchValidator
+        validator: benchValidator
     })
     benchValidation(req: AppRequest<typeof benchValidator>) {
         const id = req.query.id;
@@ -37,35 +37,33 @@ export default class Benchontroller {
         const user = this.service.getById(id);
         return Response.json(user);
     }
-    @Get("/query")
-    benchQuery(req: AppRequest) {
+    @Get("/query", {
+        validator: optionalBenchQueryValidator,
+    })
+    benchQuery(req: AppRequest<typeof optionalBenchQueryValidator>) {
         const id = req.query.id;
         return new Response(id ? (id + '') : "");
     }
-    @Get("/query-raw")
-    benchQueryRaw(req: AppRequest) {
-        const url = new URL(req.native.url);
-        const id = url.searchParams.get("id");
-
-        return new Response(id ?? "");
+    @Get("/query-raw", {
+        validator: optionalBenchQueryValidator,
+    })
+    benchQueryRaw(req: AppRequest<typeof optionalBenchQueryValidator>) {
+        return new Response(req.query.id ?? "");
     }
-    @Get("/query-fast")
-    benchQueryFast(req: AppRequest) {
-        const url = req.native.url;
-
-        const index = url.indexOf("id=");
-        const id = index === -1
-            ? ""
-            : url.slice(index + 3);
-
-        return new Response(id);
+    @Get("/query-fast", {
+        validator: optionalBenchQueryValidator,
+    })
+    benchQueryFast(req: AppRequest<typeof optionalBenchQueryValidator>) {
+        return new Response(req.query.id ?? "");
     }
     @Get("/query-ignore")
     benchQueryIgnore() {
         return new Response("OK");
     }
-    @Get("/query-read-ignore")
-    benchQueryReadIgnore(req: AppRequest) {
+    @Get("/query-read-ignore", {
+        validator: optionalBenchQueryValidator,
+    })
+    benchQueryReadIgnore(req: AppRequest<typeof optionalBenchQueryValidator>) {
         const id = req.query.id;
         void id;
 

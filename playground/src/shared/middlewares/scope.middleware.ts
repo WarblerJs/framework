@@ -16,10 +16,10 @@ export const requestIdMiddleware: Middleware = (_request, context, next) => {
 };
 
 export const tenantMiddleware: Middleware = (request, context, next) => {
-  const tenantId = request.headers.get("x-tenant-id");
+  const tenantId = (request.headers as { readonly "x-tenant-id"?: string })["x-tenant-id"];
   context.set<Tenant>("tenant", Object.freeze({
     id: tenantId ?? "playground",
-    source: tenantId === null ? "default" : "header",
+    source: tenantId === undefined ? "default" : "header",
   }));
   return next();
 };

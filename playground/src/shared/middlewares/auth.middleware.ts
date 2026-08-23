@@ -1,12 +1,19 @@
 import { inject } from "@warbler/core";
-import type { Middleware } from "@warbler/http";
+import type { AppRequest, Middleware } from "@warbler/http";
+import { defineValidator, v } from "@warbler/validators";
 import { SessionAuthenticator } from "../services/session-authenticator.service";
 
-export const sessionMiddleware: Middleware = async (request, context, next) => {
+export const sessionCookieValidator = defineValidator({
+    cookieRules: {
+        session: v.string("validators.invalid_session").optional(),
+    },
+});
+
+export const sessionMiddleware: Middleware<AppRequest<typeof sessionCookieValidator>> = async (request, context, next) => {
 
     const sessionAuthenticator = inject(SessionAuthenticator);
 
-    const sessionId = request.cookies.get("session");
+    const sessionId = request.cookies.session;
 
     if (!sessionId) {
         return next();

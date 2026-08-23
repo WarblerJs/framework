@@ -13,7 +13,8 @@ export { applyKeyMap, validateKeyMap } from "./mapping";
 export { messageDescriptorCacheSize, parseMessageDescriptor } from "./messages";
 export { firstTranslatedValidationErrors, translateValidationErrors, type TranslatedValidationErrors } from "./translation";
 export type {
-  CompiledValidator, InferValidatorBody, InferValidatorOutput, InferValidatorPath,
+  CompiledValidator, InferValidatorBody, InferValidatorCookies, InferValidatorHeaders,
+  InferValidatorMessage, InferValidatorMetadata, InferValidatorOutput, InferValidatorPath,
   InferValidatorQuery, MaybePromise, RequestValidator, ValidationErrorHandler, ValidationErrors,
   ValidationInput, ValidationIssue, ValidationRequest, ValidationResult, ValidationSource, ValidationTranslator,
 } from "./types";

@@ -10,6 +10,13 @@ import { userPermissionGuard } from "../guards/user-permission.guard";
 import { postUserValidatore } from "../validators/post_user.validator";
 import { Email } from "@warbler/email";
 import { auditMiddleware, authMiddleware } from "../../../../shared/middlewares/scope.middleware";
+import { defineValidator, v } from "@warbler/validators";
+
+export const tenantHeaderValidator = defineValidator({
+  headerRules: {
+    "x-tenant-id": v.string("validators.invalid_tenant").optional(),
+  },
+});
 
 @Controller({
   middleware: [
@@ -82,6 +89,7 @@ export class UserController {
   }
 
   @Get("/middleware/all", {
+    validator: tenantHeaderValidator,
     middleware: [
       auditMiddleware,
     ],
