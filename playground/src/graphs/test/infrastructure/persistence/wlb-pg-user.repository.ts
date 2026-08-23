@@ -8,7 +8,12 @@ import { FindUserRepositoryPort } from "../../domain/ports/user.repository.port"
     provide: FindUserRepositoryPort,
 })
 export class WlbPgFindUserRepository extends FindUserRepositoryPort {
-    override findUsers(): Promise<readonly any[]> {
+    override async findUsers(): Promise<readonly any[]> {
+        const exist = await WlbPg.user.exists({
+            where: { email: 'bellib6@gmail.com', },
+
+        });
+        console.log('Yexist', exist)
         return WlbPg.products.findMany({
             take: 200
         });

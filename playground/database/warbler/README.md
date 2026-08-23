@@ -322,6 +322,17 @@ const selectedCounts = await WlbPg.user.count({
 const hasUser = await WlbPg.user.exists({
   where: { email: "ada@example.com" },
 });
+
+const emailOrPhoneExists = await WlbPg.user.exists({
+  where: {
+    tenantId,
+    deletedAt: null,
+    OR: [
+      { email },
+      { phone },
+    ],
+  },
+});
 ```
 
 Each table gets `findUnique`, `findUniqueOrThrow`, `findFirst`, `findFirstOrThrow`, `findMany`,
@@ -351,6 +362,35 @@ await WlbPg.user.findUnique({
 `withDeleted` and `onlyDeleted` cannot both be true. Root scope does not automatically propagate to
 relations; set the relation scope explicitly. Soft-delete lifecycle methods are generated only for
 soft-delete-enabled models:
+
+`exists` returns only a boolean and reuses the same typed `where` input as the normal query API,
+including `AND`, `OR`, `NOT`, scalar operators, relation filters, tenant predicates, and soft-delete
+scope flags. It compiles to PostgreSQL `SELECT EXISTS (SELECT 1 ... ) AS "exists"` and does not
+select model columns, hydrate a row, issue `SELECT *`, use `count(*)`, or add ordering. PostgreSQL
+can stop after the first matching row, but lookup performance still depends on application indexes.
+
+Existence checks are useful for fast feedback, but they do not replace database uniqueness
+constraints. Two concurrent requests can both observe `false` before either inserts, so the
+database must remain the final authority and application code should still translate unique
+constraint violations. For active tenant-scoped email checks, use an index shaped for the policy:
+
+```sql
+CREATE UNIQUE INDEX users_tenant_email_active_unique
+ON users (tenant_id, email)
+WHERE deleted_at IS NULL;
+```
+
+For OR searches over independently searchable columns, PostgreSQL may combine suitable indexes:
+
+```sql
+CREATE INDEX users_tenant_email_active_idx
+ON users (tenant_id, email)
+WHERE deleted_at IS NULL;
+
+CREATE INDEX users_tenant_phone_active_idx
+ON users (tenant_id, phone)
+WHERE deleted_at IS NULL;
+```
 
 ```ts
 await WlbPg.user.softDelete({ where: { id } });      // UPDATE ... SET deleted_at = NOW()

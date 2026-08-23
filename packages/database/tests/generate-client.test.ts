@@ -51,11 +51,15 @@ describe("generateClientSource aggregation types", () => {
     expect(source).toContain('primaryKeyFields: Object.freeze(["id"])');
     expect(source).toContain('field: "id", column: "id", kind: "string", pgType: "uuid"');
     expect(source).toContain('field: "total", column: "total", kind: "number", pgType: "numeric"');
-    expect(source).toContain("exists(args?: { readonly where?: OrderWhere; }): Promise<boolean>;");
+    expect(source).toContain("export type OrderExistsArgs = { readonly where?: OrderWhere; };");
+    expect(source).toContain("exists(args?: OrderExistsArgs): Promise<boolean>;");
+    expect(source).toContain("exists(args?: OrderExistsArgs, options?: PgExplainOptions): Promise<PgExplainResult>;");
+    expect(source).toContain("delegate.exists = (args?: OrderExistsArgs) => executeExists(database, READ_SCHEMA, MODEL, args);");
     expect(source).toContain("aggregate<A extends OrderAggregateArgs>(args: A & { readonly lock?: never }): Promise<OrderAggregatePayload<A>>;");
     expect(source).toContain("groupBy<A extends OrderGroupByArgs>(args: A & { readonly lock?: never }): Promise<readonly OrderGroupByPayload<A>[]>;");
     expect(source).not.toContain("readonly where?: OrderWhere; readonly select?: S; readonly lock?: PgRowLock; };");
     expect(source).not.toContain("exists(args?: { readonly where?: OrderWhere; readonly lock?: PgRowLock })");
+    expect(source).not.toContain("exists(args?: { readonly where?: OrderWhere;");
     expect(source).not.toContain("aggregate<A extends OrderAggregateArgs & { readonly lock");
     expect(source).not.toContain("groupBy<A extends OrderGroupByArgs & { readonly lock");
     expect(source).toContain("const delegate: Record<string, unknown> = {};");
@@ -83,6 +87,7 @@ describe("generateClientSource aggregation types", () => {
     expect(source).not.toContain("deletedAt?: Date | null;");
     expect(source).toContain('softDelete: Object.freeze({ column: "deleted_at", field: "deletedAt" })');
     expect(source).toContain("readonly withDeleted?: boolean;");
+    expect(source).toContain("export type OrderExistsArgs = { readonly where?: OrderWhere; readonly withDeleted?: boolean; readonly onlyDeleted?: boolean; };");
     expect(source).toContain("softDelete(args: { readonly where: OrderUniqueWhere }): Promise<OrderRow>;");
     expect(source).toContain("restoreMany(args: { readonly where: OrderWhere }): Promise<MutationCountResult>;");
     expect(source).toContain("forceDeleteMany(args: { readonly where: OrderWhere }): Promise<MutationCountResult>;");

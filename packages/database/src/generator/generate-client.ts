@@ -377,6 +377,10 @@ function groupByArgs(table: TableMetadata): string {
 }`;
 }
 
+function existsArgs(table: TableMetadata): string {
+  return `export type ${table.modelName}ExistsArgs = { readonly where?: ${table.modelName}Where;${table.softDelete?.enabled === true ? " readonly withDeleted?: boolean; readonly onlyDeleted?: boolean;" : ""} };`;
+}
+
 function groupByPayload(table: TableMetadata): string {
   return `export type ${table.modelName}GroupByPayload<A extends ${table.modelName}GroupByArgs> = {
   readonly [K in A["by"][number]]: ${table.modelName}Row[K];
@@ -445,13 +449,12 @@ function runtimeSchemaSource(allTables: readonly TableMetadata[]): string {
 }
 
 function explainDelegateInterface(table: TableMetadata): string {
-  const scope = table.softDelete?.enabled === true ? " readonly withDeleted?: boolean; readonly onlyDeleted?: boolean;" : "";
   return `export interface ${table.modelName}ExplainDelegate {
   findUnique<S extends ${table.modelName}Select | undefined = undefined, I extends ${table.modelName}Include | undefined = undefined>(args: ${table.modelName}FindUniqueArgs<S, I>, options?: PgExplainOptions): Promise<PgExplainResult>;
   findFirst<S extends ${table.modelName}Select | undefined = undefined, I extends ${table.modelName}Include | undefined = undefined>(args?: ${table.modelName}FindFirstArgs<S, I>, options?: PgExplainOptions): Promise<PgExplainResult>;
   findMany<S extends ${table.modelName}Select | undefined = undefined, I extends ${table.modelName}Include | undefined = undefined>(args?: ${table.modelName}FindManyArgs<S, I>, options?: PgExplainOptions): Promise<PgExplainResult>;
   count<S extends ${table.modelName}CountAggregateInput | undefined = undefined>(args?: ${table.modelName}CountArgs<S>, options?: PgExplainOptions): Promise<PgExplainResult>;
-  exists(args?: { readonly where?: ${table.modelName}Where;${scope} }, options?: PgExplainOptions): Promise<PgExplainResult>;
+  exists(args?: ${table.modelName}ExistsArgs, options?: PgExplainOptions): Promise<PgExplainResult>;
   aggregate<A extends ${table.modelName}AggregateArgs>(args: A & { readonly lock?: never }, options?: PgExplainOptions): Promise<PgExplainResult>;
   groupBy<A extends ${table.modelName}GroupByArgs>(args: A & { readonly lock?: never }, options?: PgExplainOptions): Promise<PgExplainResult>;
 }`;
@@ -505,7 +508,7 @@ function delegateInterface(table: TableMetadata, rowType: string): string {
   count(): Promise<number>;
   count(args: { readonly where?: ${table.modelName}Where;${scope} }): Promise<number>;
   count<S extends ${table.modelName}CountAggregateInput>(args: { readonly where?: ${table.modelName}Where; readonly select: S;${scope} }): Promise<${table.modelName}CountAggregatePayload<S>>;
-  exists(args?: { readonly where?: ${table.modelName}Where;${scope} }): Promise<boolean>;
+  exists(args?: ${table.modelName}ExistsArgs): Promise<boolean>;
   aggregate<A extends ${table.modelName}AggregateArgs>(args: A & { readonly lock?: never }): Promise<${table.modelName}AggregatePayload<A>>;
   groupBy<A extends ${table.modelName}GroupByArgs>(args: A & { readonly lock?: never }): Promise<readonly ${table.modelName}GroupByPayload<A>[]>;
 ${lifecycle}
@@ -526,7 +529,7 @@ function delegateFactory(table: TableMetadata): string {
   explain.findFirst = (args?: ${table.modelName}FindFirstArgs, options?: PgExplainOptions) => executeExplainFindFirst(database, READ_SCHEMA, MODEL, args, options);
   explain.findMany = (args?: ${table.modelName}FindManyArgs, options?: PgExplainOptions) => executeExplainFindMany(database, READ_SCHEMA, MODEL, args, options);
   explain.count = (args?: ${table.modelName}CountArgs<${table.modelName}CountAggregateInput | undefined>, options?: PgExplainOptions) => executeExplainCount(database, READ_SCHEMA, MODEL, args, options);
-  explain.exists = (args?: { readonly where?: ${table.modelName}Where }, options?: PgExplainOptions) => executeExplainExists(database, READ_SCHEMA, MODEL, args, options);
+  explain.exists = (args?: ${table.modelName}ExistsArgs, options?: PgExplainOptions) => executeExplainExists(database, READ_SCHEMA, MODEL, args, options);
   explain.aggregate = (args: ${table.modelName}AggregateArgs, options?: PgExplainOptions) => executeExplainAggregate(database, READ_SCHEMA, MODEL, args, options);
   explain.groupBy = (args: ${table.modelName}GroupByArgs, options?: PgExplainOptions) => executeExplainGroupBy(database, READ_SCHEMA, MODEL, args, options);
   Object.freeze(explain);
@@ -548,7 +551,7 @@ function delegateFactory(table: TableMetadata): string {
   delegate.delete = (args: { readonly where: ${table.modelName}UniqueWhere; readonly select?: ${table.modelName}Select }) => executeDelete(database, READ_SCHEMA, MODEL, args);
   delegate.deleteMany = (args: { readonly where: ${table.modelName}Where }) => executeDeleteMany(database, READ_SCHEMA, MODEL, args);
   delegate.count = (args?: { readonly where?: ${table.modelName}Where; readonly select?: ${table.modelName}CountAggregateInput }) => executeCount(database, READ_SCHEMA, MODEL, args);
-  delegate.exists = (args?: { readonly where?: ${table.modelName}Where }) => executeExists(database, READ_SCHEMA, MODEL, args);
+  delegate.exists = (args?: ${table.modelName}ExistsArgs) => executeExists(database, READ_SCHEMA, MODEL, args);
   delegate.aggregate = (args: ${table.modelName}AggregateArgs) => executeAggregate(database, READ_SCHEMA, MODEL, args);
   delegate.groupBy = (args: ${table.modelName}GroupByArgs) => executeGroupBy(database, READ_SCHEMA, MODEL, args);
 ${lifecycle}
@@ -693,6 +696,7 @@ ${deletedScopeFields(table)}  readonly select?: ${table.modelName}Select;
     `export type ${table.modelName}FindFirstArgs<S extends ${table.modelName}Select | undefined = undefined, I extends ${table.modelName}Include | undefined = undefined> = { readonly where?: ${table.modelName}Where; readonly select?: S; readonly include?: never; readonly orderBy?: ${table.modelName}OrderBy | readonly ${table.modelName}OrderBy[]; readonly take?: number; readonly skip?: number; readonly cursor?: ${table.modelName}Cursor; readonly lock?: PgRowLock;${table.softDelete?.enabled === true ? " readonly withDeleted?: boolean; readonly onlyDeleted?: boolean;" : ""} } | { readonly where?: ${table.modelName}Where; readonly select?: never; readonly include?: I; readonly orderBy?: ${table.modelName}OrderBy | readonly ${table.modelName}OrderBy[]; readonly take?: number; readonly skip?: number; readonly cursor?: ${table.modelName}Cursor; readonly lock?: PgRowLock;${table.softDelete?.enabled === true ? " readonly withDeleted?: boolean; readonly onlyDeleted?: boolean;" : ""} };`,
     `export type ${table.modelName}FindManyArgs<S extends ${table.modelName}Select | undefined = undefined, I extends ${table.modelName}Include | undefined = undefined> = { readonly where?: ${table.modelName}Where; readonly select?: S; readonly include?: never; readonly orderBy?: ${table.modelName}OrderBy | readonly ${table.modelName}OrderBy[]; readonly take?: number; readonly skip?: number; readonly cursor?: ${table.modelName}Cursor; readonly distinct?: readonly ${table.modelName}ScalarField[]; readonly lock?: PgRowLock;${table.softDelete?.enabled === true ? " readonly withDeleted?: boolean; readonly onlyDeleted?: boolean;" : ""} } | { readonly where?: ${table.modelName}Where; readonly select?: never; readonly include?: I; readonly orderBy?: ${table.modelName}OrderBy | readonly ${table.modelName}OrderBy[]; readonly take?: number; readonly skip?: number; readonly cursor?: ${table.modelName}Cursor; readonly distinct?: readonly ${table.modelName}ScalarField[]; readonly lock?: PgRowLock;${table.softDelete?.enabled === true ? " readonly withDeleted?: boolean; readonly onlyDeleted?: boolean;" : ""} };`,
     `export type ${table.modelName}CountArgs<S extends ${table.modelName}CountAggregateInput | undefined = undefined> = { readonly where?: ${table.modelName}Where; readonly select?: S;${table.softDelete?.enabled === true ? " readonly withDeleted?: boolean; readonly onlyDeleted?: boolean;" : ""} };`,
+    existsArgs(table),
     "",
     selectPayloadType(table, rowType, relations),
     includePayloadType(table, rowType, relations),
