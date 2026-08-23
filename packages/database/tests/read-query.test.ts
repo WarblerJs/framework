@@ -129,6 +129,19 @@ const softSchema: RuntimeReadSchema = Object.freeze({
 });
 const softUser = softSchema.models.User!;
 const softPost = softSchema.models.Post!;
+const tenantSoftUser = Object.freeze({
+  ...softUser,
+  columns: Object.freeze([
+    ...softUser.columns,
+    Object.freeze({ field: "tenantId", column: "tenant_id", kind: "string" as const, pgType: "uuid", nullable: false, unique: false, primaryKey: false }),
+  ]),
+});
+const tenantSoftSchema: RuntimeReadSchema = Object.freeze({
+  models: Object.freeze({
+    ...softSchema.models,
+    User: tenantSoftUser,
+  }),
+});
 
 describe("read query compiler", () => {
   test("findUnique uses query-object where and rejects non-unique or ambiguous selectors", async () => {
@@ -694,6 +707,71 @@ describe("read query compiler", () => {
     expect(query.sql).toStartWith('SELECT EXISTS (SELECT 1 FROM "users" AS "wq0" WHERE EXISTS (SELECT 1 FROM "posts" AS "wq1"');
     expect(query.sql).toContain('"wq1"."user_id" = "wq0"."id" AND "wq1"."likes" > $1');
     expect(query.params).toEqual([10]);
+  });
+
+  test("exists compiles scoped predicates without selection, count, ordering, or hydration", async () => {
+    const sql = createFakeSql([{ exists: true }]);
+    await expect(executeExists(sql, tenantSoftSchema, tenantSoftUser, {
+      where: {
+        tenantId: "018f6e8e-a1a0-7d46-a9cb-8122476760a9",
+        AND: [
+          { active: true },
+          {
+            OR: [
+              { email: "ada@example.com" },
+              { age: { gte: 21 } },
+            ],
+          },
+        ],
+        NOT: { email: { endsWith: "@blocked.example" } },
+      },
+    })).resolves.toBe(true);
+
+    const query = sql.queries[0]!;
+    expect(query.sql).toBe('SELECT EXISTS (SELECT 1 FROM "users" AS "wq0" WHERE "wq0"."deleted_at" IS NULL AND ("wq0"."tenant_id" = $1 AND ("wq0"."active" = $2 AND ("wq0"."email" = $3 OR "wq0"."age" >= $4)) AND NOT ("wq0"."email" LIKE $5))) AS "exists"');
+    expect(query.params).toEqual(["018f6e8e-a1a0-7d46-a9cb-8122476760a9", true, "ada@example.com", 21, "%@blocked.example"]);
+    expect(query.sql).not.toContain("SELECT *");
+    expect(query.sql).not.toContain("count(");
+    expect(query.sql).not.toContain("ORDER BY");
+    expect(query.sql).not.toContain("LIMIT");
+    expect(query.sql).not.toContain('"wq0"."id" AS "id"');
+  });
+
+  test("exists preserves soft-delete scopes and explicit tenant predicates", async () => {
+    const defaultScope = createFakeSql([{ exists: false }]);
+    await expect(executeExists(defaultScope, tenantSoftSchema, tenantSoftUser, {
+      where: { tenantId: "tenant-a", email: "deleted@example.com" },
+    })).resolves.toBe(false);
+    expect(defaultScope.queries[0]!.sql).toBe('SELECT EXISTS (SELECT 1 FROM "users" AS "wq0" WHERE "wq0"."deleted_at" IS NULL AND ("wq0"."tenant_id" = $1 AND "wq0"."email" = $2)) AS "exists"');
+    expect(defaultScope.queries[0]!.params).toEqual(["tenant-a", "deleted@example.com"]);
+
+    const withDeleted = createFakeSql([{ exists: true }]);
+    await expect(executeExists(withDeleted, tenantSoftSchema, tenantSoftUser, {
+      withDeleted: true,
+      where: { tenantId: "tenant-a", email: "deleted@example.com" },
+    })).resolves.toBe(true);
+    expect(withDeleted.queries[0]!.sql).toBe('SELECT EXISTS (SELECT 1 FROM "users" AS "wq0" WHERE "wq0"."tenant_id" = $1 AND "wq0"."email" = $2) AS "exists"');
+
+    const onlyDeleted = createFakeSql([{ exists: false }]);
+    await expect(executeExists(onlyDeleted, tenantSoftSchema, tenantSoftUser, {
+      onlyDeleted: true,
+      where: { tenantId: "tenant-a", email: "active@example.com" },
+    })).resolves.toBe(false);
+    expect(onlyDeleted.queries[0]!.sql).toBe('SELECT EXISTS (SELECT 1 FROM "users" AS "wq0" WHERE "wq0"."deleted_at" IS NOT NULL AND ("wq0"."tenant_id" = $1 AND "wq0"."email" = $2)) AS "exists"');
+  });
+
+  test("exists returns exact booleans and rejects unsupported runtime options", async () => {
+    await expect(executeExists(createFakeSql([{ exists: false }]), schema, user)).resolves.toBe(false);
+    await expect(executeExists(createFakeSql([{ exists: true }]), schema, user, { where: { active: true } })).resolves.toBe(true);
+    await expect(executeExists(createFakeSql([{ exists: "false" }]), schema, user)).rejects.toThrow(DatabaseQueryError);
+    await expect(executeExists(createFakeSql([]), schema, user)).rejects.toThrow(DatabaseQueryError);
+
+    const unsupported = ["select", "include", "orderBy", "cursor", "skip", "take", "distinct", "lock"] as const;
+    for (let index = 0, total = unsupported.length; index < total; index += 1) {
+      const key = unsupported[index]!;
+      await expect(executeExists(createFakeSql(), schema, user, { [key]: key === "skip" || key === "take" ? 1 : true } as never)).rejects.toThrow(DatabaseQueryError);
+    }
+    await expect(executeExists(createFakeSql(), schema, user, "not-args" as never)).rejects.toThrow(DatabaseQueryError);
   });
 
   test("aggregate compiles requested operations without hydrating rows", async () => {

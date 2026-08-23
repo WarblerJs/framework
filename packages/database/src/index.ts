@@ -51,6 +51,7 @@ export type {
   ComparableFilter,
   CountQueryArgs,
   EqualityFilter,
+  ExistsQueryArgs,
   GroupByQueryArgs,
   PgExplainOptions,
   PgExplainResult,

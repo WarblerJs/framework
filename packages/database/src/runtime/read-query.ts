@@ -92,6 +92,12 @@ export interface CountQueryArgs {
   readonly onlyDeleted?: unknown;
 }
 
+export interface ExistsQueryArgs {
+  readonly where?: unknown;
+  readonly withDeleted?: unknown;
+  readonly onlyDeleted?: unknown;
+}
+
 export interface AggregateQueryArgs {
   readonly where?: unknown;
   readonly _count?: unknown;
@@ -157,7 +163,7 @@ interface OrderedColumn {
 
 interface CompiledQuery {
   readonly sql: string;
-  readonly params: readonly unknown[];
+  readonly params: unknown[];
   readonly usesRowLock?: boolean;
 }
 
@@ -282,6 +288,29 @@ function rejectUnsupportedRowLock(model: RuntimeModel, args: unknown, operation:
   if (isPlainObject(args) && args.lock !== undefined) {
     throw new DatabaseQueryError(model.name, `\`lock\` is not supported on ${operation}.`);
   }
+}
+
+function validateExistsArgs(model: RuntimeModel, args: unknown): asserts args is ExistsQueryArgs | undefined {
+  if (args === undefined) return;
+  if (!isPlainObject(args)) throw new DatabaseQueryError(model.name, "exists args must be an object.");
+
+  const keys = Object.keys(args);
+
+  for (let index = 0, total = keys.length; index < total; index += 1) {
+    const key = keys[index]!;
+    if (key === "where" || key === "withDeleted" || key === "onlyDeleted") continue;
+    if (key === "lock") throw new DatabaseQueryError(model.name, "`lock` is not supported on exists.");
+    throw new DatabaseQueryError(model.name, `\`${key}\` is not supported on exists.`);
+  }
+
+  validateDeletedScope(model, args);
+}
+
+function decodeExistsResult(model: RuntimeModel, rows: readonly Readonly<Record<string, unknown>>[]): boolean {
+  const value = rows[0]?.exists;
+  if (value === true) return true;
+  if (value === false) return false;
+  throw new DatabaseQueryError(model.name, "PostgreSQL returned an invalid boolean result for exists().");
 }
 
 function validateDeletedScope(model: RuntimeModel, args: DeletedScopeArgs | undefined): void {
@@ -1144,29 +1173,25 @@ export async function executeCount(sql: SQL, schema: RuntimeReadSchema, model: R
   return rows[0]?.count ?? 0;
 }
 
-function compileExistsSql(schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs): CompiledQuery {
-  rejectUnsupportedRowLock(model, args, "exists");
+function compileExistsSql(schema: RuntimeReadSchema, model: RuntimeModel, args?: ExistsQueryArgs): CompiledQuery {
+  validateExistsArgs(model, args);
   const state = createCompileState(schema);
   const alias = "wq0";
   const where = compileScopedWhere(state, model, alias, args?.where, 0, args);
-  const whereSql = where.length === 0 ? "" : `WHERE ${where}`;
+  const whereSql = where.length === 0 ? "" : ` WHERE ${where}`;
   return {
-    sql: `SELECT EXISTS (${[
-      "SELECT 1",
-      `FROM ${q(model.table)} AS ${q(alias)}`,
-      whereSql,
-    ].filter((part) => part.length > 0).join(" ")}) AS "exists"`,
+    sql: `SELECT EXISTS (SELECT 1 FROM ${q(model.table)} AS ${q(alias)}${whereSql}) AS "exists"`,
     params: state.params,
   };
 }
 
-export async function executeExists(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: CountQueryArgs): Promise<boolean> {
+export async function executeExists(sql: SQL, schema: RuntimeReadSchema, model: RuntimeModel, args?: ExistsQueryArgs): Promise<boolean> {
   const query = compileExistsSql(schema, model, args);
-  const rows = await sql.unsafe<{ exists: boolean }[]>(
+  const rows = await sql.unsafe<Readonly<Record<string, unknown>>[]>(
     query.sql,
-    [...query.params],
+    query.params,
   );
-  return rows[0]?.exists === true;
+  return decodeExistsResult(model, rows);
 }
 
 function compileAggregateSql(schema: RuntimeReadSchema, model: RuntimeModel, args: AggregateQueryArgs): CompiledQuery {
