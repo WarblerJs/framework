@@ -68,9 +68,9 @@ export function analyzeExecutableBindings(
   }
   const controllerOwners = new Map<string, { readonly graph: string; readonly controller: ControllerWIR }>();
   for (const graph of wir.graphs) for (const controller of graph.controllers) controllerOwners.set(`${graph.name}:${controller.name}`, { graph: graph.name, controller });
-  const handlerOwners = new Map<string, { readonly graph: string; readonly controller: ControllerWIR; readonly file: string; readonly handler: string; readonly useCases: readonly HandlerUseCaseWIR[] }>();
+  const handlerOwners = new Map<string, { readonly graph: string; readonly controller: ControllerWIR; readonly file: string; readonly handler: string; readonly expression?: CapturedExpressionWIR; readonly useCases: readonly HandlerUseCaseWIR[] }>();
   for (const graph of wir.graphs) for (const controller of graph.controllers) {
-    for (const route of controller.routes) handlerOwners.set(`${graph.name}:${controller.name}.${route.handler}`, { graph: graph.name, controller, file: route.file, handler: route.handler, useCases: route.useCases });
+    for (const route of controller.routes) handlerOwners.set(`${graph.name}:${controller.name}.${route.handler}`, { graph: graph.name, controller, file: route.file, handler: route.handler, ...(route.handlerExpression === undefined ? {} : { expression: route.handlerExpression }), useCases: route.useCases });
     for (const event of controller.socketEvents) handlerOwners.set(`${graph.name}:${controller.name}.${event.handler}`, { graph: graph.name, controller, file: event.file, handler: event.handler, useCases: event.useCases });
   }
 
@@ -178,7 +178,9 @@ export function analyzeExecutableBindings(
     const qualified = optimized.strings[row.nameId]!;
     const handlerOwner = handlerOwners.get(qualified);
     if (handlerOwner?.controller.synthetic === true) {
-      const expression = resolveHandlerExpression(handlerOwner.handler, handlerOwner.file, resolveValue);
+      const expression = handlerOwner.expression === undefined
+        ? resolveHandlerExpression(handlerOwner.handler, handlerOwner.file, resolveValue)
+        : resolveCaptured(handlerOwner.expression);
       if (expression === undefined) { failed = true; continue; }
       const graphId = optimized.graphIds[handlerOwner.graph]!;
       const useCaseProviderIds = resolveUseCaseProviderIds(optimized, handlerOwner.useCases, graphId);

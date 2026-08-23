@@ -200,7 +200,7 @@ function analyzeDeclarativeGraphCall(
   rejectSingularMiddleware(object, node, source, diagnostics);
   const transport = callee === "defineHttpGraph" ? "http" : "websocket";
   const controllerName = `${graphName}${transport === "http" ? "$http" : "$websocket"}`;
-  const routes = transport === "http" ? declarativeHttpRoutes(object, source, handlerOptions, csrfValidators, diagnostics) : [];
+  const routes = transport === "http" ? declarativeHttpRoutes(object, source, aliases, handlerOptions, csrfValidators, diagnostics) : [];
   const socketEvents = transport === "websocket" ? declarativeSocketEvents(object, source, handlerOptions, diagnostics) : [];
   graphs.push(Object.freeze({
     ...location(node, source),
@@ -235,6 +235,7 @@ function analyzeDeclarativeGraphCall(
 function declarativeHttpRoutes(
   object: ts.ObjectLiteralExpression,
   source: ts.SourceFile,
+  aliases: ReadonlyMap<string, string>,
   handlerOptions: ReadonlyMap<string, HandlerOptions>,
   csrfValidators: ReadonlySet<string>,
   diagnostics: CompilerDiagnostic[],
@@ -250,28 +251,34 @@ function declarativeHttpRoutes(
       diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Invalid HTTP route key "${key}". Use METHOD /path with a supported uppercase method.`, property, source, [key]);
       continue;
     }
-    const options = ts.isObjectLiteralExpression(property.initializer) && findProperty(property.initializer, "handler") !== undefined ? property.initializer : undefined;
+    const helperCall = ts.isCallExpression(property.initializer) && callName(property.initializer.expression, aliases) === "defineHttpRoute" ? property.initializer : undefined;
+    const inlineOptions = helperCall === undefined && ts.isObjectLiteralExpression(property.initializer) && findProperty(property.initializer, "run") !== undefined ? property.initializer : objectArgument(helperCall, 0);
+    const options = inlineOptions === undefined && ts.isObjectLiteralExpression(property.initializer) && findProperty(property.initializer, "handler") !== undefined ? property.initializer : undefined;
     if (options !== undefined) {
       rejectSingularMiddleware(options, property, source, diagnostics);
       rejectForbiddenDeclarativeOptions(options, ["validator", "guards", "useCase", "providers"], property, source, diagnostics);
     }
-    const handler = options === undefined ? expressionReference(property.initializer) : objectReference(options, "handler");
+    if (inlineOptions !== undefined) rejectSingularMiddleware(inlineOptions, property, source, diagnostics);
+    const handler = inlineOptions !== undefined ? `__warbler_inline_http_${routes.length}` : options === undefined ? expressionReference(property.initializer) : objectReference(options, "handler");
     if (handler === undefined) {
       diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `HTTP route "${key}" is missing a handler.`, property, source, [key]);
       continue;
     }
     const inherited = handlerOptionsFor(handlerOptions, handler);
-    const validator = inherited.validator;
+    const validator = inlineOptions === undefined ? inherited.validator : objectReference(inlineOptions, "validator");
     routes.push(Object.freeze({
       ...location(property, source),
       method: parsed.method,
       path: parsed.path,
       handler,
+      ...(inlineOptions === undefined ? {} : { handlerExpression: captureExpression(helperCall ?? inlineOptions, aliases, source) }),
       ...(validator === undefined ? {} : { validator }),
-      ...(options === undefined ? {} : objectStringOrUndefined(options, "name") === undefined ? {} : { name: objectStringOrUndefined(options, "name")! }),
-      middleware: Object.freeze(options === undefined ? inherited.middleware : [...objectReferenceArray(options, "middlewares"), ...inherited.middleware]),
-      guards: inherited.guards,
-      useCases: inherited.useCases,
+      ...(inlineOptions !== undefined
+        ? objectStringOrUndefined(inlineOptions, "name") === undefined ? {} : { name: objectStringOrUndefined(inlineOptions, "name")! }
+        : options === undefined ? {} : objectStringOrUndefined(options, "name") === undefined ? {} : { name: objectStringOrUndefined(options, "name")! }),
+      middleware: Object.freeze(inlineOptions !== undefined ? objectReferenceArray(inlineOptions, "middlewares") : options === undefined ? inherited.middleware : [...objectReferenceArray(options, "middlewares"), ...inherited.middleware]),
+      guards: inlineOptions !== undefined ? objectReferenceArray(inlineOptions, "guards") : inherited.guards,
+      useCases: inlineOptions !== undefined ? Object.freeze(objectReferenceMap(inlineOptions, "useCase")) : inherited.useCases,
       csrf: validator === undefined ? false : csrfValidators.has(lastReferenceSegment(validator)),
       viewContext: false,
     }));

@@ -1,8 +1,11 @@
 export { Controller } from "./controller";
 export {
+  defineHttpRoute,
   defineHttpGraph,
   HttpMethod,
+  type DefinedHttpInlineGraphRoute,
   type HttpGraphDefinition,
+  type HttpInlineGraphRoute,
   type HttpGraphRoute,
   type HttpMethod as HttpMethodType,
   type HttpRouteKey,

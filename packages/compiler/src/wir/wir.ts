@@ -16,6 +16,7 @@ export interface RouteWIR extends SourceLocationWIR {
   /** Logical route name (`{name: "users.show"}`) resolved by the `route()` view built-in. */
   readonly name?: string;
   readonly handler: string;
+  readonly handlerExpression?: CapturedExpressionWIR;
   readonly validator?: string;
   readonly middleware: readonly string[];
   readonly guards: readonly string[];

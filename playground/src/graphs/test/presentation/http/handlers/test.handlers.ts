@@ -15,14 +15,14 @@ export const getTest = defineHandler({
   validator: validateRequest,
   guards: [ guestGuardTest ],
   middlewares: [ authMiddleware ],
-  run: async (_ctx: AppRequest,{getUser}) => {
+  run: async (_ctx: AppRequest<typeof validateRequest>,{getUser}) => {
 
-    const source = await getUser.execute(2);
+    const source = await getUser.execute(_ctx.query.id);
 
     return source.match({
       right: ( c) => JsonRes({ pp: _ctx.context, vbn:c  }),
       left: ( d) => JsonRes({  error: d }),
-    })
+    });
 
 
   },
