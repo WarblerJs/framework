@@ -46,6 +46,14 @@ class LocalController {
   readonly local = inject(LocalService);
   show(): Response { return new Response(this.local instanceof LocalService ? "local" : "invalid"); }
 }
+class SocketController {
+  handle(message: unknown, context: unknown): string {
+    socketHandlerObservation = Object.freeze({ message, context });
+    return "handled";
+  }
+}
+
+let socketHandlerObservation: Readonly<{ message: unknown; context: unknown }> | undefined;
 
 function isThenable(value: unknown): value is Promise<unknown> {
   return typeof value === "object" && value !== null && "then" in value && typeof value.then === "function";
@@ -345,6 +353,98 @@ describe("startRuntime generated binding consumption", () => {
     const response = await routes["/users"]!.GET!(new Request("http://localhost/users"));
     expect(response.status).toBe(400);
     expect(events).not.toContain("middleware");
+    await runtime.stop();
+  });
+
+  test("validated WebSocket envelopes copy own enumerable message fields, replace data, freeze once, and preserve originals", async () => {
+    let dispatch: ((event: string, message: unknown, context: unknown) => unknown) | undefined;
+    let middlewareEnvelope: unknown;
+    socketHandlerObservation = undefined;
+    const app: GeneratedApplicationBindings = Object.freeze({
+      application: Object.freeze({
+        strings: Object.freeze([]), graphIds: Object.freeze({ SocketGraph: 0 }),
+        providerTable: Object.freeze([]), providerDependencies: Object.freeze([]),
+        routeTable: Object.freeze([]),
+        socketEventTable: Object.freeze([Object.freeze({
+          id: 0, controllerId: 0, handlerId: 0, validatorId: 0,
+          guardStart: 0, guardCount: 0, middlewareStart: 0, middlewareCount: 1,
+        })]),
+        routeGuards: Object.freeze([]), routeMiddleware: Object.freeze([]),
+        socketGuards: Object.freeze([]), socketMiddleware: Object.freeze([0]),
+      }),
+      providers: Object.freeze([]),
+      controllers: Object.freeze([
+        Object.freeze({ id: 0, graphId: 0, transport: "websocket", token: SocketController, factory: () => new SocketController() }),
+      ]),
+      handlers: Object.freeze([
+        Object.freeze({
+          id: 0, controllerId: 0, parameterCount: 2,
+          invoke: (controller: SocketController, message: unknown, context: unknown) => controller.handle(message, context),
+        }),
+      ]),
+      guards: Object.freeze([]),
+      middleware: Object.freeze([
+        Object.freeze({
+          id: 0,
+          execute: (input: unknown, _context: unknown, next: (value: unknown) => unknown) => {
+            middlewareEnvelope = input;
+            return next(input);
+          },
+        }),
+      ]),
+      validators: Object.freeze([
+        Object.freeze({
+          id: 0,
+          flags: 1,
+          validate: () => Object.freeze({ valid: true, value: Object.freeze({ roomId: "validated" }) }),
+        }),
+      ]),
+      websocket: Object.freeze({
+        events: Object.freeze({
+          "room.join": Object.freeze({
+            id: 0, controllerId: 0, handlerId: 0, validatorId: 0,
+            guardStart: 0, guardCount: 0, middlewareStart: 0, middlewareCount: 1,
+          }),
+        }),
+      }),
+    });
+    const launcher: RuntimeTransportLauncher = {
+      kind: "websocket",
+      start(input) {
+        dispatch = (input.bindings as { readonly dispatch: typeof dispatch }).dispatch;
+        return Object.freeze({});
+      },
+    };
+    const runtime = await startRuntime({
+      application: app,
+      runtimeConfig: runtimeConfig(false, true),
+      transportLaunchers: [launcher],
+      transportConfigLoader: async (kind) => Object.freeze({ kind }),
+    });
+    const originalMessage = Object.create({ inherited: "blocked" }) as Record<string, unknown>;
+    originalMessage.event = "room.join";
+    originalMessage.data = Object.freeze({ raw: "input" });
+    originalMessage.extra = "keep";
+    Object.defineProperty(originalMessage, "hidden", { enumerable: false, value: "secret" });
+    const context = Object.freeze({ connectionId: "socket-1" });
+    expect(await dispatch!("room.join", originalMessage, context)).toBe("handled");
+    const envelope = middlewareEnvelope as { readonly message: Readonly<Record<string, unknown>>; readonly context: unknown };
+    expect(socketHandlerObservation).toBeDefined();
+    const observation = socketHandlerObservation as unknown as Readonly<{ message: unknown; context: unknown }>;
+    const received = observation.message as Readonly<Record<string, unknown>>;
+    expect(Object.isFrozen(envelope)).toBe(true);
+    expect(Object.isFrozen(envelope.message)).toBe(true);
+    expect(received).toBe(envelope.message);
+    expect(received).not.toBe(originalMessage);
+    expect(received.event).toBe("room.join");
+    expect(received.extra).toBe("keep");
+    expect(received.data).toEqual({ roomId: "validated" });
+    expect(Object.prototype.hasOwnProperty.call(received, "hidden")).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(received, "inherited")).toBe(false);
+    expect(envelope.context).toBe(context);
+    expect(observation.context).toBe(context);
+    expect(originalMessage.data).toEqual({ raw: "input" });
+    expect(originalMessage.extra).toBe("keep");
     await runtime.stop();
   });
 

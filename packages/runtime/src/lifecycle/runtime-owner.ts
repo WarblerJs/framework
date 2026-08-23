@@ -99,15 +99,19 @@ const VALIDATOR_SOURCE_QUERY = 1 << 1;
 const VALIDATOR_SOURCE_PATH = 1 << 2;
 const VALIDATOR_SOURCE_HEADERS = 1 << 3;
 const VALIDATOR_SOURCE_COOKIES = 1 << 4;
+const VALIDATOR_SOURCE_MESSAGE = 1 << 5;
+const VALIDATOR_SOURCE_METADATA = 1 << 6;
 const REQUEST_REQUIREMENT_NONE = 0;
 const REQUEST_REQUIREMENT_BODY = 1 << 0;
 const REQUEST_REQUIREMENT_QUERY = 1 << 1;
 const REQUEST_REQUIREMENT_PARAMS = 1 << 2;
 const REQUEST_REQUIREMENT_HEADERS = 1 << 3;
 const REQUEST_REQUIREMENT_COOKIES = 1 << 4;
-const REQUEST_REQUIREMENT_VALIDATION = 1 << 5;
-const REQUEST_REQUIREMENT_APP_REQUEST = 1 << 6;
-const REQUEST_REQUIREMENT_REQUEST_SCOPE = 1 << 7;
+const REQUEST_REQUIREMENT_MESSAGE = 1 << 5;
+const REQUEST_REQUIREMENT_METADATA = 1 << 6;
+const REQUEST_REQUIREMENT_VALIDATION = 1 << 7;
+const REQUEST_REQUIREMENT_APP_REQUEST = 1 << 8;
+const REQUEST_REQUIREMENT_REQUEST_SCOPE = 1 << 9;
 const EMPTY_RECORD: Readonly<Record<string, unknown>> = Object.freeze(Object.create(null) as Record<string, unknown>);
 const DEFAULT_TRANSLATE = (key: string): string => key;
 const UNSET_REQUEST_VALUE = Symbol("warbler.unsetRequestValue");
@@ -438,11 +442,11 @@ export class GeneratedRuntimeOwner implements RuntimeHandle, RuntimeExecutionCon
       return runValidated(validator, validationInput, (validated) => {
         const requestContextStart = profiler !== undefined && http ? performance.now() : 0;
         const requestContext = new RequestContextStore();
-        const pipelineValue = http ? buildAppRequest(validationInput, validated, requestContext, requestRequirements) : socketValidatedEnvelope(input, validated);
+        const pipelineValue = http ? buildAppRequest(validationInput, validated, requestContext, this.#options.development === true) : socketValidatedEnvelope(input, validated);
         const pipelineContext = http ? requestContext : socketConnectionContext(pipelineValue);
         if (profiler !== undefined && http) profiler.record("requestContext", performance.now() - requestContextStart);
         return terminal(pipelineValue, pipelineContext);
-    }, (outcome) => http ? invalidHttpValidation(validator, outcome.errors, validationInput, requestRequirements) : socketValidationFailure(input, outcome.errors), profiler !== undefined && http ? profiler : undefined);
+    }, (outcome) => http ? invalidHttpValidation(validator, outcome.errors, validationInput) : socketValidationFailure(input, outcome.errors), profiler !== undefined && http ? profiler : undefined);
     };
     // Route/socket pipelines run with the owning Graph as the ambient DI resolver so guards,
     // middleware, validators, and handlers can call `inject()` during execution. Only swap
@@ -580,6 +584,8 @@ function compileHttpRequestRequirements(validatorFlags: number | undefined, need
   if ((validatorFlags & VALIDATOR_SOURCE_PATH) !== 0) requirements |= REQUEST_REQUIREMENT_PARAMS;
   if ((validatorFlags & VALIDATOR_SOURCE_HEADERS) !== 0) requirements |= REQUEST_REQUIREMENT_HEADERS;
   if ((validatorFlags & VALIDATOR_SOURCE_COOKIES) !== 0) requirements |= REQUEST_REQUIREMENT_COOKIES;
+  if ((validatorFlags & VALIDATOR_SOURCE_MESSAGE) !== 0) requirements |= REQUEST_REQUIREMENT_MESSAGE;
+  if ((validatorFlags & VALIDATOR_SOURCE_METADATA) !== 0) requirements |= REQUEST_REQUIREMENT_METADATA;
   return requirements;
 }
 function createRuntimePipelineRegistry(providers: readonly import("../generated/executable-bindings").ProviderBinding[]): RuntimePipelineRegistry {
@@ -646,56 +652,86 @@ function socketValidatedEnvelope(original: unknown, validated: unknown): unknown
   const message = original.message;
   if (typeof message !== "object" || message === null) return original;
   const data = validationOutcomeValue(validated);
-  return Object.freeze({
-    message: Object.freeze({ ...message, data }),
+  const source = message as Readonly<Record<PropertyKey, unknown>>;
+  const copiedMessage: Record<PropertyKey, unknown> = Object.create(null);
+  for (const key in source) if (Object.prototype.hasOwnProperty.call(source, key)) copiedMessage[key] = source[key];
+  copiedMessage.data = data;
+  const envelope: { message: Readonly<Record<PropertyKey, unknown>>; context: unknown } = {
+    message: Object.freeze(copiedMessage),
     context: original.context,
-  });
+  };
+  return Object.freeze(envelope);
 }
 /**
- * Builds the `AppRequest`-shaped object passed to every HTTP controller handler —
- * unconditionally, whether or not the route declared a validator (previously this
- * only ran for validated routes; unvalidated routes fell through to the raw native
- * `Request`, missing `.body`/`.native` despite being typed as `AppRequest`).
- *
- * `headers` is always the real native `Headers` — never the plain record `headerRules`
- * validation produces internally, which stays a pass/fail gate, not a value swap.
- * `cookies` is always a `Bun.CookieMap`, likewise never replaced by validated output.
- * `context` is a live getter into `requestContext`: mutable while guards/middleware
- * run, frozen once the pipeline's `settle()` step completes, but always the same
- * object identity end to end.
+ * Builds the sanitized `AppRequest` passed to HTTP controller handlers. Successful
+ * validation output is the boundary: only declared validator sources are exposed.
+ * Raw native request state stays in transport/runtime internals, except for the
+ * development-only `dev.native` diagnostic escape hatch.
  */
-function buildAppRequest(validationInput: unknown, body: unknown, requestContext: RequestContextStore, requestRequirements: number): unknown {
+function buildAppRequest(validationInput: unknown, body: unknown, requestContext: RequestContextStore, development: boolean): unknown {
   if (typeof validationInput !== "object" || validationInput === null || !("__request" in validationInput)) return body;
   const request = validationInput.__request;
   if (!(request instanceof Request)) return body;
   const source = request as Request & Readonly<Record<string, unknown>>;
   const pipelineInput = validationInput as Readonly<Record<string, unknown>>;
   const outcome = validationOutcome(body);
-  const bodyValue = outcome?.value ?? body;
-  let paramsValue: unknown = outcome?.path ?? pipelineInput.path ?? source.params ?? UNSET_REQUEST_VALUE;
-  let queryValue: unknown = outcome?.query ?? pipelineInput.query ?? source.query ?? UNSET_REQUEST_VALUE;
-  const cookiesRequired = (requestRequirements & REQUEST_REQUIREMENT_COOKIES) !== 0;
-  let cookiesValue: Bun.CookieMap | typeof UNSET_REQUEST_VALUE = UNSET_REQUEST_VALUE;
-  return {
+  const bodyValue = outcome !== undefined && "value" in outcome ? outcome.value : body;
+  const paramsValue = validationSection(outcome, "path");
+  const queryValue = validationSection(outcome, "query");
+  const headersValue = validationSection(outcome, "headers");
+  const cookiesValue = validationSection(outcome, "cookies");
+  const messageValue = validationSection(outcome, "message");
+  const metadataValue = validationSection(outcome, "metadata");
+  const appRequest = Object.create(null) as {
+    dev?: Readonly<{ native: Request }>;
+    body: unknown;
+    params: unknown;
+    query: unknown;
+    headers: unknown;
+    cookies: unknown;
+    message: unknown;
+    metadata: unknown;
+    readonly context: Readonly<Record<string, unknown>>;
+    locale: string;
+    tr: RuntimeTranslate;
+  };
+  if (development === true) appRequest.dev = Object.freeze({ native: request });
+  appRequest.body = bodyValue;
+  appRequest.params = paramsValue;
+  appRequest.query = queryValue;
+  appRequest.headers = headersValue;
+  appRequest.cookies = cookiesValue;
+  appRequest.message = messageValue;
+  appRequest.metadata = metadataValue;
+  Object.defineProperty(appRequest, "context", {
+    enumerable: true,
+    configurable: false,
+    get(): Readonly<Record<string, unknown>> { return requestContext.currentView(); },
+  });
+  appRequest.locale = typeof source.locale === "string" ? source.locale : "en";
+  appRequest.tr = typeof pipelineInput.__translate === "function" ? pipelineInput.__translate as RuntimeTranslate : DEFAULT_TRANSLATE;
+  return Object.freeze(appRequest);
+}
+function validationSection(outcome: Readonly<Record<string, unknown>> | undefined, key: string): unknown {
+  return outcome !== undefined && key in outcome ? outcome[key] : EMPTY_RECORD;
+}
+function buildValidationErrorRequest(validationInput: unknown, body: unknown, requestContext: RequestContextStore): unknown {
+  if (typeof validationInput !== "object" || validationInput === null || !("__request" in validationInput)) return body;
+  const request = validationInput.__request;
+  if (!(request instanceof Request)) return body;
+  const source = request as Request & Readonly<Record<string, unknown>>;
+  const pipelineInput = validationInput as Readonly<Record<string, unknown>>;
+  return Object.freeze({
     native: request,
-    body: bodyValue,
-    get params(): unknown {
-      if (paramsValue === UNSET_REQUEST_VALUE) paramsValue = source.params ?? EMPTY_RECORD;
-      return paramsValue;
-    },
-    get query(): unknown {
-      if (queryValue === UNSET_REQUEST_VALUE) queryValue = lazyRequestQuery(request);
-      return queryValue;
-    },
+    body,
+    params: pipelineInput.path ?? source.params ?? EMPTY_RECORD,
+    query: pipelineInput.query ?? lazyRequestQuery(request),
     headers: request.headers,
-    get cookies(): Bun.CookieMap {
-      if (cookiesValue === UNSET_REQUEST_VALUE) cookiesValue = cookiesRequired && source.cookies instanceof Bun.CookieMap ? source.cookies : requestCookieMap(request);
-      return cookiesValue;
-    },
-    get context(): Readonly<Record<string, unknown>> { return requestContext.currentView(); },
+    cookies: requestCookieMap(request),
+    context: requestContext.currentView(),
     locale: typeof source.locale === "string" ? source.locale : "en",
     tr: typeof pipelineInput.__translate === "function" ? pipelineInput.__translate as RuntimeTranslate : DEFAULT_TRANSLATE,
-  };
+  });
 }
 /**
  * Reuses `BunRequest.cookies` when present (already lazily parsed by Bun for every
@@ -748,11 +784,10 @@ function invalidHttpValidation(
   validator: import("../generated/executable-bindings").ValidatorBinding | undefined,
   rawErrors: unknown,
   validationInput: unknown,
-  requestRequirements: number,
 ): unknown {
   const handler = validator?.onValidationError;
   if (typeof handler !== "function") return invalidValidationResponse(rawErrors, validationInput);
-  const req = buildAppRequest(validationInput, rawRequestValue(validationInput), new RequestContextStore(), requestRequirements);
+  const req = buildValidationErrorRequest(validationInput, rawRequestValue(validationInput), new RequestContextStore());
   return (handler as (req: unknown, errors: unknown) => unknown)(req, rawErrors);
 }
 function rawRequestValue(validationInput: unknown): unknown {

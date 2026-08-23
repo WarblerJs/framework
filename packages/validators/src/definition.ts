@@ -41,7 +41,7 @@ type PathRulesFrom<TDefinition> = "paramRules" extends keyof TDefinition ? Shape
 type BodyRuleFrom<TDefinition> = "bodyRule" extends keyof TDefinition ? NonNullable<TDefinition["bodyRule"]> extends AnyField ? NonNullable<TDefinition["bodyRule"]> : undefined : undefined;
 type KeyMapFrom<TDefinition> = "mapK" extends keyof TDefinition ? NonNullable<TDefinition["mapK"]> extends Readonly<Record<string, string>> ? NonNullable<TDefinition["mapK"]> : EmptyShape : EmptyShape;
 type BaseBodyOutput<TRules extends RuleShape, TBodyRule extends AnyField | undefined> = TBodyRule extends AnyField ? FieldOutput<TBodyRule> : InferRuleShape<TRules>;
-type MapValueFrom<TDefinition, TRules extends RuleShape, TBodyRule extends AnyField | undefined> = "mapV" extends keyof TDefinition ? NonNullable<TDefinition["mapV"]> extends (...input: any[]) => infer TResult ? TResult : BaseBodyOutput<TRules, TBodyRule> : BaseBodyOutput<TRules, TBodyRule>;
+type MapValueFrom<TDefinition, TRules extends RuleShape, TBodyRule extends AnyField | undefined> = "mapV" extends keyof TDefinition ? NonNullable<TDefinition["mapV"]> extends (...input: never[]) => infer TResult ? TResult : BaseBodyOutput<TRules, TBodyRule> : BaseBodyOutput<TRules, TBodyRule>;
 
 export function resolveAliasedSection<T>(newValue: T | undefined, oldValue: T | undefined, newKey: string, oldKey: string): T | undefined {
   if (newValue !== undefined && oldValue !== undefined) throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, `Validator definition cannot specify both "${newKey}" and "${oldKey}".`);
@@ -61,7 +61,7 @@ export function defineValidator<const TDefinition extends object>(
   const pathCount = (runtime.paramRules === undefined ? 0 : 1) + (runtime.paramsRules === undefined ? 0 : 1) + (runtime.pathRules === undefined ? 0 : 1);
   if (pathCount > 1) throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, "Validator definition cannot specify more than one of \"paramRules\", \"paramsRules\", or \"pathRules\".");
   if (runtime.bodyRule !== undefined && (runtime.bodyRules !== undefined || runtime.rules !== undefined)) throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, "Validator definition cannot specify both bodyRule and bodyRules/rules.");
-  return attachStages(freezeDefinition(definition as Readonly<Record<string, any>>), Object.freeze({
+  return attachStages(freezeDefinition(definition as Readonly<Record<string, unknown>>), Object.freeze({
     ...(Object.keys(options).length === 0 ? {} : { options: Object.freeze({ ...options }) }),
     after: Object.freeze([]), patch: Object.freeze([]),
   })) as unknown as ValidatorDefinition<
@@ -70,7 +70,7 @@ export function defineValidator<const TDefinition extends object>(
     BodyRuleFrom<TDefinition>, MapValueFrom<TDefinition, BodyRulesFrom<TDefinition>, BodyRuleFrom<TDefinition>>, KeyMapFrom<TDefinition>
   >;
 }
-function freezeDefinition<TDefinition extends Readonly<Record<string, any>>>(definition: TDefinition): TDefinition {
+function freezeDefinition<TDefinition extends Readonly<Record<string, unknown>>>(definition: TDefinition): TDefinition {
   return Object.freeze({
     ...definition,
     ...(definition.bodyRules === undefined ? {} : { bodyRules: Object.freeze({ ...definition.bodyRules }) }),
@@ -86,7 +86,7 @@ function freezeDefinition<TDefinition extends Readonly<Record<string, any>>>(def
     ...(definition.mapK === undefined ? {} : { mapK: Object.freeze({ ...definition.mapK }) }),
   }) as TDefinition;
 }
-function attachStages<TDefinition extends Readonly<Record<string, any>>, TMapOutput>(definition: TDefinition, stages: ValidatorStages<TDefinition, TMapOutput>): TDefinition & ValidatorStageMethods<TDefinition> {
+function attachStages<TDefinition extends Readonly<Record<string, unknown>>, TMapOutput>(definition: TDefinition, stages: ValidatorStages<TDefinition, TMapOutput>): TDefinition & ValidatorStageMethods<TDefinition> {
   return Object.freeze({
     ...definition,
     [VALIDATOR_STAGES]: stages,

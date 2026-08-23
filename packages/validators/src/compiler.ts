@@ -42,7 +42,7 @@ const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
 const CUID = /^c[^\s-]{8,}$/u;
 const NANOID = /^[A-Za-z0-9_-]{21}$/u;
 
-export function compileValidator<T extends Readonly<Record<string, any>>>(definition: T, id = 0): CompiledValidator {
+export function compileValidator<T extends object>(definition: T, id = 0): CompiledValidator {
   if (!isRecord(definition) || !Number.isSafeInteger(id) || id < 0) throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, "Validator definition or ID is invalid.");
   validateKnownDefinition(definition);
   const bodyShape = resolveBodyRules(definition);
@@ -78,7 +78,7 @@ export function compileValidator<T extends Readonly<Record<string, any>>>(defini
     const total = bodyKeys.length;
     for (let index = 0; index < total; index += 1) knownKeys.add(bodyKeys[index]!);
   }
-  const keyMap = definition.mapK === undefined ? undefined : validateKeyMap(definition.mapK, definition.mapV === undefined ? knownKeys : undefined);
+  const keyMap = definition.mapK === undefined ? undefined : validateKeyMap(definition.mapK as Readonly<Record<string, string>>, definition.mapV === undefined ? knownKeys : undefined);
   const stages = validatorStages(definition);
   validateOptions(stages?.options ?? Object.freeze({}));
   const plan: CompiledPlan = Object.freeze({

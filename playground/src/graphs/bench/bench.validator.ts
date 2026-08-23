@@ -16,3 +16,9 @@ export const benchValidator = defineValidator({
 //     });
 //   },
 });
+
+export const optionalBenchQueryValidator = defineValidator({
+  queryRules: {
+    id: v.string('id_invalid_uuid').optional(),
+  },
+});
