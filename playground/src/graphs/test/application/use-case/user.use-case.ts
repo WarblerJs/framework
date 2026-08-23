@@ -8,9 +8,9 @@ export class GetUserUseCase {
      readonly #repository = inject(FindUserRepositoryPort);
     // readonly #sessions = inject(SessionRepositoryPort);
 
-    async execute(): Promise<Either<AuthTranslationKey, {user:any,sessionId:string}>> {
+    async execute(id:number): Promise<Either<AuthTranslationKey, {user:any,sessionId:string}>> {
         
-        if (true) {
+        if (id > 4 ) {
             return right({
                 user: { habib:'bel from excute'},
                 sessionId: 'rpepee from excute',

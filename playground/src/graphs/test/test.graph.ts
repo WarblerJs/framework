@@ -12,18 +12,18 @@ export default defineHttpGraph({
   providers: [
     Provider({provide: FindUserRepositoryPort ,useExisting: WlbPgFindUserRepository })
   ],
-  
-
-
   routes: {
     "GET /test": {
       name: 'test.index',
       handler: handlers.getTest
     },
-
     "POST /test/:id": {
       handler: handlers.postTest,
       name: "test.create",
+    },
+    "PUT /test/:id": {
+      handler: handlers.postTest,
+      name: "test.put",
     },
   },
 });

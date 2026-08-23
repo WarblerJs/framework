@@ -17,9 +17,9 @@ export const getTest = defineHandler({
   middlewares: [ authMiddleware ],
   run: async (_ctx: AppRequest,{getUser}) => {
 
-    const res = await getUser.execute();
+    const source = await getUser.execute(2);
 
-    return res.match({
+    return source.match({
       right: ( c) => JsonRes({ pp: _ctx.context, vbn:c  }),
       left: ( d) => JsonRes({  error: d }),
     })
