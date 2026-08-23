@@ -14,6 +14,7 @@ export type ValidatorDefinition<
   TMetadata extends RuleShape = EmptyShape, TBodyRule extends AnyField | undefined = undefined,
   TMapped = TBodyRule extends AnyField ? FieldOutput<TBodyRule> : InferRuleShape<TRules>,
   TKeyMap extends Readonly<Record<string, string>> = EmptyShape, TMapOutput = never,
+  TDeclaredSections extends PropertyKey = never,
 > =
   & Readonly<{
     bodyRule?: TBodyRule; bodyRules?: TRules; queryRules?: TQuery; paramRules?: TPath; paramsRules?: TPath;
@@ -23,10 +24,11 @@ export type ValidatorDefinition<
     /** @deprecated use `bodyRules` */ rules?: TRules;
     /** @deprecated use `paramRules` */ pathRules?: TPath;
     readonly __warblerOutput?: () => TMapped; readonly __warblerKeyMap?: () => TKeyMap;
-    readonly [VALIDATOR_STAGES]?: ValidatorStages<ValidatorDefinition<TRules, TQuery, TPath, THeaders, TCookies, TMessage, TMetadata, TBodyRule, TMapped, TKeyMap, TMapOutput>, TMapOutput>;
+    readonly __warblerSections?: () => TDeclaredSections;
+    readonly [VALIDATOR_STAGES]?: ValidatorStages<ValidatorDefinition<TRules, TQuery, TPath, THeaders, TCookies, TMessage, TMetadata, TBodyRule, TMapped, TKeyMap, TMapOutput, TDeclaredSections>, TMapOutput>;
     readonly __warblerMap?: TMapOutput extends never ? undefined : () => TMapOutput;
   }>
-  & ValidatorStageMethods<ValidatorDefinition<TRules, TQuery, TPath, THeaders, TCookies, TMessage, TMetadata, TBodyRule, TMapped, TKeyMap, TMapOutput>>;
+  & ValidatorStageMethods<ValidatorDefinition<TRules, TQuery, TPath, THeaders, TCookies, TMessage, TMetadata, TBodyRule, TMapped, TKeyMap, TMapOutput, TDeclaredSections>>;
 export interface ValidatorStageMethods<TDefinition> {
   /** Adds sequential cross-source validation after parsed field rejectIf rules. */
   after(callback: AfterCallback<TDefinition>): TDefinition;
@@ -42,6 +44,7 @@ type BodyRuleFrom<TDefinition> = "bodyRule" extends keyof TDefinition ? NonNulla
 type KeyMapFrom<TDefinition> = "mapK" extends keyof TDefinition ? NonNullable<TDefinition["mapK"]> extends Readonly<Record<string, string>> ? NonNullable<TDefinition["mapK"]> : EmptyShape : EmptyShape;
 type BaseBodyOutput<TRules extends RuleShape, TBodyRule extends AnyField | undefined> = TBodyRule extends AnyField ? FieldOutput<TBodyRule> : InferRuleShape<TRules>;
 type MapValueFrom<TDefinition, TRules extends RuleShape, TBodyRule extends AnyField | undefined> = "mapV" extends keyof TDefinition ? NonNullable<TDefinition["mapV"]> extends (...input: never[]) => infer TResult ? TResult : BaseBodyOutput<TRules, TBodyRule> : BaseBodyOutput<TRules, TBodyRule>;
+type DeclaredSectionsFrom<TDefinition> = Extract<keyof TDefinition, "bodyRule" | "bodyRules" | "rules" | "queryRules" | "paramRules" | "paramsRules" | "pathRules" | "headerRules" | "cookieRules" | "messageRules" | "metadataRules">;
 
 export function resolveAliasedSection<T>(newValue: T | undefined, oldValue: T | undefined, newKey: string, oldKey: string): T | undefined {
   if (newValue !== undefined && oldValue !== undefined) throw new ValidatorError(ValidatorErrorCode.INVALID_DEFINITION, `Validator definition cannot specify both "${newKey}" and "${oldKey}".`);
@@ -53,7 +56,7 @@ export function defineValidator<const TDefinition extends object>(
 ): ValidatorDefinition<
   BodyRulesFrom<TDefinition>, ShapeFrom<TDefinition, "queryRules">, PathRulesFrom<TDefinition>, ShapeFrom<TDefinition, "headerRules">,
   ShapeFrom<TDefinition, "cookieRules">, ShapeFrom<TDefinition, "messageRules">, ShapeFrom<TDefinition, "metadataRules">,
-  BodyRuleFrom<TDefinition>, MapValueFrom<TDefinition, BodyRulesFrom<TDefinition>, BodyRuleFrom<TDefinition>>, KeyMapFrom<TDefinition>
+  BodyRuleFrom<TDefinition>, MapValueFrom<TDefinition, BodyRulesFrom<TDefinition>, BodyRuleFrom<TDefinition>>, KeyMapFrom<TDefinition>, never, DeclaredSectionsFrom<TDefinition>
 > {
   validateOptions(options);
   const runtime = definition as Readonly<Record<string, unknown>>;
@@ -67,7 +70,7 @@ export function defineValidator<const TDefinition extends object>(
   })) as unknown as ValidatorDefinition<
     BodyRulesFrom<TDefinition>, ShapeFrom<TDefinition, "queryRules">, PathRulesFrom<TDefinition>, ShapeFrom<TDefinition, "headerRules">,
     ShapeFrom<TDefinition, "cookieRules">, ShapeFrom<TDefinition, "messageRules">, ShapeFrom<TDefinition, "metadataRules">,
-    BodyRuleFrom<TDefinition>, MapValueFrom<TDefinition, BodyRulesFrom<TDefinition>, BodyRuleFrom<TDefinition>>, KeyMapFrom<TDefinition>
+    BodyRuleFrom<TDefinition>, MapValueFrom<TDefinition, BodyRulesFrom<TDefinition>, BodyRuleFrom<TDefinition>>, KeyMapFrom<TDefinition>, never, DeclaredSectionsFrom<TDefinition>
   >;
 }
 function freezeDefinition<TDefinition extends Readonly<Record<string, unknown>>>(definition: TDefinition): TDefinition {

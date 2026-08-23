@@ -354,11 +354,12 @@ function handlersSource(bindings: ExecutableBindingPlan): string {
   ...input: Parameters<InstanceType<typeof ${binding.controller.local}>[${JSON.stringify(binding.method)}]>
 ): ReturnType<InstanceType<typeof ${binding.controller.local}>[${JSON.stringify(binding.method)}]> =>
   controller.${binding.method}(...input);
-` : `const invokeHandler${binding.id} = (
+` : `const Handler${binding.id} = ${binding.expression.text};
+const invokeHandler${binding.id} = (
   _controller: undefined,
-  ...input: Parameters<typeof ${binding.expression.text}.run>
-): ReturnType<typeof ${binding.expression.text}.run> =>
-  ${binding.expression.text}.run(...input);
+  ...input: Parameters<typeof Handler${binding.id}.run>
+): ReturnType<typeof Handler${binding.id}.run> =>
+  Handler${binding.id}.run(...input);
 `).join("\n");
   const rows = bindings.handlers.map((binding) => binding.kind === "method"
     ? `  Object.freeze({ kind: "method", id: ${binding.id}, controllerId: ${binding.controllerId}, parameterCount: ${binding.parameterCount}, invoke: invokeHandler${binding.id} }),`

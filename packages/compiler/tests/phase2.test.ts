@@ -197,6 +197,45 @@ describe("Phase 2 generated artifacts", () => {
 });
 
 describe("executable bindings", () => {
+  test("emits executable bindings for inline defineHttpRoute graph routes", async () => {
+    const root = await phase2Project();
+    await Bun.write(join(root, "src", "application.ts"), `
+      import { createApp } from "@warbler/core";
+      import { defineHttpGraph, defineHttpRoute, JsonRes } from "@warbler/http";
+      import { defineValidator, v } from "@warbler/validators";
+
+      export const ValidateUser = defineValidator({
+        paramRules: { id: v.number() },
+        queryRules: { page: v.number() },
+      });
+
+      export const http = defineHttpGraph({
+        routes: {
+          "GET /users/:id": defineHttpRoute({
+            validator: ValidateUser,
+            run(ctx) {
+              return JsonRes({ id: ctx.params.id, page: ctx.query.page });
+            },
+          }),
+        },
+      });
+
+      export default createApp({ graphs: [http] });
+    `);
+
+    const context = await compileProject(root, { semanticDiagnostics: false });
+    expect(context.diagnostics.filter((item) => item.code.startsWith("WARBLER_BINDING"))).toEqual([]);
+    const directory = join(root, ".warbler", "generated");
+    const handlers = await Bun.file(join(directory, "handlers.generated.ts")).text();
+    const validators = await Bun.file(join(directory, "validators.generated.ts")).text();
+    expect(handlers).toContain("const Handler0 =");
+    expect(handlers).toContain("defineHttpRoute");
+    expect(handlers).toContain("ValidateUser");
+    expect(handlers).toContain("Handler0.run(...input)");
+    expect(validators).toContain("compileValidator");
+    expect(validators).toContain("ValidateUser");
+  }, 15_000);
+
   test("emits exported values, direct handlers, scopes, and one Runtime manifest", async () => {
     const root = await phase2Project();
     const context = await compileProject(root);
