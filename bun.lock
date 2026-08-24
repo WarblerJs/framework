@@ -10,19 +10,19 @@
     },
     "packages/cli": {
       "name": "@warblerjs/cli",
-      "version": "0.1.0",
+      "version": "0.1.5",
       "bin": {
         "warbler": "./src/bin.ts",
       },
       "dependencies": {
-        "@warblerjs/compiler": "workspace:*",
-        "@warblerjs/config": "workspace:*",
-        "@warblerjs/console": "workspace:*",
-        "@warblerjs/core": "workspace:*",
-        "@warblerjs/database": "workspace:*",
-        "@warblerjs/framework": "workspace:*",
-        "@warblerjs/runtime": "workspace:*",
-        "@warblerjs/view": "workspace:*",
+        "@warblerjs/compiler": "0.1.3",
+        "@warblerjs/config": "0.1.0",
+        "@warblerjs/console": "0.1.0",
+        "@warblerjs/core": "0.1.0",
+        "@warblerjs/database": "0.1.0",
+        "@warblerjs/framework": "0.1.3",
+        "@warblerjs/runtime": "0.1.3",
+        "@warblerjs/view": "0.1.0-rc.0",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -31,7 +31,7 @@
     },
     "packages/compiler": {
       "name": "@warblerjs/compiler",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "dependencies": {
         "@warblerjs/console": "workspace:*",
         "@warblerjs/core": "workspace:*",
@@ -446,6 +446,32 @@
 
     "@tailwindcss/oxide-wasm32-wasi/tslib": ["tslib@2.8.1", "", { "bundled": true }, "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="],
 
+    "@warblerjs/cli/@warblerjs/compiler": ["@warblerjs/compiler@0.1.3", "", { "dependencies": { "@warblerjs/console": "0.1.0", "@warblerjs/core": "0.1.0", "@warblerjs/events": "0.1.3", "@warblerjs/validators": "0.1.3", "typescript": "^5.9.2" } }, "sha512-8quI3OClhnO7luS3uCSuRKd+jltzCu4TBlthM8wSPgOBWjzLgWxEeekEvO0yXBpbNnbv+uEbtp21GgdfakYmAg=="],
+
+    "@warblerjs/cli/@warblerjs/framework": ["@warblerjs/framework@0.1.3", "", { "dependencies": { "@warblerjs/core": "0.1.0", "@warblerjs/http": "0.1.3", "@warblerjs/validators": "0.1.3", "@warblerjs/websocket": "0.1.3" } }, "sha512-EzQQ3leaznLlJva8G0UsO+tj7C19eYoWMzpuiWaB6A2i5DlGFOjCtk6aFfshEGU93Pst8IUXa0djHxQ8TO5FFw=="],
+
+    "@warblerjs/cli/@warblerjs/runtime": ["@warblerjs/runtime@0.1.3", "", { "dependencies": { "@warblerjs/config": "0.1.0", "@warblerjs/console": "0.1.0", "@warblerjs/core": "0.1.0", "@warblerjs/i18n": "0.1.2", "@warblerjs/transport": "0.1.0" } }, "sha512-ts1Mjn3AUwtsmT1CJi2OAadz8cQ1y4yK4gDhDf6wceUVKXIusKjCMEkYzWkFAWhhDVK0zw1QEdpmYN9ywHkhsg=="],
+
     "lightningcss/detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
+
+    "@warblerjs/cli/@warblerjs/compiler/@warblerjs/events": ["@warblerjs/events@0.1.3", "", { "dependencies": { "@warblerjs/console": "0.1.0", "@warblerjs/core": "0.1.0" } }, "sha512-3em02scZbjqiAYdrOSG8C0OzIcGvZ/OwaBSFE4nc/TPlwrKCJ0O5xbAqelKXYFFStBs6h5qiTAuguMP6UHeS+w=="],
+
+    "@warblerjs/cli/@warblerjs/compiler/@warblerjs/validators": ["@warblerjs/validators@0.1.3", "", { "dependencies": { "@warblerjs/core": "0.1.0", "@warblerjs/i18n": "0.1.2" } }, "sha512-hCkaH8OiVL84m+fUOyhwhDS+kEbtOKQ1YC1DbQkeoGfutvMvgTJ+OZ0ydgnphFbMzK/c1VnFJvTMefC6y7JJWg=="],
+
+    "@warblerjs/cli/@warblerjs/framework/@warblerjs/http": ["@warblerjs/http@0.1.3", "", { "dependencies": { "@warblerjs/config": "0.1.0", "@warblerjs/console": "0.1.0", "@warblerjs/core": "0.1.0", "@warblerjs/i18n": "0.1.2", "@warblerjs/transport": "0.1.0", "@warblerjs/validators": "0.1.3", "@warblerjs/view": "0.1.0-rc.0" } }, "sha512-rv9BRZcl5QaN3IR7theTx2nQkNw/+R0Az7tbVOnIADkS3Wxt0D17rb48Yoq2DFgfrPEawQYilCnXeJKJf9zc0Q=="],
+
+    "@warblerjs/cli/@warblerjs/framework/@warblerjs/validators": ["@warblerjs/validators@0.1.3", "", { "dependencies": { "@warblerjs/core": "0.1.0", "@warblerjs/i18n": "0.1.2" } }, "sha512-hCkaH8OiVL84m+fUOyhwhDS+kEbtOKQ1YC1DbQkeoGfutvMvgTJ+OZ0ydgnphFbMzK/c1VnFJvTMefC6y7JJWg=="],
+
+    "@warblerjs/cli/@warblerjs/framework/@warblerjs/websocket": ["@warblerjs/websocket@0.1.3", "", { "dependencies": { "@warblerjs/config": "0.1.0", "@warblerjs/console": "0.1.0", "@warblerjs/core": "0.1.0", "@warblerjs/i18n": "0.1.2", "@warblerjs/transport": "0.1.0", "@warblerjs/validators": "0.1.3" } }, "sha512-/rDCRmsbh5WDXXsdnWehy1xKMLkkPfC4cWKEsRpPPp0ZtIXCryZ5k0JQMH49lEmaPLlmGQb+Wq63cIMuPOxYAQ=="],
+
+    "@warblerjs/cli/@warblerjs/runtime/@warblerjs/i18n": ["@warblerjs/i18n@0.1.2", "", { "dependencies": { "@warblerjs/console": "0.1.0" } }, "sha512-aNy0N20hyqUdRzt4IUM1wfJMoxbeoKkX1pwN9ph6/Pv5FPVKBleGlgVzfu1AraSj+M7NEK6mRDMKdY7hz0o4Aw=="],
+
+    "@warblerjs/cli/@warblerjs/compiler/@warblerjs/validators/@warblerjs/i18n": ["@warblerjs/i18n@0.1.2", "", { "dependencies": { "@warblerjs/console": "0.1.0" } }, "sha512-aNy0N20hyqUdRzt4IUM1wfJMoxbeoKkX1pwN9ph6/Pv5FPVKBleGlgVzfu1AraSj+M7NEK6mRDMKdY7hz0o4Aw=="],
+
+    "@warblerjs/cli/@warblerjs/framework/@warblerjs/http/@warblerjs/i18n": ["@warblerjs/i18n@0.1.2", "", { "dependencies": { "@warblerjs/console": "0.1.0" } }, "sha512-aNy0N20hyqUdRzt4IUM1wfJMoxbeoKkX1pwN9ph6/Pv5FPVKBleGlgVzfu1AraSj+M7NEK6mRDMKdY7hz0o4Aw=="],
+
+    "@warblerjs/cli/@warblerjs/framework/@warblerjs/validators/@warblerjs/i18n": ["@warblerjs/i18n@0.1.2", "", { "dependencies": { "@warblerjs/console": "0.1.0" } }, "sha512-aNy0N20hyqUdRzt4IUM1wfJMoxbeoKkX1pwN9ph6/Pv5FPVKBleGlgVzfu1AraSj+M7NEK6mRDMKdY7hz0o4Aw=="],
+
+    "@warblerjs/cli/@warblerjs/framework/@warblerjs/websocket/@warblerjs/i18n": ["@warblerjs/i18n@0.1.2", "", { "dependencies": { "@warblerjs/console": "0.1.0" } }, "sha512-aNy0N20hyqUdRzt4IUM1wfJMoxbeoKkX1pwN9ph6/Pv5FPVKBleGlgVzfu1AraSj+M7NEK6mRDMKdY7hz0o4Aw=="],
   }
 }
