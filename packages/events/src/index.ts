@@ -1,6 +1,6 @@
-import { Console } from "@warbler/console";
+import { Console } from "@warblerjs/console";
 
-const EVENT_ID = Symbol.for("@warbler/events.eventId");
+const EVENT_ID = Symbol.for("@warblerjs/events.eventId");
 
 /** Payload object produced by a Warbler event factory. */
 export type EventPayload<TFactory> = TFactory extends (...args: never[]) => infer TPayload ? TPayload extends object ? TPayload : never : never;

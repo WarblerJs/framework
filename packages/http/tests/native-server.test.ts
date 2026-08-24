@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { NotFoundError } from "@warbler/core";
-import { Console } from "@warbler/console";
+import { NotFoundError } from "@warblerjs/core";
+import { Console } from "@warblerjs/console";
 import { createBunRouteHandler, createNotFoundFallback, type BunRouteHandlerOptions } from "../src/native";
 import { RouteFlag } from "../src/compiled";
 import { getViewRequestScope } from "../src/view";

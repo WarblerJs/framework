@@ -3,7 +3,7 @@ import {
   PgDefault,
   PgTypes,
   type PgMigration
-} from "@warbler/database";
+} from "@warblerjs/database";
 
 export const up: PgMigration = async (pgm) => {
   await pgm.createTable("user_sessions", {

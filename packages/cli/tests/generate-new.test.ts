@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { compileProject } from "@warbler/compiler";
+import { compileProject } from "@warblerjs/compiler";
 import { CLIError, createGraphGenerationPlan, createStarterProject, generateGraph, generateSource, runCLI } from "../src";
 import { createTestProject } from "./helpers";
 
@@ -24,7 +24,7 @@ describe("new and generate", () => {
   test("keeps legacy generate limited to a framework-backed graph file", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
     const plan = await generateSource(project.root, "graph", "Auth", { dryRun: true });
-    expect(plan.content).toContain("@warbler/framework");
+    expect(plan.content).toContain("@warblerjs/framework");
     expect(plan.content).toContain("defineHttpGraph");
     expect(await Bun.file(join(project.root, plan.path)).exists()).toBe(false);
     await generateSource(project.root, "graph", "Auth");

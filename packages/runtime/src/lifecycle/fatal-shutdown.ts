@@ -1,6 +1,6 @@
-import { loadLoggingConfig, normalizeLoggingConfig } from "@warbler/config";
-import { Console } from "@warbler/console";
-import { normalizeError } from "@warbler/core";
+import { loadLoggingConfig, normalizeLoggingConfig } from "@warblerjs/config";
+import { Console } from "@warblerjs/console";
+import { normalizeError } from "@warblerjs/core";
 import type { RuntimeHandle } from "./runtime-owner";
 
 /**

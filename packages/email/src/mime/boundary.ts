@@ -1,4 +1,4 @@
-import { random } from "@warbler/crypto";
+import { random } from "@warblerjs/crypto";
 
 /** Generates an unpredictable MIME multipart boundary. */
 export function createBoundary(label: string): string {

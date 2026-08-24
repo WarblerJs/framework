@@ -1,7 +1,7 @@
 /**
  * Base typed error for application code (controllers/services/repositories) to throw.
  * Transport-agnostic by design — services/repositories must not depend on HTTP/View/
- * WebSocket response types, so this lives in `@warbler/core`, the dependency root every
+ * WebSocket response types, so this lives in `@warblerjs/core`, the dependency root every
  * transport package already depends on. Application code throws it (or a convenience
  * subclass) and lets it propagate; the nearest transport boundary catches, normalizes
  * (`normalizeError`), and renders it safely.

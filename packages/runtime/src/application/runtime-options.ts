@@ -1,4 +1,4 @@
-import type { RuntimeConfig } from "@warbler/config";
+import type { RuntimeConfig } from "@warblerjs/config";
 import type { GeneratedApplicationSource, RuntimeRouteHandler, RuntimeSocketHandler } from "../generated/generated-types";
 import type { RuntimeHooks } from "../hooks/runtime-hooks";
 import type { RuntimeProviderDisposer, RuntimeProviderFactory } from "../providers/provider-types";

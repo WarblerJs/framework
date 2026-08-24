@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { compileProject } from "../src";
-import { createExecutableBindingsRuntime } from "@warbler/runtime";
+import { createExecutableBindingsRuntime } from "@warblerjs/runtime";
 
 const temporaryProjects: string[] = [];
 afterEach(() => {
@@ -14,7 +14,7 @@ async function tokenProject(source: string): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), "warbler-tokens-"));
   temporaryProjects.push(root);
   const packagesRoot = resolve(import.meta.dir, "..", "..");
-  const scope = join(root, "node_modules", "@warbler");
+  const scope = join(root, "node_modules", "@warblerjs");
   mkdirSync(scope, { recursive: true });
   for (const name of ["config", "console", "core", "crypto", "email", "http", "i18n", "runtime", "transport", "validators", "view", "websocket"]) {
     symlinkSync(join(packagesRoot, name), join(scope, name));
@@ -26,9 +26,9 @@ async function tokenProject(source: string): Promise<string> {
     compilerOptions: {
       baseUrl: ".",
       paths: {
-        "@warbler/config": ["node_modules/@warbler/config/src/index.ts"],
-        "@warbler/crypto": ["node_modules/@warbler/crypto/src/index.ts"],
-        "@warbler/view": ["node_modules/@warbler/view/src/index.ts"],
+        "@warblerjs/config": ["node_modules/@warblerjs/config/src/index.ts"],
+        "@warblerjs/crypto": ["node_modules/@warblerjs/crypto/src/index.ts"],
+        "@warblerjs/view": ["node_modules/@warblerjs/view/src/index.ts"],
       },
       lib: ["ESNext"],
       types: ["bun"],
@@ -47,7 +47,7 @@ async function tokenProject(source: string): Promise<string> {
 }
 
 const FIXTURE = `
-  import { Graph, Service, Provider, createToken, inject } from "@warbler/core";
+  import { Graph, Service, Provider, createToken, inject } from "@warblerjs/core";
 
   export abstract class LoggerPort { abstract log(message: string): void; }
   export const APP_NAME = createToken<string>("APP_NAME");
@@ -100,7 +100,7 @@ describe("token-based provider resolution", () => {
 
   test("owns graph-local useExisting implementations referenced by explicit Provider registrations", async () => {
     const root = await tokenProject(`
-      import { Graph, Provider, Repository, Service, inject } from "@warbler/core";
+      import { Graph, Provider, Repository, Service, inject } from "@warblerjs/core";
 
       export abstract class UserRepositoryPort {
         abstract find(): string;
@@ -167,8 +167,8 @@ describe("token-based provider resolution", () => {
 
   test("controller-scoped providers resolve only for the declaring controller", async () => {
     const root = await tokenProject(`
-      import { Graph, Service, inject } from "@warbler/core";
-      import { Controller, Get } from "@warbler/http";
+      import { Graph, Service, inject } from "@warblerjs/core";
+      import { Controller, Get } from "@warblerjs/http";
 
       @Service()
       export class AuthService {}
@@ -223,8 +223,8 @@ describe("token-based provider resolution", () => {
 
   test("controller-scoped providers do not leak into sibling controllers", async () => {
     const root = await tokenProject(`
-      import { Graph, Service, inject } from "@warbler/core";
-      import { Controller, Get } from "@warbler/http";
+      import { Graph, Service, inject } from "@warblerjs/core";
+      import { Controller, Get } from "@warblerjs/http";
 
       @Service()
       export class RegisterUseCase {}
@@ -255,9 +255,9 @@ describe("token-based provider resolution", () => {
 
   test("registers SocketPublisher as a framework root provider when imported", async () => {
     const root = await tokenProject(`
-      import { Graph, Service, inject } from "@warbler/core";
-      import { Controller, Get } from "@warbler/http";
-      import { SocketPublisher as Sockets } from "@warbler/websocket";
+      import { Graph, Service, inject } from "@warblerjs/core";
+      import { Controller, Get } from "@warblerjs/http";
+      import { SocketPublisher as Sockets } from "@warblerjs/websocket";
 
       @Service()
       export class NotificationsService {
@@ -282,7 +282,7 @@ describe("token-based provider resolution", () => {
     expect(context.applicationWIR!.rootProviders.map((provider) => provider.name)).toContain("Sockets");
 
     const providers = await Bun.file(join(root, ".warbler", "generated", "providers.generated.ts")).text();
-    expect(providers).toContain('from "@warbler/websocket"');
+    expect(providers).toContain('from "@warblerjs/websocket"');
     expect(providers).toContain("SocketPublisher");
 
     const generated = await import(join(root, ".warbler", "generated", "application.generated.ts"));
@@ -294,8 +294,8 @@ describe("token-based provider resolution", () => {
 
   test("registers Email as a framework root provider when imported", async () => {
     const root = await tokenProject(`
-      import { Graph, Service, inject } from "@warbler/core";
-      import { Email } from "@warbler/email";
+      import { Graph, Service, inject } from "@warblerjs/core";
+      import { Email } from "@warblerjs/email";
 
       @Service()
       export class WelcomeService {
@@ -310,7 +310,7 @@ describe("token-based provider resolution", () => {
     expect(context.applicationWIR!.rootProviders.map((provider) => provider.name)).toContain("Email");
 
     const providers = await Bun.file(join(root, ".warbler", "generated", "providers.generated.ts")).text();
-    expect(providers).toContain('from "@warbler/email"');
+    expect(providers).toContain('from "@warblerjs/email"');
     expect(providers).toContain("Email");
 
     const generated = await import(join(root, ".warbler", "generated", "application.generated.ts"));
@@ -322,7 +322,7 @@ describe("token-based provider resolution", () => {
 
   test("resolves string and symbol tokens", async () => {
     const root = await tokenProject(`
-      import { Graph, Service, Provider, inject } from "@warbler/core";
+      import { Graph, Service, Provider, inject } from "@warblerjs/core";
       export const CACHE_SYMBOL = Symbol("cache");
       export class MemoryCache {}
       @Service()
@@ -347,7 +347,7 @@ describe("token-based provider resolution", () => {
 
   test("reports a diagnostic for Provider(...) missing a provide token", async () => {
     const root = await tokenProject(`
-      import { Graph, Provider } from "@warbler/core";
+      import { Graph, Provider } from "@warblerjs/core";
       // @ts-expect-error missing required "provide"
       @Graph({ providers: [Provider({ useValue: "oops" })] })
       class AppGraph {}
@@ -361,7 +361,7 @@ describe("token-based provider resolution", () => {
 
   test("reports a diagnostic for Provider(...) missing a use* registration", async () => {
     const root = await tokenProject(`
-      import { Graph, Provider, createToken } from "@warbler/core";
+      import { Graph, Provider, createToken } from "@warblerjs/core";
       const TOKEN = createToken<string>("TOKEN");
       // @ts-expect-error missing required use* field
       @Graph({ providers: [Provider({ provide: TOKEN })] })

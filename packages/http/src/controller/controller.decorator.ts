@@ -1,4 +1,4 @@
-import { defineMetadata, readMetadata, type Constructor } from "@warbler/core";
+import { defineMetadata, readMetadata, type Constructor } from "@warblerjs/core";
 import { HttpMetadataKeys, normalizePath } from "../internal";
 import type { ControllerMetadata, ControllerOptions } from "./controller.types";
 

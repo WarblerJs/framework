@@ -1,8 +1,11 @@
 {
-  "name": "@warbler/http",
+  "name": "@warblerjs/http",
   "version": "0.1.0",
   "type": "module",
   "private": false,
+  "files": [
+    "src"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./body": "./src/body/index.ts",
@@ -15,15 +18,21 @@
     "./server": "./src/server/index.ts",
     "./static": "./src/static/index.ts"
   },
-  "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
-  "dependencies": {
-    "@warbler/console": "workspace:*",
-    "@warbler/config": "workspace:*",
-    "@warbler/core": "workspace:*",
-    "@warbler/i18n": "workspace:*",
-    "@warbler/validators": "workspace:*",
-    "@warbler/transport": "workspace:*",
-    "@warbler/view": "workspace:*"
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
   },
-  "devDependencies": { "@types/bun": "latest", "typescript": "^5.9.2" }
+  "dependencies": {
+    "@warblerjs/console": "workspace:*",
+    "@warblerjs/config": "workspace:*",
+    "@warblerjs/core": "workspace:*",
+    "@warblerjs/i18n": "workspace:*",
+    "@warblerjs/validators": "workspace:*",
+    "@warblerjs/transport": "workspace:*",
+    "@warblerjs/view": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.2"
+  }
 }

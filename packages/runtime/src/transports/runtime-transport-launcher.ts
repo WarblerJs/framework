@@ -3,7 +3,7 @@ export type {
   RuntimeTransportLauncher,
   RuntimeTransportStartInput,
   RuntimeTransportStopOptions,
-} from "@warbler/transport";
+} from "@warblerjs/transport";
 
 /** Public immutable record for one started transport. */
 export interface RunningTransport {

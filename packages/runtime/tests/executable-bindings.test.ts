@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { inject, type ProviderToken } from "@warbler/core";
+import { inject, type ProviderToken } from "@warblerjs/core";
 import {
   createExecutableBindingsRuntime,
   type GeneratedApplicationBindings,

@@ -1,5 +1,5 @@
-import type { PgMigration } from "@warbler/database";
-import { PgDefault, PgTypes } from "@warbler/database";
+import type { PgMigration } from "@warblerjs/database";
+import { PgDefault, PgTypes } from "@warblerjs/database";
 
 export const up: PgMigration = async (pgm) => {
   await pgm.addColumns("users", {

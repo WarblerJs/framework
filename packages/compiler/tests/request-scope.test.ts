@@ -13,7 +13,7 @@ async function requestScopeProject(source: string): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), "warbler-request-scope-"));
   temporaryProjects.push(root);
   const packagesRoot = resolve(import.meta.dir, "..", "..");
-  const scope = join(root, "node_modules", "@warbler");
+  const scope = join(root, "node_modules", "@warblerjs");
   mkdirSync(scope, { recursive: true });
   for (const name of ["config", "console", "core", "http", "i18n", "runtime", "transport", "validators", "websocket"]) {
     symlinkSync(join(packagesRoot, name), join(scope, name));
@@ -30,7 +30,7 @@ async function requestScopeProject(source: string): Promise<string> {
 }
 
 const FIXTURE = `
-  import { Graph, Service, ProviderScope, inject } from "@warbler/core";
+  import { Graph, Service, ProviderScope, inject } from "@warblerjs/core";
 
   @Service({ provide: ProviderScope.REQUEST })
   export class RequestId {
@@ -70,7 +70,7 @@ describe("request-scoped providers (compiler)", () => {
 
   test("rejects a root provider depending on a request-scoped provider", async () => {
     const root = await requestScopeProject(`
-      import { Graph, Service, ProviderScope, inject } from "@warbler/core";
+      import { Graph, Service, ProviderScope, inject } from "@warblerjs/core";
       @Service({ provide: ProviderScope.REQUEST }) export class RequestId {}
       @Service({ provide: ProviderScope.ROOT }) export class RootThing { readonly id = inject(RequestId); }
       @Graph({ providers: [RequestId, RootThing] }) export class AppGraph {}

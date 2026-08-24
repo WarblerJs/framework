@@ -1,6 +1,6 @@
-# @warbler/transport
+# @warblerjs/transport
 
-`@warbler/transport` defines the implementation-neutral contracts shared by Warbler transports. It contains no network implementation, runtime discovery, configuration loading, filesystem access, or Bun API dependency.
+`@warblerjs/transport` defines the implementation-neutral contracts shared by Warbler transports. It contains no network implementation, runtime discovery, configuration loading, filesystem access, or Bun API dependency.
 
 Every transport adapter implements `start` and `stop`. Both operations use `MaybePromise`, allowing synchronous implementations to remain synchronous while supporting transports whose native lifecycle is asynchronous.
 

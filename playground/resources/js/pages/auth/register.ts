@@ -1,4 +1,4 @@
-import { FormBuilder,page } from "@warbler/frontend";
+import { FormBuilder,page } from "@warblerjs/frontend";
 
 page("register", () => {
   const loginForm = FormBuilder(

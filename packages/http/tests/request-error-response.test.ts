@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { NotFoundError, WarblerError } from "@warbler/core";
-import type { RequestHandle } from "@warbler/console";
+import { NotFoundError, WarblerError } from "@warblerjs/core";
+import type { RequestHandle } from "@warblerjs/console";
 import { HttpError } from "../src/errors";
 import { renderRequestError } from "../src/errors";
 

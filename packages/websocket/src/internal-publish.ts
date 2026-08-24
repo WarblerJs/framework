@@ -1,4 +1,4 @@
-import { Console } from "@warbler/console";
+import { Console } from "@warblerjs/console";
 import { interpretSendResult, type SocketSendResult } from "./backpressure";
 import { encodeSocketMessage, type SocketMessageFormat, type SocketOutgoingMessage } from "./message";
 import { validateTopic } from "./pubsub";

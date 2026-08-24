@@ -1,4 +1,4 @@
-import type { RuntimeTransportLauncher, RuntimeTransportStartInput, RuntimeTransportStopOptions } from "@warbler/transport";
+import type { RuntimeTransportLauncher, RuntimeTransportStartInput, RuntimeTransportStopOptions } from "@warblerjs/transport";
 import { createBunRouteHandler, type BunRouteTable, type HttpHotPathRecorder } from "../native";
 import { normalizeHttpConfig } from "../config";
 import { RouteFlag } from "../compiled";
@@ -7,7 +7,7 @@ import { createSecurityHeaderTemplate } from "../security";
 import { createStaticRouteTable } from "../static";
 import { createHttpServerOwner } from "./create-http-server-owner";
 import type { HttpServer } from "./http-server.types";
-import { createViewDevelopmentRoutes } from "@warbler/view";
+import { createViewDevelopmentRoutes } from "@warblerjs/view";
 import {
   buildNamedRouteTable,
   createAssetResolver,

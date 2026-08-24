@@ -18,7 +18,7 @@ export type SocketEventMetadata =
   | Readonly<{ kind: "subscribe"; event: string; method: string | symbol; options: SocketSubscribeOptions<unknown> }>;
 
 // `args` is deliberately `any[]`, not `unknown[]` — see the identical note in
-// `@warbler/http`'s `route.decorator.ts`. Under native (stage-3) decorator checking,
+// `@warblerjs/http`'s `route.decorator.ts`. Under native (stage-3) decorator checking,
 // a rest-parameter type of `unknown[]` makes the target contravariantly incompatible
 // with any concretely-typed handler.
 type EventHandler = (this: object, ...args: readonly any[]) => unknown;
@@ -37,7 +37,7 @@ function add(target: object, record: SocketEventMetadata): void {
 /**
  * Supports both native (stage-3) `@`-decorator application — where the decorated
  * value is the method itself, keyed individually — and direct legacy-style calls
- * (`OnOpen()(prototype, key, descriptor)`), matching `@warbler/http`'s
+ * (`OnOpen()(prototype, key, descriptor)`), matching `@warblerjs/http`'s
  * `routeDecorator`'s dual-mode handling of the same native/legacy split.
  */
 function lifecycle(name: SocketLifecycle): CompatibleEventDecorator {

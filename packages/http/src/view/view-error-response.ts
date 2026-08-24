@@ -1,4 +1,4 @@
-import { Console } from "@warbler/console";
+import { Console } from "@warblerjs/console";
 import {
   activeCompiledViews,
   isViewError,
@@ -6,7 +6,7 @@ import {
   TemplateCompilationError,
   TemplateExpressionError,
   ViewNotFoundException,
-} from "@warbler/view";
+} from "@warblerjs/view";
 
 const PRODUCTION_BODY = "Internal Server Error\n\nThe requested view could not be rendered.";
 

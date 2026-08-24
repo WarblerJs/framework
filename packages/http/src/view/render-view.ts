@@ -3,7 +3,7 @@ import {
   View,
   type ViewData,
   type ViewResponseOptions,
-} from "@warbler/view";
+} from "@warblerjs/view";
 import { buildViewBuiltins, RESERVED_VIEW_BUILTIN_NAMES } from "./view-builtins";
 import { requireViewRequestScope } from "./view-request-scope";
 import { viewErrorResponse } from "./view-error-response";
@@ -11,7 +11,7 @@ import { viewErrorResponse } from "./view-error-response";
 /**
  * Renders a Warbler view with framework built-ins (`tr`, `asset`, `route`, `csrfField`,
  * `csrfToken`) available automatically — the application-facing replacement for calling
- * `@warbler/view`'s `View()` directly. Never throws: any failure while validating
+ * `@warblerjs/view`'s `View()` directly. Never throws: any failure while validating
  * reserved names, resolving built-ins, or rendering (parsing, compilation, expression
  * evaluation, helper execution, layouts, partials, imports, missing templates) is
  * caught and converted into a safe development or production `Response` instead of

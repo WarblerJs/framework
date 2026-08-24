@@ -2,7 +2,7 @@
  * When the CSRF token travels in the request body (the `"form"`/`"json"` sources —
  * exactly what the `csrfField` view built-in submits via a plain HTML `<form>`), the
  * field is also, unavoidably, part of the body the application's own request
- * validator sees. `@warbler/validators` compiles every `bodyRules` schema as a strict
+ * validator sees. `@warblerjs/validators` compiles every `bodyRules` schema as a strict
  * object (rejecting unrecognized keys) with no opt-out — so once CSRF verification has
  * consumed and confirmed the field, it is stripped out of the body in place, before the
  * validated handler pipeline ever parses it. The application's schema never needs to
@@ -10,7 +10,7 @@
  *
  * `"form"` covers both bodies `readBodyToken` (`verify-csrf-request.ts`) reads the token
  * from via `Request.formData()`: `application/x-www-form-urlencoded` and
- * `multipart/form-data` (what a plain HTML `<form>` — and `@warbler/frontend`'s
+ * `multipart/form-data` (what a plain HTML `<form>` — and `@warblerjs/frontend`'s
  * `FormBuilder`, which always submits via `FormData` — actually send). `"json"` covers
  * `application/json`.
  *

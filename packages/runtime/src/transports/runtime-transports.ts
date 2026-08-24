@@ -1,5 +1,5 @@
-import type { RuntimeConfig, TransportName } from "@warbler/config";
-import type { MaybePromise, TransportKindValue } from "@warbler/transport";
+import type { RuntimeConfig, TransportName } from "@warblerjs/config";
+import type { MaybePromise, TransportKindValue } from "@warblerjs/transport";
 import {
   RuntimeConfigurationError,
   RuntimeError,

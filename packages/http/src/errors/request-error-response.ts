@@ -1,5 +1,5 @@
-import { Console } from "@warbler/console";
-import { errorCauseChain, safeErrorMessage } from "@warbler/core";
+import { Console } from "@warblerjs/console";
+import { errorCauseChain, safeErrorMessage } from "@warblerjs/core";
 import { JsonRes } from "../response";
 import { toNormalizedHttpError } from "./normalize-http-error";
 

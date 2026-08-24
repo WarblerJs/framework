@@ -1,4 +1,4 @@
-import { ConflictError, Service, inject } from "@warbler/framework";
+import { ConflictError, Service, inject } from "@warblerjs/framework";
 import { UserRepositoryPort } from "../../domain/ports/user.repository.port";
 import { AppErrorCode } from "@errors/app-error-code";
 

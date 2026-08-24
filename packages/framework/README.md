@@ -1,4 +1,4 @@
-# @warbler/framework
+# @warblerjs/framework
 
 Canonical public façade for Warbler applications.
 
@@ -11,15 +11,15 @@ import {
   defineValidator,
   v,
   Provider,
-} from "@warbler/framework";
+} from "@warblerjs/framework";
 
 import type {
   AppRequest,
   Guard,
   Middleware,
-} from "@warbler/framework";
+} from "@warblerjs/framework";
 ```
 
 The underlying packages remain modular. This package re-exports selected public identities from
-`@warbler/core`, `@warbler/http`, `@warbler/validators`, and `@warbler/websocket` without wrapping
+`@warblerjs/core`, `@warblerjs/http`, `@warblerjs/validators`, and `@warblerjs/websocket` without wrapping
 them or adding request-time work.

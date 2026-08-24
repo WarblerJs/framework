@@ -1,4 +1,4 @@
-import { DEFAULT_SEED_TABLE, SeedError, type DatabaseProjectConfig } from "@warbler/database";
+import { DEFAULT_SEED_TABLE, SeedError, type DatabaseProjectConfig } from "@warblerjs/database";
 import { loadDatabaseConfig } from "../config";
 import { CLIError } from "../errors";
 import type { ProjectLayout } from "../project";

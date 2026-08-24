@@ -1,6 +1,6 @@
-import { inject } from "@warbler/framework";
-import type { AppRequest, Middleware } from "@warbler/framework";
-import { defineValidator, v } from "@warbler/framework";
+import { inject } from "@warblerjs/framework";
+import type { AppRequest, Middleware } from "@warblerjs/framework";
+import { defineValidator, v } from "@warblerjs/framework";
 import { SessionAuthenticator } from "../services/session-authenticator.service";
 
 export const sessionCookieValidator = defineValidator({

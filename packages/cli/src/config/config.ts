@@ -1,13 +1,13 @@
-import { normalizeRuntimeConfig, type RuntimeConfig, type TransportName } from "@warbler/config";
+import { normalizeRuntimeConfig, type RuntimeConfig, type TransportName } from "@warblerjs/config";
 import {
   validateHttpConfig, validateMcpConfig, validateTcpConfig, validateUdpConfig,
   validateWebrtcConfig, validateWebsocketConfig,
-} from "@warbler/config/validator";
-import type { DatabaseProjectConfig } from "@warbler/database";
+} from "@warblerjs/config/validator";
+import type { DatabaseProjectConfig } from "@warblerjs/database";
 import { resolve } from "node:path";
 
 const TRANSPORTS = Object.freeze(["http", "websocket", "tcp", "udp", "mcp", "webrtc"] as const);
-/** Loads normalized Runtime configuration through `@warbler/config`. */
+/** Loads normalized Runtime configuration through `@warblerjs/config`. */
 export async function loadCLIConfig(projectRoot: string): Promise<RuntimeConfig> {
   const module = await import(resolve(projectRoot, "src/config/runtime.config.ts"));
   return normalizeRuntimeConfig(select(module, ["runtimeConfig"]));

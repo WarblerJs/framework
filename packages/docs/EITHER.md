@@ -19,7 +19,7 @@ transport presenters.
 ## API
 
 ```ts
-import { type Either, left, right } from "@warbler/core";
+import { type Either, left, right } from "@warblerjs/core";
 
 const failure = left("EMAIL_EXIST");
 const success = right({ id: "user_1" });

@@ -44,7 +44,7 @@ function createFakeSql(tableName: string): FakeSql {
   return { sql, executedMigrations, ddlLog };
 }
 
-const migrationSource = (comment: string) => `import type { PgMigration } from "@warbler/database";
+const migrationSource = (comment: string) => `import type { PgMigration } from "@warblerjs/database";
 export const up: PgMigration = async (pgm) => {
   await pgm.raw("${comment}");
 };

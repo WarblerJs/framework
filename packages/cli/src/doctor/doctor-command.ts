@@ -7,13 +7,13 @@ import { describeErrorChain } from "../errors";
 import { assertRealPathInside, pathExists, resolveInside } from "../filesystem";
 import type { ProjectLayout } from "../project";
 import { readProjectPackage } from "../project";
-import { compileProject } from "@warbler/compiler";
-import { startRuntime, validateApplicationBindings } from "@warbler/runtime";
+import { compileProject } from "@warblerjs/compiler";
+import { startRuntime, validateApplicationBindings } from "@warblerjs/runtime";
 import { importGeneratedApplication, loadTransportLaunchers } from "../dev/runtime-launcher";
 
 const PACKAGES: Readonly<Record<string, string>> = Object.freeze({
-  http: "@warbler/http", websocket: "@warbler/websocket", tcp: "@warbler/tcp",
-  udp: "@warbler/udp", mcp: "@warbler/mcp", webrtc: "@warbler/webrtc",
+  http: "@warblerjs/http", websocket: "@warblerjs/websocket", tcp: "@warblerjs/tcp",
+  udp: "@warblerjs/udp", mcp: "@warblerjs/mcp", webrtc: "@warblerjs/webrtc",
 });
 /** Runs actionable health checks without compiling or starting Runtime. */
 export async function doctorCommand(layout: ProjectLayout): Promise<readonly CLIDiagnostic[]> {
@@ -22,12 +22,12 @@ export async function doctorCommand(layout: ProjectLayout): Promise<readonly CLI
   if ((version[0] ?? 0) < 1 || ((version[0] ?? 0) === 1 && (version[1] ?? 0) < 3)) diagnostics.push(cliDiagnostic({ code: "CLI4001", severity: "error", message: `Bun >= 1.3 is required; found ${Bun.version}.` }));
   const packageJson = await readProjectPackage(layout.root);
   const dependencies = packageNames(packageJson);
-  if (!dependencies.has("@warbler/framework") && !dependencies.has("@warbler/core")) {
+  if (!dependencies.has("@warblerjs/framework") && !dependencies.has("@warblerjs/core")) {
     diagnostics.push(cliDiagnostic({
       code: "CLI4002",
       severity: "error",
-      message: "Missing @warbler/framework dependency.",
-      suggestion: "Add @warbler/framework to application dependencies.",
+      message: "Missing @warblerjs/framework dependency.",
+      suggestion: "Add @warblerjs/framework to application dependencies.",
     }));
   }
   try {

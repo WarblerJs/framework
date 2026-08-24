@@ -4,7 +4,7 @@ import {
   renderCompiledView,
 } from "../src";
 
-describe("@warbler/view", () => {
+describe("@warblerjs/view", () => {
   test("preserves default layout metadata", () => {
     const artifact = createCompiledViewArtifact({
       defaultLayout: "layouts.main",

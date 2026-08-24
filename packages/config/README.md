@@ -1,6 +1,6 @@
-# @warbler/config
+# @warblerjs/config
 
-`@warbler/config` discovers, loads, validates, normalizes, and freezes Warbler configuration for Bun.
+`@warblerjs/config` discovers, loads, validates, normalizes, and freezes Warbler configuration for Bun.
 
 The loader follows the Warbler workspace convention:
 

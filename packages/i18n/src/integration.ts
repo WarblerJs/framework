@@ -54,9 +54,9 @@ export function localizeRequest(
 /**
  * Reuses `BunRequest.cookies` when present (already lazily parsed by Bun for every
  * request served through `Bun.serve({ routes })`); falls back to explicit
- * construction otherwise. Duplicated in miniature from `@warbler/http`'s
- * `requestCookieMap` rather than imported from it: `@warbler/i18n` is a
- * transport-agnostic package `@warbler/http` itself depends on, so the reverse
+ * construction otherwise. Duplicated in miniature from `@warblerjs/http`'s
+ * `requestCookieMap` rather than imported from it: `@warblerjs/i18n` is a
+ * transport-agnostic package `@warblerjs/http` itself depends on, so the reverse
  * dependency isn't available.
  */
 function requestCookieMap(request: Request): Bun.CookieMap {

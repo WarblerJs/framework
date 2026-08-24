@@ -24,7 +24,7 @@ export {
   normalizeError,
   safeErrorMessage,
   errorCauseChain,
-} from "@warbler/core";
+} from "@warblerjs/core";
 export type {
   CreateAppOptions,
   Either,
@@ -43,7 +43,7 @@ export type {
   WarblerApplication,
   WarblerErrorOptions,
   WarblerErrorSeverity,
-} from "@warbler/core";
+} from "@warblerjs/core";
 
 export {
   Controller,
@@ -69,7 +69,7 @@ export {
   SseRes,
   TextRes,
   view,
-} from "@warbler/http";
+} from "@warblerjs/http";
 export type {
   AppRequest,
   Guard,
@@ -84,7 +84,7 @@ export type {
   RedirectStatus,
   RouteParameter,
   WarblerRequestContext,
-} from "@warbler/http";
+} from "@warblerjs/http";
 
 export {
   compileValidator,
@@ -96,7 +96,7 @@ export {
   ValidatorError,
   ValidatorErrorCode,
   ValidatorSourceFlag,
-} from "@warbler/validators";
+} from "@warblerjs/validators";
 export type {
   AnyField,
   CompiledValidator,
@@ -124,12 +124,12 @@ export type {
   ValidationTranslator,
   ValidatorDefinition,
   WarblerField,
-} from "@warbler/validators";
+} from "@warblerjs/validators";
 
 export {
   defineWebSocketGraph,
   SocketPublisher,
-} from "@warbler/websocket";
+} from "@warblerjs/websocket";
 export type {
   SocketContext,
   SocketGuard,
@@ -143,4 +143,4 @@ export type {
   WebSocketEventTable,
   WebSocketGraphDefinition,
   WebSocketGraphEvent,
-} from "@warbler/websocket";
+} from "@warblerjs/websocket";

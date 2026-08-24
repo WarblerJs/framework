@@ -3,10 +3,10 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@warbler/console": ["../console/src/index.ts"],
-      "@warbler/config": ["../config/src/index.ts"],
-      "@warbler/core": ["../core/src/index.ts"],
-      "@warbler/transport": ["../transport/src/index.ts"]
+      "@warblerjs/console": ["../console/src/index.ts"],
+      "@warblerjs/config": ["../config/src/index.ts"],
+      "@warblerjs/core": ["../core/src/index.ts"],
+      "@warblerjs/transport": ["../transport/src/index.ts"]
     }
   },
   "include": ["src", "tests"]

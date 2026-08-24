@@ -1,7 +1,7 @@
-import type { MaybePromise, ResolvedUseCases, UseCaseMap } from "@warbler/core";
+import type { MaybePromise, ResolvedUseCases, UseCaseMap } from "@warblerjs/core";
 import type {
   InferValidatorPath,
-} from "@warbler/validators";
+} from "@warblerjs/validators";
 import { HttpMethod, type HttpMethodValue } from "./route";
 import type { AnyRequestValidator, AppRequest } from "./request";
 

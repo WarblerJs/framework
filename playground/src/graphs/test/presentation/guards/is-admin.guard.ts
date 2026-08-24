@@ -1,4 +1,4 @@
-import { redirectTo, type Guard } from "@warbler/framework";
+import { redirectTo, type Guard } from "@warblerjs/framework";
 
 
 // export const guestGuard: Guard = (_request, context) => context.get("auth") === undefined

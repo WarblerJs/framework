@@ -5,16 +5,16 @@
 Implement only:
 
 ```text
-@warbler/websocket
+@warblerjs/websocket
 ```
 
 The following packages already exist and must be treated as stable dependencies:
 
 ```text
-@warbler/core
-@warbler/config
-@warbler/transport
-@warbler/http
+@warblerjs/core
+@warblerjs/config
+@warblerjs/transport
+@warblerjs/http
 ```
 
 Do not implement TCP, UDP, MCP, WebRTC, Compiler, Runtime, View, CLI, Redis, or Mail in this task.
@@ -105,7 +105,7 @@ Application example:
 import {
   Graph,
   Transport,
-} from "@warbler/core";
+} from "@warblerjs/core";
 
 import ChatSocketController from "./chat.socket-controller";
 import ChatService from "./chat.service";
@@ -357,14 +357,14 @@ Do not create empty or placeholder files merely to match this tree.
 The package may depend only on:
 
 ```text
-@warbler/core
-@warbler/config
-@warbler/transport
+@warblerjs/core
+@warblerjs/config
+@warblerjs/transport
 ```
 
-Integration with `@warbler/http` must be optional.
+Integration with `@warblerjs/http` must be optional.
 
-Do not force `@warbler/http` as a runtime dependency.
+Do not force `@warblerjs/http` as a runtime dependency.
 
 Support both:
 
@@ -407,13 +407,13 @@ import {
   type SocketMessage,
   type SocketOutgoingMessage,
   type SocketGuard,
-} from "@warbler/websocket";
+} from "@warblerjs/websocket";
 ```
 
 Controller example:
 
 ```ts
-import { inject } from "@warbler/core";
+import { inject } from "@warblerjs/core";
 
 import {
   SocketController,
@@ -425,7 +425,7 @@ import {
   OnError,
   type SocketContext,
   type SocketMessage,
-} from "@warbler/websocket";
+} from "@warblerjs/websocket";
 
 import ChatService from "./chat.service";
 
@@ -1458,7 +1458,7 @@ export default {
 } as const;
 ```
 
-All strings must be strictly parsed through `@warbler/config`.
+All strings must be strictly parsed through `@warblerjs/config`.
 
 Reject:
 
@@ -1699,7 +1699,7 @@ transports.websocket.enabled
 3. When disabled:
 
 ```text
-Do not import @warbler/websocket
+Do not import @warblerjs/websocket
 Do not load ws.config.ts
 Do not validate ws.config.ts
 Do not register WebSocket Graphs
@@ -1719,7 +1719,7 @@ Start the adapter
 
 The WebSocket package exports config validation and normalization.
 
-Filesystem discovery remains the responsibility of `@warbler/config`, Compiler, or Runtime orchestration.
+Filesystem discovery remains the responsibility of `@warblerjs/config`, Compiler, or Runtime orchestration.
 
 ---
 
@@ -1809,7 +1809,7 @@ Upgrade requests match the Graph prefix:
 /chat
 ```
 
-Normal HTTP requests remain handled by `@warbler/http`.
+Normal HTTP requests remain handled by `@warblerjs/http`.
 
 ---
 
@@ -1858,7 +1858,7 @@ No duplicated event-dispatch implementation between shared and dedicated modes.
 Implement `TransportAdapter` from:
 
 ```text
-@warbler/transport
+@warblerjs/transport
 ```
 
 Conceptual contract:

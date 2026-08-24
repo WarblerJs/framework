@@ -3,7 +3,7 @@ import {
   type TransportAdapter,
   type TransportStartContext,
   type TransportStopContext,
-} from "@warbler/transport";
+} from "@warblerjs/transport";
 import type { HttpServerOptions } from "./http-server.types";
 import type { HttpServer } from "./http-server.types";
 import { createHttpServerOwner } from "./create-http-server-owner";

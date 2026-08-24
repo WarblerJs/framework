@@ -1,7 +1,7 @@
-import { compileProject } from "@warbler/compiler";
-import type { GeneratedApplicationBindings, RuntimeHandle } from "@warbler/runtime";
-import { startRuntime } from "@warbler/runtime";
-import type { RuntimeTransportLauncher, RuntimeTransportStartInput } from "@warbler/transport";
+import { compileProject } from "@warblerjs/compiler";
+import type { GeneratedApplicationBindings, RuntimeHandle } from "@warblerjs/runtime";
+import { startRuntime } from "@warblerjs/runtime";
+import type { RuntimeTransportLauncher, RuntimeTransportStartInput } from "@warblerjs/transport";
 import { join } from "node:path";
 
 export const playgroundRoot = join(import.meta.dir, "..");

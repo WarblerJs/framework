@@ -2,7 +2,7 @@ import {
   envBoolean,
   envNumber,
   envString,
-} from "@warbler/config";
+} from "@warblerjs/config";
 
 export const databaseConfig = {
   pg: {

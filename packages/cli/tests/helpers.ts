@@ -8,7 +8,7 @@ export async function createTestProject(): Promise<{ readonly root: string; clea
   const packagesRoot = resolve(cliRoot, "..");
   const parent = await mkdtemp(join(cliRoot, ".cli-test-"));
   const root = await createStarterProject(parent, "test-app");
-  const scope = join(root, "node_modules", "@warbler");
+  const scope = join(root, "node_modules", "@warblerjs");
   await mkdir(scope, { recursive: true });
   await Promise.all([
     symlink(join(packagesRoot, "config"), join(scope, "config")),
@@ -17,10 +17,10 @@ export async function createTestProject(): Promise<{ readonly root: string; clea
     symlink(join(packagesRoot, "framework"), join(scope, "framework")),
     symlink(join(packagesRoot, "http"), join(scope, "http")),
     symlink(join(packagesRoot, "runtime"), join(scope, "runtime")),
-	    symlink(join(packagesRoot, "transport"), join(scope, "transport")),
-	    symlink(join(packagesRoot, "validators"), join(scope, "validators")),
-	    symlink(join(packagesRoot, "websocket"), join(scope, "websocket")),
-	  ]);
+    symlink(join(packagesRoot, "transport"), join(scope, "transport")),
+    symlink(join(packagesRoot, "validators"), join(scope, "validators")),
+    symlink(join(packagesRoot, "websocket"), join(scope, "websocket")),
+  ]);
   const tsconfig = await Bun.file(join(root, "tsconfig.json")).json() as {
     readonly compilerOptions?: Readonly<Record<string, unknown>>;
     readonly include?: readonly string[];
@@ -31,15 +31,15 @@ export async function createTestProject(): Promise<{ readonly root: string; clea
       ...tsconfig.compilerOptions,
       baseUrl: ".",
       paths: {
-        "@warbler/config": ["node_modules/@warbler/config/src/index.ts"],
-        "@warbler/core": ["node_modules/@warbler/core/src/index.ts"],
-        "@warbler/database": ["node_modules/@warbler/database/src/index.ts"],
-        "@warbler/framework": ["node_modules/@warbler/framework/src/index.ts"],
-        "@warbler/http": ["node_modules/@warbler/http/src/index.ts"],
-        "@warbler/runtime": ["node_modules/@warbler/runtime/src/index.ts"],
-        "@warbler/transport": ["node_modules/@warbler/transport/src/index.ts"],
-        "@warbler/validators": ["node_modules/@warbler/validators/src/index.ts"],
-        "@warbler/websocket": ["node_modules/@warbler/websocket/src/index.ts"],
+        "@warblerjs/config": ["node_modules/@warblerjs/config/src/index.ts"],
+        "@warblerjs/core": ["node_modules/@warblerjs/core/src/index.ts"],
+        "@warblerjs/database": ["node_modules/@warblerjs/database/src/index.ts"],
+        "@warblerjs/framework": ["node_modules/@warblerjs/framework/src/index.ts"],
+        "@warblerjs/http": ["node_modules/@warblerjs/http/src/index.ts"],
+        "@warblerjs/runtime": ["node_modules/@warblerjs/runtime/src/index.ts"],
+        "@warblerjs/transport": ["node_modules/@warblerjs/transport/src/index.ts"],
+        "@warblerjs/validators": ["node_modules/@warblerjs/validators/src/index.ts"],
+        "@warblerjs/websocket": ["node_modules/@warblerjs/websocket/src/index.ts"],
       },
     },
   }, null, 2)}\n`);

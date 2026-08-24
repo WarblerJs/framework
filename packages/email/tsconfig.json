@@ -3,9 +3,9 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@warbler/config": ["../config/src/index.ts"],
-      "@warbler/crypto": ["../crypto/src/index.ts"],
-      "@warbler/view": ["../view/src/index.ts"]
+      "@warblerjs/config": ["../config/src/index.ts"],
+      "@warblerjs/crypto": ["../crypto/src/index.ts"],
+      "@warblerjs/view": ["../view/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "bench/**/*.ts"]

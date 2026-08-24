@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { RuntimeConfig } from "@warbler/config";
+import type { RuntimeConfig } from "@warblerjs/config";
 import { startRuntime, type GeneratedApplicationBindings, type HttpRouteExecutor } from "../src";
 
 const runtimeConfig: RuntimeConfig = Object.freeze({

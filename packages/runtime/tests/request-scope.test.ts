@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { createInjectionToken, inject } from "@warbler/core";
-import type { RuntimeConfig } from "@warbler/config";
+import { createInjectionToken, inject } from "@warblerjs/core";
+import type { RuntimeConfig } from "@warblerjs/config";
 import { startRuntime, type GeneratedApplicationBindings, type HttpRouteExecutor } from "../src";
 
 const runtimeConfig: RuntimeConfig = Object.freeze({

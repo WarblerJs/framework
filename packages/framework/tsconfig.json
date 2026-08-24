@@ -3,10 +3,10 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@warbler/core": ["../core/src/index.ts"],
-      "@warbler/http": ["../http/src/index.ts"],
-      "@warbler/validators": ["../validators/src/index.ts"],
-      "@warbler/websocket": ["../websocket/src/index.ts"]
+      "@warblerjs/core": ["../core/src/index.ts"],
+      "@warblerjs/http": ["../http/src/index.ts"],
+      "@warblerjs/validators": ["../validators/src/index.ts"],
+      "@warblerjs/websocket": ["../websocket/src/index.ts"]
     }
   },
   "include": ["src", "tests"]

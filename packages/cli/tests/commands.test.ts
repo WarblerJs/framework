@@ -14,7 +14,7 @@ import {
   validateProject,
   type DevelopmentRuntimeLauncher,
 } from "../src";
-import { compileProject } from "@warbler/compiler";
+import { compileProject } from "@warblerjs/compiler";
 import { GeneratedBindingsRuntimeLauncher, loadTransportLaunchers } from "../src/dev/runtime-launcher";
 import { captureOutput, createTestProject } from "./helpers";
 
@@ -132,7 +132,7 @@ describe("development", () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
     const port = 39_200 + Math.floor(Math.random() * 500);
     const wsPort = port + 1;
-    await Bun.write(join(project.root, "src/main.ts"), `import { createApp, Transport } from "@warbler/core";
+    await Bun.write(join(project.root, "src/main.ts"), `import { createApp, Transport } from "@warblerjs/core";
 
 export default createApp({
   transports: [
@@ -172,14 +172,14 @@ export default createApp({
   rateLimit: { onExceeded: "reject", statusCode: 429 },
 } as const;
 `);
-    await Bun.write(join(project.root, "src/graphs/test/test.validator.ts"), `import { defineValidator, v } from "@warbler/validators";
+    await Bun.write(join(project.root, "src/graphs/test/test.validator.ts"), `import { defineValidator, v } from "@warblerjs/validators";
 export const testValidator = defineValidator({
   csrf: true,
   bodyRules: { message: v.string("validators.invalidMessage").min(1, "validators.invalidMessage") },
 });
 `);
-    await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), `import { defineHandler, Service } from "@warbler/core";
-import { JsonRes, type AppRequest } from "@warbler/http";
+    await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), `import { defineHandler, Service } from "@warblerjs/core";
+import { JsonRes, type AppRequest } from "@warblerjs/http";
 import { testValidator } from "./test.validator";
 @Service()
 export class CounterUseCase {
@@ -201,7 +201,7 @@ export const postTest = defineHandler({
   run: (ctx: AppRequest) => JsonRes({ success: true, method: "POST", body: ctx.body }),
 });
 `);
-    await Bun.write(join(project.root, "src/graphs/test/test.graph.ts"), `import { defineHttpGraph } from "@warbler/http";
+    await Bun.write(join(project.root, "src/graphs/test/test.graph.ts"), `import { defineHttpGraph } from "@warblerjs/http";
 import * as handlers from "./test.handlers";
 export default defineHttpGraph({
   prefix: "/api",
@@ -282,7 +282,7 @@ export default defineHttpGraph({
 
   test("hot reload rebuilds declarative graph, handler, and validator changes without retaining runtimes", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
-    await Bun.write(join(project.root, "src/main.ts"), `import { createApp, Transport } from "@warbler/core";
+    await Bun.write(join(project.root, "src/main.ts"), `import { createApp, Transport } from "@warblerjs/core";
 
 export default createApp({
   transports: [
@@ -292,14 +292,14 @@ export default createApp({
   graphs: "src/graphs/**/*.graph.ts",
 });
 `);
-    await Bun.write(join(project.root, "src/graphs/test/test.validator.ts"), `import { defineValidator, v } from "@warbler/validators";
+    await Bun.write(join(project.root, "src/graphs/test/test.validator.ts"), `import { defineValidator, v } from "@warblerjs/validators";
 export const testValidator = defineValidator({
   csrf: true,
   bodyRules: { message: v.string("validators.invalidMessage").min(1, "validators.invalidMessage") },
 });
 `);
-    await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), `import { defineHandler } from "@warbler/core";
-import { JsonRes, type AppRequest } from "@warbler/http";
+    await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), `import { defineHandler } from "@warblerjs/core";
+import { JsonRes, type AppRequest } from "@warblerjs/http";
 import { testValidator } from "./test.validator";
 export const getTest = defineHandler({
   run: (_ctx: AppRequest) => JsonRes({ version: 1 }),
@@ -310,7 +310,7 @@ export const postTest = defineHandler({
 });
 `);
     const graphPath = join(project.root, "src/graphs/test/test.graph.ts");
-    await Bun.write(graphPath, `import { defineHttpGraph } from "@warbler/http";
+    await Bun.write(graphPath, `import { defineHttpGraph } from "@warblerjs/http";
 import * as handlers from "./test.handlers";
 export default defineHttpGraph({
   prefix: "/api",
@@ -334,7 +334,7 @@ export default defineHttpGraph({
     }, false);
     cleanup.push(() => session.stop());
 
-    await Bun.write(graphPath, `import { defineHttpGraph } from "@warbler/http";
+    await Bun.write(graphPath, `import { defineHttpGraph } from "@warblerjs/http";
 import * as handlers from "./test.handlers";
 export default defineHttpGraph({
   prefix: "/api",
@@ -348,8 +348,8 @@ export default defineHttpGraph({
     await (session as unknown as { notifyChanges(paths: readonly string[]): Promise<void> }).notifyChanges(["src/graphs/test/test.graph.ts"]);
     expect(snapshots.at(-1)?.routePaths).toContain("/api/changed");
 
-    await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), `import { defineHandler } from "@warbler/core";
-import { JsonRes, type AppRequest } from "@warbler/http";
+    await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), `import { defineHandler } from "@warblerjs/core";
+import { JsonRes, type AppRequest } from "@warblerjs/http";
 import { testValidator } from "./test.validator";
 export const getTest = defineHandler({
   run: (_ctx: AppRequest) => JsonRes({ version: 2 }),
@@ -362,7 +362,7 @@ export const postTest = defineHandler({
     await (session as unknown as { notifyChanges(paths: readonly string[]): Promise<void> }).notifyChanges(["src/graphs/test/test.handlers.ts"]);
     expect(new Set(snapshots.map((snapshot) => snapshot.fingerprint)).size).toBeGreaterThanOrEqual(3);
 
-    await Bun.write(join(project.root, "src/graphs/test/test.validator.ts"), `import { defineValidator, v } from "@warbler/validators";
+    await Bun.write(join(project.root, "src/graphs/test/test.validator.ts"), `import { defineValidator, v } from "@warblerjs/validators";
 export const testValidator = defineValidator({
   csrf: false,
   bodyRules: { message: v.string("validators.invalidMessage").min(1, "validators.invalidMessage") },
@@ -406,8 +406,8 @@ describe("build and start", () => {
     expect(productionEntry).toContain("createHttpRuntimeLauncher");
     expect(productionEntry).not.toContain("createWebSocketRuntimeLauncher");
     const bundle = await Bun.file(result.entry).text();
-    expect(bundle).not.toContain("@warbler/compiler");
-    expect(bundle).not.toContain("@warbler/cli");
+    expect(bundle).not.toContain("@warblerjs/compiler");
+    expect(bundle).not.toContain("@warblerjs/cli");
     const child = Bun.spawn(["bun", result.entry], { cwd: project.root, stdout: "pipe", stderr: "pipe" });
     await Bun.sleep(150);
     expect(child.exitCode).toBeNull();

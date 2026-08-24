@@ -1,6 +1,6 @@
 import type { ServerWebSocket } from "bun";
-import { Console } from "@warbler/console";
-import { normalizeError, safeErrorMessage } from "@warbler/core";
+import { Console } from "@warblerjs/console";
+import { normalizeError, safeErrorMessage } from "@warblerjs/core";
 import type { SocketContext } from "./context";
 
 /**

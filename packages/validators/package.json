@@ -1,12 +1,17 @@
 {
-  "name": "@warbler/validators",
+  "name": "@warblerjs/validators",
   "version": "0.1.0",
   "type": "module",
+  "private": false,
+  "files": [
+    "src",
+    "README.md"
+  ],
   "exports": { ".": "./src/index.ts" },
   "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
   "dependencies": {
-    "@warbler/core": "workspace:*",
-    "@warbler/i18n": "workspace:*"
+    "@warblerjs/core": "workspace:*",
+    "@warblerjs/i18n": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest",

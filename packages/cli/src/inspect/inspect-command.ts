@@ -1,4 +1,4 @@
-import { compileProject } from "@warbler/compiler";
+import { compileProject } from "@warblerjs/compiler";
 import { loadCLIConfig, resolveEnabledTransports } from "../config";
 import { CLIError } from "../errors";
 import type { ProjectLayout } from "../project";

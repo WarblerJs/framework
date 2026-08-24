@@ -5,7 +5,7 @@ import {
   publishViewDevelopmentUpdate,
   type CompiledViewArtifact,
   type ViewProjectConfig,
-} from "@warbler/view";
+} from "@warblerjs/view";
 import { pathToFileURL } from "node:url";
 import type { DevelopmentReporter } from "./dev-session";
 

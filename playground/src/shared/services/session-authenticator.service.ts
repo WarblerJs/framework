@@ -1,5 +1,5 @@
-import { inject, Service } from "@warbler/framework";
-import { hash } from "@warbler/crypto";
+import { inject, Service } from "@warblerjs/framework";
+import { hash } from "@warblerjs/crypto";
 
 @Service({ provide: "root" })
 export class SessionAuthenticator {

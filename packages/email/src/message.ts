@@ -1,4 +1,4 @@
-import { random } from "@warbler/crypto";
+import { random } from "@warblerjs/crypto";
 import { normalizeAddressList, normalizeEmailAddress } from "./address";
 import { normalizeAttachments } from "./attachment/attachment";
 import type { EmailConfig } from "./config";

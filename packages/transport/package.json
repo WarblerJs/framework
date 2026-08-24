@@ -1,8 +1,11 @@
 {
-  "name": "@warbler/transport",
+  "name": "@warblerjs/transport",
   "version": "0.1.0",
   "type": "module",
   "private": false,
+  "files": [
+    "src"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./adapter": "./src/adapter/index.ts",

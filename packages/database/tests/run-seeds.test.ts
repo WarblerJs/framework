@@ -65,7 +65,7 @@ function createFakeSql(options: { readonly failTrackingFor?: string } = {}): Fak
   };
 }
 
-const seedSource = (body: string) => `import type { PgSeed } from "@warbler/database";
+const seedSource = (body: string) => `import type { PgSeed } from "@warblerjs/database";
 export const seed: PgSeed<{ readonly unsafe: (query: string) => Promise<unknown> }> = async (db) => {
   ${body}
 };

@@ -1,11 +1,11 @@
-import type { CompilerContext } from "@warbler/compiler";
-import type { RuntimeConfig, TransportName } from "@warbler/config";
+import type { CompilerContext } from "@warblerjs/compiler";
+import type { RuntimeConfig, TransportName } from "@warblerjs/config";
 import {
   startRuntime,
   type GeneratedApplicationBindings,
   type RuntimeHandle,
   type RuntimeTransportLauncher,
-} from "@warbler/runtime";
+} from "@warblerjs/runtime";
 import { pathToFileURL } from "node:url";
 import { applyApplicationTransports, loadCLIConfig, loadEnabledTransportConfigs, resolveEnabledTransports } from "../config";
 import { CLIError, describeErrorChain } from "../errors";
@@ -14,12 +14,12 @@ import type { DevelopmentReporter, DevelopmentRuntimeHandle, DevelopmentRuntimeL
 import { resolveNetworkAddresses } from "./network-addresses";
 
 const TRANSPORT_PACKAGES: Readonly<Record<TransportName, Readonly<{ packageName: string; factory: string }>>> = Object.freeze({
-  http: Object.freeze({ packageName: "@warbler/http", factory: "createHttpRuntimeLauncher" }),
-  websocket: Object.freeze({ packageName: "@warbler/websocket", factory: "createWebSocketRuntimeLauncher" }),
-  tcp: Object.freeze({ packageName: "@warbler/tcp", factory: "createTcpRuntimeLauncher" }),
-  udp: Object.freeze({ packageName: "@warbler/udp", factory: "createUdpRuntimeLauncher" }),
-  mcp: Object.freeze({ packageName: "@warbler/mcp", factory: "createMcpRuntimeLauncher" }),
-  webrtc: Object.freeze({ packageName: "@warbler/webrtc", factory: "createWebrtcRuntimeLauncher" }),
+  http: Object.freeze({ packageName: "@warblerjs/http", factory: "createHttpRuntimeLauncher" }),
+  websocket: Object.freeze({ packageName: "@warblerjs/websocket", factory: "createWebSocketRuntimeLauncher" }),
+  tcp: Object.freeze({ packageName: "@warblerjs/tcp", factory: "createTcpRuntimeLauncher" }),
+  udp: Object.freeze({ packageName: "@warblerjs/udp", factory: "createUdpRuntimeLauncher" }),
+  mcp: Object.freeze({ packageName: "@warblerjs/mcp", factory: "createMcpRuntimeLauncher" }),
+  webrtc: Object.freeze({ packageName: "@warblerjs/webrtc", factory: "createWebrtcRuntimeLauncher" }),
 });
 
 /** In-process launcher consuming only Compiler-generated bindings and Runtime public APIs. */

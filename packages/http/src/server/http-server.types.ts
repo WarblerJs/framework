@@ -1,4 +1,4 @@
-import type { MaybePromise } from "@warbler/transport";
+import type { MaybePromise } from "@warblerjs/transport";
 import type { HttpNativeServerOptions } from "../native";
 import type { ServerStateValue } from "./server-state";
 

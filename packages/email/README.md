@@ -1,12 +1,12 @@
-# @warbler/email
+# @warblerjs/email
 
 Compile-first email for Warbler applications. The package validates messages,
 renders compiled Warbler views for templates, builds MIME, and sends through a
 transport without adding external dependencies.
 
 ```ts
-import { inject } from "@warbler/core";
-import { Email } from "@warbler/email";
+import { inject } from "@warblerjs/core";
+import { Email } from "@warblerjs/email";
 
 const email = inject(Email);
 

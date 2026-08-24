@@ -1,5 +1,5 @@
-import { Repository } from "@warbler/framework";
-import { password } from "@warbler/crypto";
+import { Repository } from "@warblerjs/framework";
+import { password } from "@warblerjs/crypto";
 import { WlbPg } from "@pg/client";
 import type { UserEntity } from "../../domain/entities/user.entity";
 import { FindUserRepositoryPort } from "../../domain/ports/user.repository.port";

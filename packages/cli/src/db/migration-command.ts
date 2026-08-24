@@ -1,4 +1,4 @@
-import { createPgConnection, rollbackMigrations, runMigrations, scaffoldMigration, type ExecutedMigration, type RolledBackMigration } from "@warbler/database";
+import { createPgConnection, rollbackMigrations, runMigrations, scaffoldMigration, type ExecutedMigration, type RolledBackMigration } from "@warblerjs/database";
 import { atomicWrite } from "../filesystem";
 import type { ProjectLayout } from "../project";
 import { requireDatabaseConfig } from "./shared";

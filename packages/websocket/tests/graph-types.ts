@@ -1,4 +1,4 @@
-import { defineHandler } from "@warbler/core";
+import { defineHandler } from "@warblerjs/core";
 import { defineWebSocketGraph, type WebSocketEventKey, type WebSocketEventTable, type WebSocketGraphEvent } from "../src";
 
 const handler = defineHandler({

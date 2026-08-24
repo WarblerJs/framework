@@ -1,4 +1,4 @@
-import type { TranslationParameters } from "@warbler/i18n";
+import type { TranslationParameters } from "@warblerjs/i18n";
 import type {
   InferValidatorBody,
   InferValidatorCookies,
@@ -11,7 +11,7 @@ import type {
   RequestValidator,
   RuleShape,
   AnyField,
-} from "@warbler/validators";
+} from "@warblerjs/validators";
 import type { WarblerRequestContext } from "./warbler-request-context";
 
 /**

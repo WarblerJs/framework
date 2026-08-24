@@ -1,4 +1,4 @@
-import { Repository } from "@warbler/framework";
+import { Repository } from "@warblerjs/framework";
 import { WlbPg } from "../../../../../database/warbler/pg/generated/client";
 import type { User } from "../../domain/entities/user.entity";
 import {

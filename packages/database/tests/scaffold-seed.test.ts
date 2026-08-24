@@ -7,7 +7,7 @@ describe("scaffoldSeed", () => {
     const { fileName, content } = scaffoldSeed("admin_user", { clientImportPath: "../generated/client" });
 
     expect(fileName).toBe("0001_admin_user.seed.ts");
-    expect(content).toContain('import type { PgSeed } from "@warbler/database"');
+    expect(content).toContain('import type { PgSeed } from "@warblerjs/database"');
     expect(content).toContain('import type { WlbPgTransactionClient } from "../generated/client"');
     expect(content).toContain("export const seed: PgSeed<WlbPgTransactionClient>");
     expect(content).toContain("await db.user.createMany");

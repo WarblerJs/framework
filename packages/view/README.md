@@ -1,4 +1,4 @@
-# @warbler/view
+# @warblerjs/view
 
 Compile-first Warbler template renderer. `compileViewProject()` discovers and parses templates,
 validates the immutable dependency graph, bundles configured browser assets, and returns an
@@ -47,7 +47,7 @@ Example:
 import {
   createCompiledViewArtifact,
   renderCompiledView,
-} from "@warbler/view";
+} from "@warblerjs/view";
 
 const artifact = createCompiledViewArtifact({
   templates: {
@@ -71,7 +71,7 @@ const html = await renderCompiledView({
 Application controllers can return a native HTML response:
 
 ```ts
-import { View } from "@warbler/view";
+import { View } from "@warblerjs/view";
 
 return View("home.index", { users });
 ```
@@ -84,9 +84,9 @@ untrusted content.
 `View()`/`renderCompiledView()` accept an optional `builtins` map (`ViewResponseOptions.builtins`
 / `RenderCompiledViewOptions.builtins`) — a second, function-capable scope resolved alongside
 `data` inside `{{ }}`/`{{{ }}}` expressions, using the exact same evaluator. This is how
-`@warbler/http`'s `view()` makes `tr()`, `asset()`, `route()`, `csrfField`, and `csrfToken`
-available to every template automatically; `@warbler/view` itself has no opinion on what a
-built-in is — it just resolves names, the same as `data`. See `@warbler/http`'s README for the
+`@warblerjs/http`'s `view()` makes `tr()`, `asset()`, `route()`, `csrfField`, and `csrfToken`
+available to every template automatically; `@warblerjs/view` itself has no opinion on what a
+built-in is — it just resolves names, the same as `data`. See `@warblerjs/http`'s README for the
 concrete built-in list, reserved-name rules, and error handling.
 
 Tailwind CSS v4 uses the official CLI when enabled in the existing View configuration:

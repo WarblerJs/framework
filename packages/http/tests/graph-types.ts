@@ -1,5 +1,5 @@
-import { defineHandler } from "@warbler/core";
-import { defineValidator, v } from "@warbler/validators";
+import { defineHandler } from "@warblerjs/core";
+import { defineValidator, v } from "@warblerjs/validators";
 import { defineHttpGraph, defineHttpRoute, type HttpGraphRoute, type HttpRouteKey, type HttpRouteTable } from "../src";
 
 const handler = defineHandler({

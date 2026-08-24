@@ -1,5 +1,5 @@
-import { defineValidator, v, type ValidationErrors, type ValidationIssue, type ValidationRequest } from "@warbler/framework";
-import { view } from "@warbler/framework";
+import { defineValidator, v, type ValidationErrors, type ValidationIssue, type ValidationRequest } from "@warblerjs/framework";
+import { view } from "@warblerjs/framework";
 
 function firstIssue(errors: ValidationErrors): ValidationIssue | undefined {
   const groups = Object.values(errors);

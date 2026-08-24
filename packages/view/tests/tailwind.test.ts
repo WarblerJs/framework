@@ -52,7 +52,7 @@ describe("official Tailwind CSS v4 integration", () => {
   });
 
   test("keeps the previous public artifact when compilation fails", async () => {
-    const root = await project('@plugin "@warbler/not-installed";');
+    const root = await project('@plugin "@warblerjs/not-installed";');
     await Bun.write(`${root}/public/app.css`, "previous-valid-css");
     await expect(compileViewProject({
       projectRoot: root,

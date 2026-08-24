@@ -1,6 +1,6 @@
 import type { DevelopmentRuntimeLauncher } from "./dev/dev-session";
-import { Console } from "@warbler/console";
-import { isDatabaseError } from "@warbler/database";
+import { Console } from "@warblerjs/console";
+import { isDatabaseError } from "@warblerjs/database";
 import type { DevSession } from "./dev/dev-session";
 import type { DevelopmentEvent, DevelopmentReporter } from "./dev/dev-session";
 import { devCommand } from "./dev/dev-command";

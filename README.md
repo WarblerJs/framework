@@ -39,7 +39,7 @@ providers
 Example:
 
 ```ts
-import { defineHttpGraph } from "@warbler/framework";
+import { defineHttpGraph } from "@warblerjs/framework";
 
 import * as handlers from "./presentation/http/handlers/users.handlers";
 
@@ -82,7 +82,7 @@ import {
   defineValidator,
   v,
   Provider,
-} from "@warbler/framework";
+} from "@warblerjs/framework";
 ```
 
 The CLI creates new Graph boundaries with:

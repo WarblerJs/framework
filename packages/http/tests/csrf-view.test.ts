@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { activateCompiledViews, createCompiledViewArtifact } from "@warbler/view";
+import { activateCompiledViews, createCompiledViewArtifact } from "@warblerjs/view";
 import { CsrfVerifier, type CsrfPolicy } from "../src/csrf";
 import { HttpMethod } from "../src/route";
 import { csrf, runInViewRequestScope, view, type ViewRequestScope } from "../src/view";

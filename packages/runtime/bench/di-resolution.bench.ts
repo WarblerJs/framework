@@ -1,11 +1,11 @@
 /**
  * Focused DI resolution benchmark. No benchmarking library exists anywhere in this repo (checked before
  * writing this), so this uses `Bun.nanoseconds()` directly, matching the codebase's existing timing style
- * (`@warbler/console`'s `Console.timer`) rather than introducing a new dependency.
+ * (`@warblerjs/console`'s `Console.timer`) rather than introducing a new dependency.
  *
  * Run with: bun run packages/runtime/bench/di-resolution.bench.ts
  */
-import { Container, createInjectionToken, type ProviderToken } from "@warbler/core";
+import { Container, createInjectionToken, type ProviderToken } from "@warblerjs/core";
 import { GraphProviderContainer, RequestProviderContainer, RootProviderContainer } from "../src/container/generated-provider-containers";
 import type { ProviderBinding, ProviderBindingContext } from "../src/generated/executable-bindings";
 

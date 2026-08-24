@@ -1,4 +1,4 @@
-import { env } from "@warbler/config";
+import { env } from "@warblerjs/config";
 
 export const profilingConfig = {
   /*

@@ -1,4 +1,4 @@
-import { Console } from "@warbler/console";
+import { Console } from "@warblerjs/console";
 import type { CLIDiagnostic } from "./diagnostics";
 /** CLI output sink, injectable for tests. */
 export interface CLIOutput {

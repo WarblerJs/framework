@@ -3,8 +3,8 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { ManagedDevSession, type DevelopmentRuntimeHandle, type DevelopmentRuntimeLauncher } from "../src/dev/dev-session";
 import { importGeneratedApplication } from "../src/dev/runtime-launcher";
-import { startRuntime, type RuntimeTransportLauncher, type RuntimeTransportStartInput } from "@warbler/runtime";
-import { compileProject, type CompilerContext } from "@warbler/compiler";
+import { startRuntime, type RuntimeTransportLauncher, type RuntimeTransportStartInput } from "@warblerjs/runtime";
+import { compileProject, type CompilerContext } from "@warblerjs/compiler";
 import { createTestProject } from "./helpers";
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -207,14 +207,14 @@ describe("managed development reload", () => {
 
   test("repeated declarative graph reloads do not retain unbounded compiler or runtime state", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
-    await Bun.write(join(project.root, "src/main.ts"), `import { createApp, Transport } from "@warbler/core";
+    await Bun.write(join(project.root, "src/main.ts"), `import { createApp, Transport } from "@warblerjs/core";
 export default createApp({
   transports: [Transport.HTTP],
   graphs: "src/graphs/**/*.graph.ts",
 });
 `);
     await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), declarativeHandlerSource(0));
-    await Bun.write(join(project.root, "src/graphs/test/test.graph.ts"), `import { defineHttpGraph } from "@warbler/http";
+    await Bun.write(join(project.root, "src/graphs/test/test.graph.ts"), `import { defineHttpGraph } from "@warblerjs/http";
 import * as handlers from "./test.handlers";
 export default defineHttpGraph({
   prefix: "/api",
@@ -251,7 +251,7 @@ export default defineHttpGraph({
   test("imports fresh compiled validator bindings after a full Runtime restart", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
     const graph = join(project.root, "src/graphs/home/home.graph.ts");
-    await Bun.write(graph, `import { defineHttpGraph } from "@warbler/framework";
+    await Bun.write(graph, `import { defineHttpGraph } from "@warblerjs/framework";
 
 import * as handlers from "./presentation/http/handlers/home.handlers";
 
@@ -268,7 +268,7 @@ export default defineHttpGraph({
 });
 `);
     const handler = join(project.root, "src/graphs/home/presentation/http/handlers/home.handlers.ts");
-    const source = `import { defineHandler, defineValidator, JsonRes, v, type AppRequest } from "@warbler/framework";
+    const source = `import { defineHandler, defineValidator, JsonRes, v, type AppRequest } from "@warblerjs/framework";
 
 export const PayloadValidator = defineValidator({
   rules: { value: v.string("invalid_string").max(3, "too_long") },
@@ -349,8 +349,8 @@ export const index = defineHandler({
 });
 
 function declarativeHandlerSource(version: number): string {
-  return `import { defineHandler } from "@warbler/core";
-import { JsonRes, type AppRequest } from "@warbler/http";
+  return `import { defineHandler } from "@warblerjs/core";
+import { JsonRes, type AppRequest } from "@warblerjs/http";
 export const getTest = defineHandler({
   run: (_ctx: AppRequest) => JsonRes({ version: ${version} }),
 });

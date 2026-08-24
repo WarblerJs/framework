@@ -33,7 +33,7 @@ function renderHttpFiles(plan: Omit<GraphGenerationPlan, "files">, transportCoun
   return Object.freeze([
     Object.freeze({
       path: `${plan.rootDirectory}/${graphFileName(plan, "http", transportCount)}`,
-      content: `import { defineHttpGraph } from "@warbler/framework";
+      content: `import { defineHttpGraph } from "@warblerjs/framework";
 
 import * as handlers from ${JSON.stringify(handlerModule)};
 
@@ -55,7 +55,7 @@ export default defineHttpGraph({
     }),
     Object.freeze({
       path: `${plan.rootDirectory}/presentation/http/handlers/${plan.directoryName}.handlers.ts`,
-      content: `import { defineHandler, JsonRes } from "@warbler/framework";
+      content: `import { defineHandler, JsonRes } from "@warblerjs/framework";
 
 const message = ${JSON.stringify(plan.routeNamePrefix)};
 
@@ -74,7 +74,7 @@ function renderSocketFiles(plan: Omit<GraphGenerationPlan, "files">, transportCo
   return Object.freeze([
     Object.freeze({
       path: `${plan.rootDirectory}/${graphFileName(plan, "socket", transportCount)}`,
-      content: `import { defineWebSocketGraph } from "@warbler/framework";
+      content: `import { defineWebSocketGraph } from "@warblerjs/framework";
 
 import * as handlers from ${JSON.stringify(handlerModule)};
 
@@ -96,7 +96,7 @@ export default defineWebSocketGraph({
     }),
     Object.freeze({
       path: `${plan.rootDirectory}/presentation/socket/handlers/${plan.directoryName}.socket.handlers.ts`,
-      content: `import { defineHandler } from "@warbler/framework";
+      content: `import { defineHandler } from "@warblerjs/framework";
 
 export const open = defineHandler({
   run: () => undefined,

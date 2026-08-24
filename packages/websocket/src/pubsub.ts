@@ -5,7 +5,7 @@ export type SocketTopic = string;
 export function validateTopic(topic: string, maximumLength = 256): SocketTopic {
   if (typeof topic !== "string" || topic.length === 0 || topic.length > maximumLength || /[\u0000-\u001f\u007f]/u.test(topic))
     throw new WebSocketPayloadError("Invalid socket topic");
-  if (topic.startsWith("@warbler/")) throw new WebSocketPayloadError("Reserved socket topic");
+  if (topic.startsWith("@warblerjs/")) throw new WebSocketPayloadError("Reserved socket topic");
   return topic;
 }
 /** Native topic subscription contract. */

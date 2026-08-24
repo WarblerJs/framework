@@ -1,11 +1,11 @@
-# @warbler/core
+# @warblerjs/core
 
 Core contracts for Warbler applications: graphs, transports, dependency injection, providers, metadata, and application definition.
 
 ## Example
 
 ```ts
-import { Graph, Service, Repository, Transport, createApp, inject } from "@warbler/core";
+import { Graph, Service, Repository, Transport, createApp, inject } from "@warblerjs/core";
 
 @Repository()
 class UserRepository {}
@@ -29,7 +29,7 @@ export default createApp({ graphs: [UserGraph] });
 Injectable providers are Graph-local unless explicitly promoted to the root scope:
 
 ```ts
-import { ProviderScope, Service } from "@warbler/core";
+import { ProviderScope, Service } from "@warblerjs/core";
 
 @Service()
 class UserService {} // visible only in its declaring Graph
@@ -47,12 +47,12 @@ searched. Instance lifetime remains independently configurable as `scope: "singl
 
 `WarblerError` is the transport-agnostic base error for application code — controllers,
 services, and repositories throw it (or a convenience subclass) and let it propagate; there is
-no need for a `try/catch` in every layer. The nearest transport boundary (`@warbler/http`'s
-`view()`/route handling, `@warbler/websocket`'s socket dispatch, ...) catches it exactly once,
+no need for a `try/catch` in every layer. The nearest transport boundary (`@warblerjs/http`'s
+`view()`/route handling, `@warblerjs/websocket`'s socket dispatch, ...) catches it exactly once,
 normalizes it, logs it, and renders a response appropriate for that transport:
 
 ```ts
-import { NotFoundError } from "@warbler/core";
+import { NotFoundError } from "@warblerjs/core";
 
 class FindUserUseCase {
   async execute(id: string) {
@@ -85,6 +85,6 @@ Convenience subclasses cover the common HTTP-equivalent statuses without redecla
 status, message, expose, fatal, cause}`). `message` is already the safe-to-expose variant
 (the real message when `expose` is `true`, a generic "Internal Server Error" otherwise); an
 unrecognized error always normalizes to a generic, non-exposed internal error. Transport
-packages that recognize their own additional error types (e.g. `@warbler/http`'s `HttpError`)
-translate those into a `WarblerError` first, then call this — `@warbler/core` itself has no
+packages that recognize their own additional error types (e.g. `@warblerjs/http`'s `HttpError`)
+translate those into a `WarblerError` first, then call this — `@warblerjs/core` itself has no
 knowledge of any transport.

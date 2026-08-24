@@ -12,7 +12,7 @@ import {
   type Middleware,
 } from "../src";
 
-describe("@warbler/framework public facade", () => {
+describe("@warblerjs/framework public facade", () => {
   test("re-exports stable application-facing HTTP, handler, validator, and DI APIs", async () => {
     const validator = defineValidator({
       queryRules: {

@@ -1,8 +1,8 @@
 # Sending
 
 ```ts
-import { inject } from "@warbler/core";
-import { Email } from "@warbler/email";
+import { inject } from "@warblerjs/core";
+import { Email } from "@warblerjs/email";
 
 const email = inject(Email);
 

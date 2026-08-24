@@ -1,8 +1,8 @@
-import { defineHandler } from "@warbler/framework";
+import { defineHandler } from "@warblerjs/framework";
 import {
   JsonRes,
   type AppRequest,
-} from "@warbler/framework";
+} from "@warblerjs/framework";
 
 import { testValidator } from "../../../test.validator";
 import { validateRequest } from "../validators/test.validators";

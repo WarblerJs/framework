@@ -1,5 +1,5 @@
-import { Console } from "@warbler/console";
-import { normalizeError, safeErrorMessage } from "@warbler/core";
+import { Console } from "@warblerjs/console";
+import { normalizeError, safeErrorMessage } from "@warblerjs/core";
 import { InvalidRequestError } from "../errors";
 import { type HeadersInput, toHeaders } from "../internal/header-value";
 import type { ServerSentEvent } from "./response-types";

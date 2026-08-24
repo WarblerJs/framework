@@ -1,10 +1,10 @@
-# @warbler/events
+# @warblerjs/events
 
 Compile-first functional events for Warbler.
 
 ```ts
-import { event, listen, EventDispatcher } from "@warbler/events";
-import { inject } from "@warbler/core";
+import { event, listen, EventDispatcher } from "@warblerjs/events";
+import { inject } from "@warblerjs/core";
 
 export const UserCreated = event((userId: string, email: string) => ({ userId, email } as const));
 

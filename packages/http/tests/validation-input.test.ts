@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { ValidatorSourceFlag } from "@warbler/validators";
+import { ValidatorSourceFlag } from "@warblerjs/validators";
 import { prepareHttpValidationInput } from "../src/request/validation-input";
 
 test("prepared HTTP validation input keeps a fixed hot-path property shape", async () => {

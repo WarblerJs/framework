@@ -1,4 +1,4 @@
-import { env, envBoolean, envNumber, envString } from "@warbler/config";
+import { env, envBoolean, envNumber, envString } from "@warblerjs/config";
 
 export const mailConfig = {
   default: "smtp",

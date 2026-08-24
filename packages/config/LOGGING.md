@@ -6,7 +6,7 @@ paths can use quiet handlers rather than building log metadata and suppressing i
 later.
 
 ```ts
-import { env } from "@warbler/config";
+import { env } from "@warblerjs/config";
 
 export const loggingConfig = {
   environment: env("APP_ENV", "production"),

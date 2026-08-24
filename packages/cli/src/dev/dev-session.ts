@@ -1,4 +1,4 @@
-import { Compiler, type CompilerContext } from "@warbler/compiler";
+import { Compiler, type CompilerContext } from "@warblerjs/compiler";
 import { atomicWrite } from "../filesystem";
 import { CLIError, describeErrorChain } from "../errors";
 import { ExitCode } from "../types";

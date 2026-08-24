@@ -1,6 +1,6 @@
-import { inject } from "@warbler/framework";
-import { listen } from "@warbler/events";
-import { SocketPublisher } from "@warbler/framework";
+import { inject } from "@warblerjs/framework";
+import { listen } from "@warblerjs/events";
+import { SocketPublisher } from "@warblerjs/framework";
 import { UserCreated } from "../../domain/events/user-created.event";
 
 export const notifyUserCreated = listen(UserCreated, (event) => {

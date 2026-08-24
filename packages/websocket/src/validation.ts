@@ -1,6 +1,6 @@
 import type { SocketContext } from "./context";
 import type { SocketMessage } from "./message";
-import type { RequestValidator } from "@warbler/validators";
+import type { RequestValidator } from "@warblerjs/validators";
 /** Validator result with safe application errors. */
 export type SocketValidationResult = true | Readonly<{ valid: false; errors?: readonly string[] }>;
 /** Precompiled socket data validator. */

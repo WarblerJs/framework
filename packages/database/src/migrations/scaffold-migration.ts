@@ -42,8 +42,8 @@ function parseKindAndName(arg: string): Readonly<{ kind: MigrationKind; name: st
   throw new MigrationScaffoldError(`Unknown migration kind in "${arg}". Supported: ${KINDS.join(", ")}.`);
 }
 
-const header = 'import type { PgMigration } from "@warbler/database";\n';
-const headerWithBuilders = 'import type { PgMigration } from "@warbler/database";\nimport { PgDefault, PgTypes } from "@warbler/database";\n';
+const header = 'import type { PgMigration } from "@warblerjs/database";\n';
+const headerWithBuilders = 'import type { PgMigration } from "@warblerjs/database";\nimport { PgDefault, PgTypes } from "@warblerjs/database";\n';
 
 function content(kind: MigrationKind, name: string, options: ScaffoldMigrationOptions): string {
   switch (kind) {

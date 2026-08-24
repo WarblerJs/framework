@@ -1,5 +1,5 @@
-import type { RuntimeTransportLauncher, RuntimeTransportStartInput, RuntimeTransportStopOptions } from "@warbler/transport";
-import { Console, createCorrelationId } from "@warbler/console";
+import type { RuntimeTransportLauncher, RuntimeTransportStartInput, RuntimeTransportStopOptions } from "@warblerjs/transport";
+import { Console, createCorrelationId } from "@warblerjs/console";
 import type { ServerWebSocket, WebSocketHandler } from "bun";
 import { normalizeWebSocketConfig, type WebSocketConfig } from "./config";
 import { createSocketContext, type SocketContext } from "./context";

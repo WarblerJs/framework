@@ -7,7 +7,7 @@ import { ServerStateError } from "../errors";
  * (`../native/bun-route-handler.ts`), the one place every request passes through before
  * dispatch — and read from the same package, so no cross-package ambient store is
  * needed. `request` is the raw native `Request`; locale/`tr` are attached onto it
- * in-place, later, by `@warbler/i18n`'s `localizeRequest` (inside `@warbler/runtime`) —
+ * in-place, later, by `@warblerjs/i18n`'s `localizeRequest` (inside `@warblerjs/runtime`) —
  * same object identity, so reading `request.locale`/`request.tr` lazily (only when a
  * built-in is actually invoked) always observes the localized values.
  */
@@ -28,7 +28,7 @@ export interface ViewRequestScope {
  * Backed by `AsyncLocalStorage`, not a module-level variable: request handling spans
  * real `await` boundaries (validators, guards, middleware, async controller methods),
  * so two concurrent requests must never observe each other's scope. Mirrors
- * `@warbler/core`'s `injection-context.ts` `requestResolvers` pattern.
+ * `@warblerjs/core`'s `injection-context.ts` `requestResolvers` pattern.
  */
 const storage = new AsyncLocalStorage<ViewRequestScope>();
 

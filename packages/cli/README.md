@@ -1,4 +1,4 @@
-# @warbler/cli
+# @warblerjs/cli
 
 Bun-native orchestration for Warbler projects.
 
@@ -21,8 +21,8 @@ warbler version
 warbler help
 ```
 
-The CLI locates and validates applications, delegates configuration to `@warbler/config`, analysis
-and generation to `@warbler/compiler`, and execution to a Runtime launcher abstraction. It never
+The CLI locates and validates applications, delegates configuration to `@warblerjs/config`, analysis
+and generation to `@warblerjs/compiler`, and execution to a Runtime launcher abstraction. It never
 analyzes TypeScript, reconstructs dependency injection, scans decorators, or fabricates executable
 handler bindings.
 
@@ -37,7 +37,7 @@ overwriting unless `--force` is explicit. `clean` can remove only `dist/` and `.
 ## Graph Generation
 
 `warbler make:graph <name>` is the architecture-aware generation boundary. It generates a
-feature Graph under `src/graphs/<name>/` and uses `@warbler/framework` for application-facing
+feature Graph under `src/graphs/<name>/` and uses `@warblerjs/framework` for application-facing
 imports.
 
 ```text
@@ -74,7 +74,7 @@ import {
   defineHandler,
   defineValidator,
   v,
-} from "@warbler/framework";
+} from "@warblerjs/framework";
 ```
 
 Exit codes are: `0` success, `1` command/build failure, `2` invalid arguments, `3` invalid project

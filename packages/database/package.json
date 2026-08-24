@@ -1,8 +1,11 @@
 {
-  "name": "@warbler/database",
+  "name": "@warblerjs/database",
   "version": "0.1.0",
   "type": "module",
-  "private": true,
+  "private": false,
+  "files": [
+    "src"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./columns": "./src/columns/index.ts",

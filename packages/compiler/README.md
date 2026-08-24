@@ -1,11 +1,11 @@
-# @warbler/compiler
+# @warblerjs/compiler
 
 The Warbler compiler discovers application TypeScript declarations, validates their ownership and
 dependency relationships, produces immutable Warbler Intermediate Representation (WIR), and lowers
 that WIR into deterministic executable TypeScript artifacts.
 
 ```ts
-import { compileProject } from "@warbler/compiler";
+import { compileProject } from "@warblerjs/compiler";
 
 const context = await compileProject(process.cwd());
 

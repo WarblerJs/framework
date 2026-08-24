@@ -1,14 +1,14 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { env } from "@warbler/config";
+import { env } from "@warblerjs/config";
 import { Email, EmailAddressError, EmailEncodingError, LogTransport, normalizeEmailConfig } from "../src";
 import { createChunkedBase64Encoder, encodeBase64Mime, MemoryTransport, parseSmtpCapabilities, parseSmtpResponse } from "../src/testing";
-import { encoding } from "@warbler/crypto";
+import { encoding } from "@warblerjs/crypto";
 
 const renderer = Object.freeze({
   render: (name: string, data: Readonly<Record<string, unknown>>) => `<p>${name}:${String(data.email)}</p>`,
 });
 
-describe("@warbler/email", () => {
+describe("@warblerjs/email", () => {
   test("sends through memory transport and keeps bcc out of MIME headers", async () => {
     const transport = new MemoryTransport();
     const email = new Email({ transport: "memory", from: "Warbler <hello@example.test>" }, renderer, transport);

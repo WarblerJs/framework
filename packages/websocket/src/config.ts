@@ -1,4 +1,4 @@
-import { parseByteSize, parseDuration } from "@warbler/config";
+import { parseByteSize, parseDuration } from "@warblerjs/config";
 import { WebSocketError } from "./errors";
 import type { SocketMessageFormat } from "./message";
 /** User WebSocket configuration. */

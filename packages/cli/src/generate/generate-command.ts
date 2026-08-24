@@ -24,7 +24,7 @@ export async function generateSource(
 
 function createPlan(kind: GeneratorKind, name: string, base: string): GeneratedFilePlan {
   switch (kind) {
-    case "graph": return Object.freeze({ path: `src/graphs/${base}/${base}.graph.ts`, content: `import { defineHandler, defineHttpGraph, JsonRes } from "@warbler/framework";
+    case "graph": return Object.freeze({ path: `src/graphs/${base}/${base}.graph.ts`, content: `import { defineHandler, defineHttpGraph, JsonRes } from "@warblerjs/framework";
 
 const message = "${base}";
 

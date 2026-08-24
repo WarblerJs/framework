@@ -10,10 +10,10 @@ import {
   type ProfilingConfig,
   type RuntimeConfig,
   type TransportName,
-} from "@warbler/config";
-import { Console } from "@warbler/console";
-import { loadProjectTranslator, localizeRequest, type CatalogTranslator } from "@warbler/i18n";
-import { getActiveContainer, RequestContextStore, runInRequestContext } from "@warbler/core";
+} from "@warblerjs/config";
+import { Console } from "@warblerjs/console";
+import { loadProjectTranslator, localizeRequest, type CatalogTranslator } from "@warblerjs/i18n";
+import { getActiveContainer, RequestContextStore, runInRequestContext } from "@warblerjs/core";
 import { validateApplicationBindings, type ValidatedBindingIndexes } from "../bindings";
 import { RootProviderContainer, GraphProviderContainer, RequestProviderContainer } from "../container/generated-provider-containers";
 import { ControllerInstanceTable } from "../controllers";
@@ -737,7 +737,7 @@ function buildValidationErrorRequest(validationInput: unknown, body: unknown, re
  * Reuses `BunRequest.cookies` when present (already lazily parsed by Bun for every
  * request served through `Bun.serve({ routes })`); falls back to explicit
  * construction otherwise (plain `Request`, e.g. in tests). Duplicated in miniature
- * from `@warbler/http`'s `requestCookieMap` rather than imported from it: the
+ * from `@warblerjs/http`'s `requestCookieMap` rather than imported from it: the
  * Runtime deliberately has no dependency on the HTTP package, since it also drives
  * WebSocket dispatch — `buildAppRequest` above structurally mirrors `AppRequest`
  * for the same reason, without importing the type itself.

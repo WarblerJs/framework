@@ -1,4 +1,4 @@
-import { encoding } from "@warbler/crypto";
+import { encoding } from "@warblerjs/crypto";
 import type { SmtpAuthConfig } from "../../config";
 
 /** Creates an AUTH PLAIN payload without exposing credentials in logs or errors. */
