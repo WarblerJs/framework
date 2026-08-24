@@ -1,4 +1,5 @@
 import type { DevelopmentRuntimeLauncher } from "./dev/dev-session";
+import { CLI_VERSION } from "./version";
 import { Console } from "@warblerjs/console";
 import { isDatabaseError } from "@warblerjs/database";
 import type { DevSession } from "./dev/dev-session";
@@ -88,10 +89,19 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
       assertArgs(context, 0);
       writeResult(output, context.format, { command: "help", status: "success", text: HELP }, HELP);
       return ExitCode.SUCCESS;
-    case "version":
-      assertArgs(context, 0);
-      writeResult(output, context.format, { command: "version", status: "success", version: "0.1.0" }, "Warbler CLI 0.1.0");
-      return ExitCode.SUCCESS;
+      case "version":
+        assertArgs(context, 0);
+        writeResult(
+          output,
+          context.format,
+          {
+            command: "version",
+            status: "success",
+            version: CLI_VERSION,
+          },
+          `Warbler CLI ${CLI_VERSION}`,
+        );
+        return ExitCode.SUCCESS;
     case "new": {
       assertArgs(context, 1);
       const root = await createStarterProject(context.cwd, context.args[0], context.flags["dry-run"] === true);
@@ -142,7 +152,7 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
       );
       services.onDevSession?.(session);
       Console.banner({
-        version: "0.1.0",
+        version: CLI_VERSION,
         project: basename(root),
         build: session.buildNumber,
         ...(session.network === undefined ? {} : { network: session.network }),
