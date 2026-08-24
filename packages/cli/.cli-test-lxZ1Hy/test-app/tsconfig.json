@@ -1,0 +1,50 @@
+{
+  "compilerOptions": {
+    "lib": [
+      "ESNext"
+    ],
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": [
+      "bun"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@warblerjs/config": [
+        "node_modules/@warblerjs/config/src/index.ts"
+      ],
+      "@warblerjs/core": [
+        "node_modules/@warblerjs/core/src/index.ts"
+      ],
+      "@warblerjs/database": [
+        "node_modules/@warblerjs/database/src/index.ts"
+      ],
+      "@warblerjs/framework": [
+        "node_modules/@warblerjs/framework/src/index.ts"
+      ],
+      "@warblerjs/http": [
+        "node_modules/@warblerjs/http/src/index.ts"
+      ],
+      "@warblerjs/runtime": [
+        "node_modules/@warblerjs/runtime/src/index.ts"
+      ],
+      "@warblerjs/transport": [
+        "node_modules/@warblerjs/transport/src/index.ts"
+      ],
+      "@warblerjs/validators": [
+        "node_modules/@warblerjs/validators/src/index.ts"
+      ],
+      "@warblerjs/websocket": [
+        "node_modules/@warblerjs/websocket/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    ".warbler/generated/context.generated.d.ts"
+  ]
+}
