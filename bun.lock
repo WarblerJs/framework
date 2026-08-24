@@ -37,10 +37,10 @@
         "@warblerjs/core": "workspace:*",
         "@warblerjs/events": "workspace:*",
         "@warblerjs/validators": "workspace:*",
+        "typescript": "^5.9.2",
       },
       "devDependencies": {
         "@types/bun": "latest",
-        "typescript": "^5.9.2",
       },
     },
     "packages/config": {
@@ -151,9 +151,9 @@
     },
     "packages/i18n": {
       "name": "@warblerjs/i18n",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
-        "@warblerjs/console": "workspace:*",
+        "@warblerjs/console": "0.1.0",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -225,7 +225,7 @@
       },
     },
     "playground": {
-      "name": "@warblerjsjs/playground",
+      "name": "@warblerjs/playground",
       "version": "0.1.0",
       "dependencies": {
         "@warblerjs/config": "workspace:*",
@@ -352,6 +352,8 @@
 
     "@warblerjs/i18n": ["@warblerjs/i18n@workspace:packages/i18n"],
 
+    "@warblerjs/playground": ["@warblerjs/playground@workspace:playground"],
+
     "@warblerjs/runtime": ["@warblerjs/runtime@workspace:packages/runtime"],
 
     "@warblerjs/transport": ["@warblerjs/transport@workspace:packages/transport"],
@@ -361,8 +363,6 @@
     "@warblerjs/view": ["@warblerjs/view@workspace:packages/view"],
 
     "@warblerjs/websocket": ["@warblerjs/websocket@workspace:packages/websocket"],
-
-    "@warblerjsjs/playground": ["@warblerjsjs/playground@workspace:playground"],
 
     "braces": ["braces@3.0.3", "", { "dependencies": { "fill-range": "^7.1.1" } }, "sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA=="],
 
