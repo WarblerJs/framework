@@ -32,6 +32,25 @@ export interface WorkspacePackage {
 
 export type PublishStatus = "publish" | "skip";
 
+export type ReleaseReason =
+  | "not-published"
+  | "metadata-repair"
+  | "explicit-patch"
+  | "dependency-propagation";
+
+export type SkipReason = "already-published";
+
+export interface ExplicitReleaseRequest {
+  readonly packageName: string;
+  readonly bump: "patch";
+}
+
+export interface ReleasePlannerOptions {
+  readonly packageName?: string;
+  readonly fromPackage?: string;
+  readonly explicitReleases?: readonly ExplicitReleaseRequest[];
+}
+
 export interface ReleasePackage {
   readonly name: string;
   readonly directory: string;
@@ -40,7 +59,7 @@ export interface ReleasePackage {
   readonly npmTag: string;
   readonly internalDependencies: readonly string[];
   readonly shouldPublish: boolean;
-  readonly reason: string;
+  readonly reason: ReleaseReason | SkipReason;
 }
 
 export interface ReleasePlan {
@@ -81,6 +100,7 @@ export interface ReleaseOptions {
   readonly dryRun?: boolean;
   readonly packageName?: string;
   readonly fromPackage?: string;
+  readonly explicitReleases?: readonly ExplicitReleaseRequest[];
   readonly noTests?: boolean;
   readonly json?: boolean;
   readonly registry?: string;

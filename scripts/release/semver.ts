@@ -28,6 +28,14 @@ export function bumpRepairVersion(version: string): string {
   return `${parsed.major}.${parsed.minor}.${parsed.patch}-${parsed.prerelease}.1`;
 }
 
+export function bumpStablePatchVersion(version: string): string {
+  const parsed = parseSemver(version);
+  if (parsed.prerelease !== undefined) {
+    throw new ReleaseError(`--patch does not support prerelease versions: ${version}`);
+  }
+  return `${parsed.major}.${parsed.minor}.${parsed.patch + 1}`;
+}
+
 export function firstUnpublishedRepairVersion(current: string, publishedVersions: readonly string[]): string {
   const published = new Set(publishedVersions);
   let candidate = bumpRepairVersion(current);

@@ -1,11 +1,22 @@
 import { topologicalOrder } from "./graph";
 import { dependencyRecord, internalDependencies, manifestHasStaleWarblerScope, manifestHasWorkspaceProtocol, releaseManifest } from "./manifest";
-import { firstUnpublishedRepairVersion, npmTag } from "./semver";
+import { bumpStablePatchVersion, firstUnpublishedRepairVersion, npmTag } from "./semver";
 import { scanStaleWarblerReferences } from "./discovery";
-import { dependencyFields, ReleaseError, type NpmClient, type ReleasePackage, type ReleasePlan, type WorkspacePackage } from "./types";
+import {
+  dependencyFields,
+  ReleaseError,
+  WARBLER_SCOPE,
+  type NpmClient,
+  type ReleasePackage,
+  type ReleasePlan,
+  type ReleasePlannerOptions,
+  type ReleaseReason,
+  type WorkspacePackage,
+} from "./types";
 
 interface PackageState {
   readonly package: WorkspacePackage;
+  readonly currentMetadata: Readonly<{ readonly exists: boolean; readonly dependencies?: Readonly<Record<string, string>>; readonly optionalDependencies?: Readonly<Record<string, string>>; readonly peerDependencies?: Readonly<Record<string, string>> }>;
   readonly publishedCurrent: boolean;
   readonly publishedCurrentBroken: boolean;
   readonly publishedVersions: readonly string[];
@@ -15,9 +26,15 @@ export async function createReleasePlan(
   root: string,
   packages: readonly WorkspacePackage[],
   npm: NpmClient,
-  filter: Readonly<{ readonly packageName?: string; readonly fromPackage?: string }> = {},
+  options: ReleasePlannerOptions = {},
 ): Promise<ReleasePlan> {
-  const ordered = filterPackages(topologicalOrder(packages), filter);
+  const explicitReleases = options.explicitReleases ?? [];
+  if (explicitReleases.length > 0 && (options.packageName !== undefined || options.fromPackage !== undefined)) {
+    throw new ReleaseError("--patch cannot be combined with --package or --from because dependent propagation requires the full workspace graph.");
+  }
+  const ordered = filterPackages(topologicalOrder(packages), options);
+  const allByName = new Map(packages.map((item) => [item.name, item] as const));
+  validateExplicitReleases(explicitReleases, allByName);
   const packageNames = new Set(packages.map((item) => item.name));
   const states = new Map<string, PackageState>();
   for (const item of ordered) {
@@ -27,6 +44,7 @@ export async function createReleasePlan(
     ]);
     states.set(item.name, Object.freeze({
       package: item,
+      currentMetadata: metadata,
       publishedCurrent: metadata.exists,
       publishedCurrentBroken: metadata.exists && publishedMetadataBroken(metadata),
       publishedVersions: versions,
@@ -34,11 +52,19 @@ export async function createReleasePlan(
   }
 
   const targets = new Map<string, string>();
+  const reasons = new Map<string, ReleaseReason>();
+  const explicitNames = new Set(explicitReleases.map((item) => item.packageName));
   for (const item of ordered) {
     const state = states.get(item.name)!;
-    targets.set(item.name, state.publishedCurrentBroken
-      ? firstUnpublishedRepairVersion(item.currentVersion, state.publishedVersions)
-      : item.currentVersion);
+    if (explicitNames.has(item.name)) {
+      targets.set(item.name, bumpStablePatchVersion(item.currentVersion));
+      reasons.set(item.name, "explicit-patch");
+    } else if (state.publishedCurrentBroken) {
+      targets.set(item.name, firstUnpublishedRepairVersion(item.currentVersion, state.publishedVersions));
+      reasons.set(item.name, "metadata-repair");
+    } else {
+      targets.set(item.name, item.currentVersion);
+    }
   }
 
   let changed = true;
@@ -47,10 +73,10 @@ export async function createReleasePlan(
     for (const item of ordered) {
       const state = states.get(item.name)!;
       const desired = releaseManifest(item.manifest, targets.get(item.name)!, targets);
-      const currentPublished = state.publishedCurrent ? await npm.metadata(item.name, item.currentVersion) : { exists: false } as const;
-      const desiredDiffers = state.publishedCurrent && !publishedDependenciesMatch(desired, currentPublished);
+      const desiredDiffers = state.publishedCurrent && !publishedDependenciesMatch(desired, state.currentMetadata);
       if (desiredDiffers && targets.get(item.name) === item.currentVersion) {
         targets.set(item.name, firstUnpublishedRepairVersion(item.currentVersion, state.publishedVersions));
+        reasons.set(item.name, "dependency-propagation");
         changed = true;
       }
     }
@@ -63,7 +89,7 @@ export async function createReleasePlan(
     const metadata = await npm.metadata(item.name, targetVersion);
     const shouldPublish = !metadata.exists;
     if (metadata.exists && targetVersion !== item.currentVersion) {
-      throw new ReleaseError(`Repair target already exists and cannot be overwritten: ${item.name}@${targetVersion}`);
+      throw new ReleaseError(`Release target already exists and cannot be overwritten: ${item.name}@${targetVersion}`);
     }
     planned.push(Object.freeze({
       name: item.name,
@@ -74,8 +100,8 @@ export async function createReleasePlan(
       internalDependencies: internalDependencies(item.manifest, packageNames),
       shouldPublish,
       reason: shouldPublish
-        ? targetVersion === item.currentVersion ? "not published" : "metadata repair"
-        : "already published",
+        ? reasons.get(item.name) ?? "not-published"
+        : "already-published",
     }));
   }
 
@@ -110,6 +136,23 @@ function filterPackages(packages: readonly WorkspacePackage[], filter: Readonly<
     return Object.freeze(packages.slice(index));
   }
   return packages;
+}
+
+function validateExplicitReleases(
+  requests: readonly Readonly<{ readonly packageName: string; readonly bump: "patch" }>[],
+  packages: ReadonlyMap<string, WorkspacePackage>,
+): void {
+  const seen = new Set<string>();
+  for (const request of requests) {
+    if (!request.packageName.startsWith(WARBLER_SCOPE)) {
+      throw new ReleaseError(`Explicit patch package must use ${WARBLER_SCOPE}: ${request.packageName}`);
+    }
+    if (request.bump !== "patch") throw new ReleaseError(`Unsupported explicit release bump: ${request.bump}`);
+    if (seen.has(request.packageName)) continue;
+    seen.add(request.packageName);
+    const item = packages.get(request.packageName);
+    if (item === undefined) throw new ReleaseError(`Explicit patch package was not discovered or is private: ${request.packageName}`);
+  }
 }
 
 function publishedMetadataBroken(metadata: Readonly<{ readonly dependencies?: Readonly<Record<string, string>>; readonly optionalDependencies?: Readonly<Record<string, string>>; readonly peerDependencies?: Readonly<Record<string, string>> }>): boolean {

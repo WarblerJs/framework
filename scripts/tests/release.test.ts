@@ -16,7 +16,9 @@ import {
   type PublishedPackageMetadata,
 } from "../release/index";
 import { RegistryNpmClient } from "../release/npm-client";
-import type { PackageManifest } from "../release/types";
+import { packReleasePackage } from "../release/package";
+import { targetVersionMap } from "../release/planner";
+import type { PackageManifest, ReleasePlannerOptions } from "../release/types";
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -64,7 +66,7 @@ describe("release planning", () => {
     const root = await fixture({ core: manifest("@warblerjs/core") });
     const plan = await planFor(root, published("@warblerjs/core", "0.1.0"));
     expect(plan.packages[0]?.shouldPublish).toBe(false);
-    expect(plan.packages[0]?.reason).toBe("already published");
+    expect(plan.packages[0]?.reason).toBe("already-published");
   });
 
   test("selects an unpublished patch for broken published workspace metadata", async () => {
@@ -112,6 +114,145 @@ describe("release planning", () => {
       new Map([["@warblerjs/framework", "0.1.2"]]),
     );
     expect(resolved.dependencies?.["@warblerjs/framework"]).toBe("^0.1.2");
+  });
+
+  test("explicit patch bump publishes the next stable patch", async () => {
+    const root = await fixture({ i18n: manifest("@warblerjs/i18n", { version: "0.1.1" }) });
+    const plan = await planFor(root, {
+      explicitReleases: [{ packageName: "@warblerjs/i18n", bump: "patch" }],
+    }, published("@warblerjs/i18n", "0.1.1"));
+    expect(plan.packages[0]?.currentVersion).toBe("0.1.1");
+    expect(plan.packages[0]?.targetVersion).toBe("0.1.2");
+    expect(plan.packages[0]?.reason).toBe("explicit-patch");
+    expect(plan.packages[0]?.shouldPublish).toBe(true);
+  });
+
+  test("direct dependents receive patch releases when dependency metadata changes", async () => {
+    const root = await fixture({
+      i18n: manifest("@warblerjs/i18n"),
+      validators: manifest("@warblerjs/validators", { dependencies: { "@warblerjs/i18n": "workspace:*" } }),
+      core: manifest("@warblerjs/core"),
+    });
+    const plan = await planFor(root, {
+      explicitReleases: [{ packageName: "@warblerjs/i18n", bump: "patch" }],
+    },
+    published("@warblerjs/i18n", "0.1.0"),
+    published("@warblerjs/validators", "0.1.0", { dependencies: { "@warblerjs/i18n": "0.1.0" } }),
+    published("@warblerjs/core", "0.1.0"));
+    const validators = plan.packages.find((item) => item.name === "@warblerjs/validators");
+    const core = plan.packages.find((item) => item.name === "@warblerjs/core");
+    expect(validators?.targetVersion).toBe("0.1.1");
+    expect(validators?.reason).toBe("dependency-propagation");
+    expect(core?.shouldPublish).toBe(false);
+  });
+
+  test("dependency propagation recurses transitively", async () => {
+    const root = await fixture({
+      i18n: manifest("@warblerjs/i18n"),
+      validators: manifest("@warblerjs/validators", { dependencies: { "@warblerjs/i18n": "workspace:*" } }),
+      compiler: manifest("@warblerjs/compiler", { dependencies: { "@warblerjs/validators": "workspace:*" } }),
+      cli: manifest("@warblerjs/cli", { dependencies: { "@warblerjs/compiler": "workspace:*" } }),
+    });
+    const plan = await planFor(root, {
+      explicitReleases: [{ packageName: "@warblerjs/i18n", bump: "patch" }],
+    },
+    published("@warblerjs/i18n", "0.1.0"),
+    published("@warblerjs/validators", "0.1.0", { dependencies: { "@warblerjs/i18n": "0.1.0" } }),
+    published("@warblerjs/compiler", "0.1.0", { dependencies: { "@warblerjs/validators": "0.1.0" } }),
+    published("@warblerjs/cli", "0.1.0", { dependencies: { "@warblerjs/compiler": "0.1.0" } }));
+    expect(plan.packages.map((item) => [item.name, item.targetVersion, item.reason])).toEqual([
+      ["@warblerjs/i18n", "0.1.1", "explicit-patch"],
+      ["@warblerjs/validators", "0.1.1", "dependency-propagation"],
+      ["@warblerjs/compiler", "0.1.1", "dependency-propagation"],
+      ["@warblerjs/cli", "0.1.1", "dependency-propagation"],
+    ]);
+  });
+
+  test("unrelated published packages remain skipped during explicit patch release", async () => {
+    const root = await fixture({
+      i18n: manifest("@warblerjs/i18n"),
+      validators: manifest("@warblerjs/validators", { dependencies: { "@warblerjs/i18n": "workspace:*" } }),
+      config: manifest("@warblerjs/config"),
+    });
+    const plan = await planFor(root, {
+      explicitReleases: [{ packageName: "@warblerjs/i18n", bump: "patch" }],
+    },
+    published("@warblerjs/i18n", "0.1.0"),
+    published("@warblerjs/validators", "0.1.0", { dependencies: { "@warblerjs/i18n": "0.1.0" } }),
+    published("@warblerjs/config", "0.1.0"));
+    const config = plan.packages.find((item) => item.name === "@warblerjs/config");
+    expect(config?.targetVersion).toBe("0.1.0");
+    expect(config?.shouldPublish).toBe(false);
+    expect(config?.reason).toBe("already-published");
+  });
+
+  test("explicit patch fails safely when target version already exists", async () => {
+    const root = await fixture({ i18n: manifest("@warblerjs/i18n", { version: "0.1.1" }) });
+    await expect(planFor(root, {
+      explicitReleases: [{ packageName: "@warblerjs/i18n", bump: "patch" }],
+    }, published("@warblerjs/i18n", "0.1.1"), published("@warblerjs/i18n", "0.1.2"))).rejects.toThrow(ReleaseError);
+  });
+
+  test("explicit patch rejects prerelease source versions", async () => {
+    const root = await fixture({ i18n: manifest("@warblerjs/i18n", { version: "0.1.0-rc.0" }) });
+    await expect(planFor(root, {
+      explicitReleases: [{ packageName: "@warblerjs/i18n", bump: "patch" }],
+    }, published("@warblerjs/i18n", "0.1.0-rc.0"))).rejects.toThrow("--patch does not support prerelease versions");
+  });
+
+  test("supports multiple explicit patch requests", async () => {
+    const root = await fixture({
+      i18n: manifest("@warblerjs/i18n"),
+      core: manifest("@warblerjs/core"),
+      validators: manifest("@warblerjs/validators", { dependencies: { "@warblerjs/i18n": "workspace:*", "@warblerjs/core": "workspace:*" } }),
+    });
+    const plan = await planFor(root, {
+      explicitReleases: [
+        { packageName: "@warblerjs/i18n", bump: "patch" },
+        { packageName: "@warblerjs/core", bump: "patch" },
+      ],
+    },
+    published("@warblerjs/i18n", "0.1.0"),
+    published("@warblerjs/core", "0.1.0"),
+    published("@warblerjs/validators", "0.1.0", { dependencies: { "@warblerjs/i18n": "0.1.0", "@warblerjs/core": "0.1.0" } }));
+    expect(plan.packages.filter((item) => item.reason === "explicit-patch").map((item) => item.name).sort()).toEqual([
+      "@warblerjs/core",
+      "@warblerjs/i18n",
+    ]);
+    expect(plan.packages.find((item) => item.name === "@warblerjs/validators")?.reason).toBe("dependency-propagation");
+  });
+
+  test("final staged manifest uses propagated concrete dependency versions", async () => {
+    const root = await fixture({
+      i18n: manifest("@warblerjs/i18n"),
+      validators: manifest("@warblerjs/validators", { dependencies: { "@warblerjs/i18n": "workspace:*" } }),
+    });
+    const workspacePackages = await discoverPublishablePackages(root);
+    const plan = await createReleasePlan(root, workspacePackages, new FakeNpm({ published: [
+      published("@warblerjs/i18n", "0.1.0"),
+      published("@warblerjs/validators", "0.1.0", { dependencies: { "@warblerjs/i18n": "0.1.0" } }),
+    ] }), {
+      explicitReleases: [{ packageName: "@warblerjs/i18n", bump: "patch" }],
+    });
+    const validatorsWorkspace = workspacePackages.find((item) => item.name === "@warblerjs/validators")!;
+    const validatorsRelease = plan.packages.find((item) => item.name === "@warblerjs/validators")!;
+    const packed = await packReleasePackage(validatorsWorkspace, validatorsRelease, targetVersionMap(plan));
+    expect(packed.manifest.dependencies?.["@warblerjs/i18n"]).toBe("0.1.1");
+    expect(JSON.stringify(packed.manifest)).not.toContain("workspace:");
+  });
+
+  test("release order is deterministic across branched dependency graphs", async () => {
+    const root = await fixture({
+      core: manifest("@warblerjs/core"),
+      validators: manifest("@warblerjs/validators", { dependencies: { "@warblerjs/core": "workspace:*" } }),
+      runtime: manifest("@warblerjs/runtime", { dependencies: { "@warblerjs/core": "workspace:*" } }),
+      cli: manifest("@warblerjs/cli", { dependencies: { "@warblerjs/runtime": "workspace:*", "@warblerjs/validators": "workspace:*" } }),
+    });
+    const expected = ["@warblerjs/core", "@warblerjs/runtime", "@warblerjs/validators", "@warblerjs/cli"];
+    for (let index = 0; index < 3; index++) {
+      const plan = await planFor(root);
+      expect(plan.packages.map((item) => item.name)).toEqual(expected);
+    }
   });
 });
 
@@ -173,6 +314,20 @@ describe("release validation and execution", () => {
     expect(result.published).toEqual(["@warblerjs/core@0.1.0"]);
     expect(npm.published).toEqual([]);
   });
+
+  test("explicit patch dry-run never publishes while reporting planned releases", async () => {
+    const root = await fixture({ i18n: manifest("@warblerjs/i18n", { version: "0.1.1" }) });
+    const npm = new FakeNpm({ published: [published("@warblerjs/i18n", "0.1.1")] });
+    const result = await runRelease({
+      root,
+      npm,
+      dryRun: true,
+      noTests: true,
+      explicitReleases: [{ packageName: "@warblerjs/i18n", bump: "patch" }],
+    });
+    expect(result.published).toEqual(["@warblerjs/i18n@0.1.2"]);
+    expect(npm.published).toEqual([]);
+  });
 });
 
 async function fixture(packages: Readonly<Record<string, PackageManifest>>): Promise<string> {
@@ -210,9 +365,21 @@ function published(name: string, version: string, metadata: Partial<PublishedPac
   });
 }
 
-async function planFor(root: string, ...publishedMetadata: readonly (PublishedPackageMetadata & { readonly name: string })[]) {
+async function planFor(
+  root: string,
+  optionsOrFirstPublished?: ReleasePlannerOptions | (PublishedPackageMetadata & { readonly name: string }),
+  ...publishedMetadata: readonly (PublishedPackageMetadata & { readonly name: string })[]
+) {
+  const options = isPlannerOptions(optionsOrFirstPublished) ? optionsOrFirstPublished : {};
+  const publishedItems = optionsOrFirstPublished === undefined || isPlannerOptions(optionsOrFirstPublished)
+    ? publishedMetadata
+    : [optionsOrFirstPublished, ...publishedMetadata];
   const packages = await discoverPublishablePackages(root);
-  return createReleasePlan(root, packages, new FakeNpm({ published: publishedMetadata }));
+  return createReleasePlan(root, packages, new FakeNpm({ published: publishedItems }), options);
+}
+
+function isPlannerOptions(value: ReleasePlannerOptions | (PublishedPackageMetadata & { readonly name: string }) | undefined): value is ReleasePlannerOptions {
+  return value !== undefined && !("exists" in value);
 }
 
 class FakeNpm implements NpmClient {

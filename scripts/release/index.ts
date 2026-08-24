@@ -10,14 +10,16 @@ export type {
   PublishedPackageMetadata,
   ReleaseOptions,
   ReleasePackage,
+  ReleaseReason,
   ReleasePlan,
   ReleaseResult,
+  ExplicitReleaseRequest,
   WorkspacePackage,
 } from "./types";
 export { ReleaseError } from "./types";
 export { createReleasePlan } from "./planner";
 export { discoverPublishablePackages, scanStaleWarblerReferences } from "./discovery";
-export { resolveWorkspaceRange, npmTag, bumpRepairVersion } from "./semver";
+export { resolveWorkspaceRange, npmTag, bumpRepairVersion, bumpStablePatchVersion } from "./semver";
 export { assertPublishableManifest, releaseManifest } from "./manifest";
 
 export async function runRelease(options: ReleaseOptions): Promise<ReleaseResult> {
@@ -30,6 +32,7 @@ export async function runRelease(options: ReleaseOptions): Promise<ReleaseResult
   const plan = await createReleasePlan(options.root, workspacePackages, npm, {
     ...(options.packageName === undefined ? {} : { packageName: options.packageName }),
     ...(options.fromPackage === undefined ? {} : { fromPackage: options.fromPackage }),
+    ...(options.explicitReleases === undefined ? {} : { explicitReleases: options.explicitReleases }),
   });
   if (plan.staleReferences.length > 0) {
     const first = plan.staleReferences[0]!;
@@ -100,7 +103,11 @@ export function formatPlan(plan: ReleasePlan): string {
     const version = item.currentVersion === item.targetVersion
       ? item.targetVersion
       : `${item.currentVersion} -> ${item.targetVersion}`;
-    rows.push(`${marker.padEnd(7)} ${item.name}@${version} (${item.reason}, tag ${item.npmTag})`);
+    rows.push(`${marker.padEnd(7)} ${item.name}@${version} (${formatReason(item.reason)}, tag ${item.npmTag})`);
   }
   return rows.join("\n");
+}
+
+function formatReason(reason: string): string {
+  return reason.replace(/-/gu, " ");
 }

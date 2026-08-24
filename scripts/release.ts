@@ -2,12 +2,13 @@
 import { discoverPublishablePackages, formatPlan, runRelease } from "./release/index";
 import { createReleasePlan } from "./release/planner";
 import { RegistryNpmClient } from "./release/npm-client";
-import { ReleaseError, NPM_REGISTRY } from "./release/types";
+import { ReleaseError, NPM_REGISTRY, type ExplicitReleaseRequest } from "./release/types";
 
 interface CLIFlags {
   readonly dryRun: boolean;
   readonly packageName?: string;
   readonly fromPackage?: string;
+  readonly explicitReleases: readonly ExplicitReleaseRequest[];
   readonly noTests: boolean;
   readonly json: boolean;
   readonly registry: string;
@@ -23,6 +24,7 @@ try {
   const plan = await createReleasePlan(root, packages, npm, {
     ...(flags.packageName === undefined ? {} : { packageName: flags.packageName }),
     ...(flags.fromPackage === undefined ? {} : { fromPackage: flags.fromPackage }),
+    explicitReleases: flags.explicitReleases,
   });
   if (flags.json) console.log(JSON.stringify({ plan }, null, 2));
   else console.log(formatPlan(plan));
@@ -36,6 +38,7 @@ try {
     allowDirty: flags.allowDirty,
     ...(flags.packageName === undefined ? {} : { packageName: flags.packageName }),
     ...(flags.fromPackage === undefined ? {} : { fromPackage: flags.fromPackage }),
+    explicitReleases: flags.explicitReleases,
     npm,
   });
 
@@ -68,6 +71,7 @@ function parseFlags(args: readonly string[]): CLIFlags {
   let json = false;
   let registry: string = NPM_REGISTRY;
   let allowDirty = false;
+  const explicitReleases: ExplicitReleaseRequest[] = [];
   for (let index = 0; index < args.length; index++) {
     const arg = args[index]!;
     if (arg === "--dry-run") { dryRun = true; continue; }
@@ -76,6 +80,10 @@ function parseFlags(args: readonly string[]): CLIFlags {
     if (arg === "--allow-dirty") { allowDirty = true; continue; }
     if (arg === "--package") { packageName = value(args, ++index, arg); continue; }
     if (arg === "--from") { fromPackage = value(args, ++index, arg); continue; }
+    if (arg === "--patch") {
+      explicitReleases.push(Object.freeze({ packageName: value(args, ++index, arg), bump: "patch" }));
+      continue;
+    }
     if (arg === "--registry") { registry = value(args, ++index, arg); continue; }
     throw new ReleaseError(`Unknown release flag: ${arg}`);
   }
@@ -85,6 +93,7 @@ function parseFlags(args: readonly string[]): CLIFlags {
     json,
     registry,
     allowDirty,
+    explicitReleases: Object.freeze(explicitReleases),
     ...(packageName === undefined ? {} : { packageName }),
     ...(fromPackage === undefined ? {} : { fromPackage }),
   });
