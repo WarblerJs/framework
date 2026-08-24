@@ -1,1 +1,1131 @@
-var s=(e,t)=>()=>(e&&(t=e(e=0)),t);var j=()=>{};var z=()=>{};var M=s(()=>{z();j()});var R=()=>{};var H=s(()=>{R()});var N=()=>{};var u;var T=s(()=>{u=class u extends Error{constructor(e){super(`Warbler FormBuilder: ${e}`);this.name="FormBuilderError"}}});function D(e,t){let r=t.getElementById(e);if(r===null||r.tagName!=="FORM")throw new u(`form "#${e}" was not found.`);return r}function q(e,t){let r=[];for(let i of Array.from(e.elements))if(be(i)&&i.name===t)r.push(i);if(r.length===0)throw new u(`field "${t}" was not found in form "#${e.id}".`);return Object.freeze(r)}function P(e,t){for(let r of Array.from(e.querySelectorAll("[data-wbr-error-for]")))if(r.getAttribute("data-wbr-error-for")===t)return r;return}function B(e){return e.querySelector("[data-wbr-form-errors]")??void 0}function be(e){return e.tagName==="INPUT"||e.tagName==="SELECT"||e.tagName==="TEXTAREA"}function k(e){return e.replace(/[^A-Za-z0-9_-]/gu,"-")}var E=s(()=>{T()});function ge(e){let t=ye;if(t===void 0||t.disposed||e.has(t))return;e.add(t),t.dependencies.add(e)}function ve(e){for(let t of[...e])if(!t.disposed)t.notify()}function l(e){let t=e,r=new Set,i=()=>(ge(r),t);return i.set=(o)=>{if(Object.is(t,o))return;t=o,ve(r)},i.update=(o)=>i.set(o(t)),i}var ye;var F=()=>{};function w(e,t){e.removeAttribute("data-wbr-valid"),e.removeAttribute("data-wbr-invalid"),e.removeAttribute("data-wbr-pending"),e.setAttribute(`data-wbr-${t}`,"")}function d(e,t,r){if(r)e.setAttribute(t,"");else e.removeAttribute(t)}class b{#e=[];#t=!1;get destroyed(){return this.#t}add(e){if(this.#t){U(e);return}this.#e.push(y(e))}destroy(){if(this.#t)return;this.#t=!0;for(let e of this.#e.splice(0).reverse())U(e)}}class A{#e=new WeakMap;replace(e,t){this.#e.get(e)?.destroy();let r=t();return this.#e.set(e,r),r}release(e,t){if(this.#e.get(e)===t)this.#e.delete(e)}get(e){return this.#e.get(e)}}function y(e){let t=!0;return()=>{if(!t)return;t=!1,e()}}function U(e){try{e()}catch{}}class O{name;element;elements;value;status=l("valid");touched=l(!1);dirty=l(!1);errors=l(Object.freeze([]));#e;#t;#o;#n=new b;#p=new Map;#b=new Set;#y=new Set;#g=new Set;#f=new Set;#s;#m=Object.freeze([]);#u=!1;#i=()=>{};#T;#E;constructor(e,t,r,i,o){this.name=e;this.element=r[0],this.elements=r,this.#e=i,this.#t=o,this.#o=P(t,e),this.#T=this.#o?.textContent??void 0,this.#E=(this.#o?.id.length??0)>0,this.#v(t.id),this.#k(),this.#d(i),this.value=l(i),this.#h(),this.validate(!1)}valid=()=>this.status()==="valid";invalid=()=>this.status()==="invalid";setMutationCallback(e){this.#l(),this.#i=e}setValue(e){this.#l(),this.#s=void 0,this.#d(e),this.value.set(e),this.#S(),this.#i()}setError(e){this.#l(),this.#s=e,this.validate(!0),this.#i()}clearError(){this.#l(),this.#s=void 0,this.validate(this.#u),this.#i()}setFormErrors(e){if(this.#n.destroyed)return;this.#m=e,this.validate(this.#u)}markAsTouched(){this.#l(),this.touched.set(!0);for(let e of this.elements)d(e,"data-wbr-touched",!0);this.#u=!0,this.#w()}markAsUntouched(){this.#l(),this.touched.set(!1);for(let e of this.elements)d(e,"data-wbr-touched",!1);this.#u=!1,this.#w()}markAsDirty(){this.#l(),this.dirty.set(!0);for(let e of this.elements)d(e,"data-wbr-dirty",!0)}markAsPristine(){this.#l(),this.dirty.set(!1);for(let e of this.elements)d(e,"data-wbr-dirty",!1)}validate(e=this.#u){this.#l(),this.#u=e;for(let o of this.elements)o.setCustomValidity("");let t=[];for(let o of this.#t)if(!o.validate(this.value()))t.push(o.message);if(t.length===0){for(let o of this.elements)if(!o.checkValidity()){t.push(o.validationMessage);break}}if(t.push(...this.#m),this.#s!==void 0)t.push(this.#s);let r=Object.freeze([...new Set(t.filter((o)=>o.length>0))]);this.errors.set(r);let i=r.length===0?"valid":"invalid";this.status.set(i);for(let o of this.elements)if(w(o,i),i==="invalid")o.setAttribute("aria-invalid","true");else o.removeAttribute("aria-invalid");return this.#w(),i==="valid"}onInput(e){return this.#l(),x(this.#b,e)}onChange(e){return this.#l(),x(this.#y,e)}onFocus(e){return this.#l(),x(this.#g,e)}onBlur(e){return this.#l(),x(this.#f,e)}destroy(){if(this.#n.destroyed)return;this.#n.destroy(),this.#b.clear(),this.#y.clear(),this.#g.clear(),this.#f.clear(),this.#s=void 0,this.#m=Object.freeze([]),this.#i=()=>{},this.#t=Object.freeze([]);for(let e of this.elements){for(let t of["data-wbr-valid","data-wbr-invalid","data-wbr-pending","data-wbr-touched","data-wbr-dirty"])e.removeAttribute(t);this.#r(e)}if(this.#o!==void 0){if(this.#o.textContent=this.#T??"",!this.#E)this.#o.removeAttribute("id")}this.#o=void 0,this.#p.clear()}#h(){for(let e of this.elements)this.#c(e,"input",()=>this.#x(this.#b)),this.#c(e,"change",()=>this.#x(this.#y)),this.#c(e,"focus",()=>{for(let t of this.#g)t()}),this.#c(e,"blur",()=>{this.markAsTouched(),this.validate(!0);for(let t of this.#f)t()})}#c(e,t,r){e.addEventListener(t,r),this.#n.add(()=>e.removeEventListener(t,r))}#x(e){if(this.#n.destroyed)return;this.#s=void 0;let t=this.#F();this.value.set(t),this.#S();for(let r of e)r(t);this.#i()}#S(){let e=!Te(this.value(),this.#e);this.dirty.set(e);for(let t of this.elements)d(t,"data-wbr-dirty",e)}#k(){for(let e of this.#t){let t=e.constraint;if(t===void 0)continue;for(let r of this.elements){if(t.required)this.#a(r,"required"),r.required=!0;if(t.type!==void 0&&r.tagName==="INPUT")this.#a(r,"type"),r.type=t.type;if(t.minLength!==void 0&&r.tagName!=="SELECT")this.#a(r,"minlength"),r.minLength=t.minLength;if(t.maxLength!==void 0&&r.tagName!=="SELECT")this.#a(r,"maxlength"),r.maxLength=t.maxLength;if(t.min!==void 0&&r.tagName==="INPUT")this.#a(r,"min"),r.min=String(t.min);if(t.max!==void 0&&r.tagName==="INPUT")this.#a(r,"max"),r.max=String(t.max);if(t.pattern!==void 0&&r.tagName==="INPUT")this.#a(r,"pattern"),r.pattern=t.pattern}}}#F(){let e=this.element;if(e.tagName==="INPUT"){let t=e;if(t.type==="radio")return this.elements.find((r)=>r.checked)?.value??"";if(t.type==="checkbox"){if(Array.isArray(this.#e))return this.elements.filter((r)=>r.checked).map((r)=>r.value);return t.checked}if(t.type==="number"&&typeof this.#e==="number")return Number.isNaN(t.valueAsNumber)?0:t.valueAsNumber}return e.value}#d(e){let t=this.element;if(t.tagName==="INPUT"&&t.type==="radio")for(let r of this.elements)r.checked=String(r.value)===String(e);else if(t.tagName==="INPUT"&&t.type==="checkbox")for(let r of this.elements)r.checked=Array.isArray(e)?e.map(String).includes(r.value):Boolean(e);else t.value=e===null?"":String(e)}#v(e){let t=this.#o;if(t===void 0)return;let r=t.id||`wbr-${k(e)}-${k(this.name)}-error`;t.id=r;for(let i of this.elements){this.#a(i,"aria-describedby"),this.#a(i,"aria-invalid");let o=new Set((i.getAttribute("aria-describedby")??"").split(/\s+/u).filter(Boolean));o.add(r),i.setAttribute("aria-describedby",[...o].join(" "))}return r}#w(){if(this.#o!==void 0)this.#o.textContent=this.#u?this.errors()[0]??"":""}#a(e,t){let r=this.#p.get(e);if(r===void 0)r=new Map,this.#p.set(e,r);if(!r.has(t))r.set(t,e.getAttribute(t))}#r(e){for(let[t,r]of this.#p.get(e)??[])if(r===null)e.removeAttribute(t);else e.setAttribute(t,r)}#l(){if(this.#n.destroyed)throw new u(`field "${this.name}" has been destroyed.`)}}function x(e,t){return e.add(t),y(()=>{e.delete(t)})}function Te(e,t){return Array.isArray(e)&&Array.isArray(t)?e.length===t.length&&e.every((r,i)=>Object.is(r,t[i])):Object.is(e,t)}var G=s(()=>{F();E();T()});class C{#e;#t=!1;begin(){if(this.#t)throw Error("Form request owner has been destroyed.");this.#e?.abort();let e=new AbortController;return this.#e=e,e}owns(e){return!this.#t&&this.#e===e}finish(e){if(!this.owns(e))return!1;return this.#e=void 0,!0}destroy(){if(this.#t)return;this.#t=!0,this.#e?.abort(),this.#e=void 0}}function K(e){return typeof e==="object"&&e!==null&&"name"in e&&e.name==="AbortError"}function W(e,t){let r=(e.getAttribute("method")??"get").trim().toUpperCase()||"GET",i=new FormData(e);if(r==="GET"||r==="HEAD"){let o=new URL(t);for(let[n,a]of i)if(typeof a==="string")o.searchParams.append(n,a);else o.searchParams.append(n,a.name);return Object.freeze({url:o.href,init:Object.freeze({method:r})})}return Object.freeze({url:t,init:Object.freeze({method:r,body:i})})}function _(e){if(typeof e!=="object"||e===null||Array.isArray(e))return Object.freeze({fields:Object.freeze({})});let t=e,r=Object.create(null),i=t.errors;if(typeof i==="object"&&i!==null&&!Array.isArray(i)){for(let[o,n]of Object.entries(i))if(o!=="__proto__"&&o!=="prototype"&&o!=="constructor"&&typeof n==="string")r[o]=n}return Object.freeze({...typeof t.message==="string"?{message:t.message}:{},fields:Object.freeze(r)})}class V{element;value;status=l("valid");touched=l(!1);dirty=l(!1);submitted=l(!1);submitting=l(!1);#e;#t;#o;#n;#p;#b=new Set;#y=new Set;#g=new Set;#f=new Set;#s;#m;#u;#i=!1;#T;#E;#h=new b;#c=new C;constructor(e,t,r,i,o){this.element=e;this.#e=t,this.#t=r,this.#o=i,this.#n=B(e),this.#p=this.#n?.textContent??void 0,this.value=l(this.#F()),this.#u=J(this.value());for(let n of Object.values(this.#e))n.setMutationCallback(()=>this.#x());this.#T=(n)=>{this.#S(n)},this.#E=()=>{this.submitted.set(!0),d(this.element,"data-wbr-submitted",!0),this.markAsTouched(),this.validate()},e.addEventListener("submit",this.#T),e.addEventListener("invalid",this.#E,!0),this.#h.add(()=>e.removeEventListener("submit",this.#T)),this.#h.add(()=>e.removeEventListener("invalid",this.#E,!0)),this.#h.add(()=>this.#c.destroy()),this.#h.add(o);for(let n of this.#d())this.#h.add(()=>n.destroy());this.validate(!1)}valid=()=>this.status()==="valid";invalid=()=>this.status()==="invalid";field(e){this.#r();let t=this.#e[e];if(t===void 0)throw new u(`field "${e}" is not registered.`);return t}setValue(e){this.#r();let t=Object.keys(this.#e),r=Object.keys(e);if(t.length!==r.length||t.some((i)=>!Object.hasOwn(e,i)))throw new u("setValue() requires every registered field and no unknown fields.");this.patchValue(e)}patchValue(e){this.#r();for(let t of Object.keys(e)){let r=this.#e[t];if(r===void 0)throw new u(`patchValue() received unknown field "${t}".`);let i=e[t];if(i!==void 0)r.setValue(i)}this.#x()}setError(e){this.#r(),this.#s=e,this.#a(),this.#w("invalid")}clearError(){this.#r(),this.#s=void 0,this.#a(),this.validate()}markAsTouched(){this.#r();for(let e of this.#d())e.markAsTouched();this.#v()}markAsUntouched(){this.#r();for(let e of this.#d())e.markAsUntouched();this.#v()}markAsDirty(){this.#r();for(let e of this.#d())e.markAsDirty();this.#v()}markAsPristine(){this.#r();for(let e of this.#d())e.markAsPristine();this.#v()}validate(e=this.submitted()||this.touched()){this.#r(),this.#m=void 0;for(let i of this.#d())i.setFormErrors(Object.freeze([]));let t=this.#d().every((i)=>i.validate(e)),r=new Map;for(let i of this.#t){let o=i.validate(this.#F());if(o===null)continue;if(t=!1,o.field===void 0)this.#m=o.message;else{let n=o.field,a=r.get(n)??[];a.push(o.message),r.set(n,a)}}for(let[i,o]of r)this.#e[i]?.setFormErrors(Object.freeze(o));if(this.#s!==void 0||this.#m!==void 0)t=!1;return this.#w(t?"valid":"invalid"),this.#a(),t}onChange(e){return this.#r(),S(this.#b,e)}onSubmit(e){return this.#r(),S(this.#y,e)}onSuccess(e){return this.#r(),S(this.#g,e)}onError(e){return this.#r(),S(this.#f,e)}destroy(){if(this.#i)return;this.#i=!0,this.#h.destroy(),this.#b.clear(),this.#y.clear(),this.#g.clear(),this.#f.clear(),this.#t=Object.freeze([]),this.#o=void 0;for(let e of Object.keys(this.#e))delete this.#e[e];this.#s=void 0,this.#m=void 0;for(let e of["data-wbr-valid","data-wbr-invalid","data-wbr-pending","data-wbr-touched","data-wbr-dirty","data-wbr-submitted","data-wbr-submitting"])this.element.removeAttribute(e);if(this.#n!==void 0)this.#n.textContent=this.#p??"";this.#n=void 0}#x(){if(this.#i)return;this.clearErrorWithoutValidation();let e=this.#F();this.value.set(e),this.validate(),this.#v();let t=J(e);if(t!==this.#u){this.#u=t;for(let r of this.#b)r(e)}}async#S(e){if(this.#i){e.preventDefault();return}let t=this.element.hasAttribute("action");if(this.submitted.set(!0),d(this.element,"data-wbr-submitted",!0),this.submitting()){e.preventDefault();return}if(this.markAsTouched(),!this.validate(!0)){e.preventDefault(),this.element.reportValidity();return}let r=this.#F();for(let o of this.#y)o(r);if(t)return;e.preventDefault(),this.submitting.set(!0),d(this.element,"data-wbr-submitting",!0);let i=this.#c.begin();try{let o=W(this.element,globalThis.location.href),n=this.#o;if(n===void 0)return;let a=await n(o.url,{...o.init,signal:i.signal});if(!this.#c.owns(i))return;if(!a.ok){if(await this.#k(a),!this.#c.owns(i))return;let h=Error(`Form submission failed with HTTP ${a.status}.`);for(let f of this.#f)f(h);return}for(let h of this.#g)h(a)}catch(o){if(this.#c.owns(i)&&!K(o))for(let n of this.#f)n(o)}finally{if(this.#c.finish(i)&&!this.#i)this.submitting.set(!1),d(this.element,"data-wbr-submitting",!1)}}async#k(e){if(this.#i)return;if(!e.headers.get("content-type")?.toLowerCase().includes("application/json"))return;let t;try{t=await e.clone().json()}catch{return}if(this.#i)return;let r=_(t);for(let[i,o]of Object.entries(r.fields)){let n=this.#e[i];if(n!==void 0)n.setError(o)}if(r.message!==void 0)this.setError(r.message);this.markAsTouched(),this.validate(!0)}#F(){let e=Object.create(null);for(let[t,r]of Object.entries(this.#e))e[t]=r.value();return Object.freeze(e)}#d(){return Object.values(this.#e)}#v(){let e=this.#d().some((r)=>r.touched()),t=this.#d().some((r)=>r.dirty());this.touched.set(e),this.dirty.set(t),d(this.element,"data-wbr-touched",e),d(this.element,"data-wbr-dirty",t)}#w(e){this.status.set(e),w(this.element,e)}#a(){if(this.#n!==void 0)this.#n.textContent=this.#s??(this.submitted()||this.touched()?this.#m??"":"")}clearErrorWithoutValidation(){this.#s=void 0,this.#a()}#r(){if(this.#i)throw new u(`form "#${this.element.id}" has been destroyed.`)}}function S(e,t){return e.add(t),y(()=>{e.delete(t)})}function J(e){return JSON.stringify(e,(t,r)=>r instanceof File?Object.freeze({name:r.name,size:r.size,type:r.type}):r)}var X=s(()=>{F();E();T()});var m=(e,t,r,i)=>Object.freeze({scope:"field",kind:e,message:t,validate:r,...i===void 0?{}:{constraint:Object.freeze(i)}}),Z=(e,t)=>{if(!Number.isSafeInteger(e)||e<0)throw RangeError(`${t} must be a non-negative safe integer.`);return e},Q=(e,t)=>{if(!Number.isFinite(e))throw RangeError(`${t} must be finite.`);return e},Ee=(e)=>e===null||e===""||e===!1||Array.isArray(e)&&e.length===0,Fe=(e)=>{let t=typeof e==="string"?e:e.source;if(t.length===0)throw RangeError("Pattern must not be empty.");return t},L;var Y=s(()=>{L=Object.freeze({required:(e="This field is required.")=>m("required",e,(t)=>!Ee(t),{required:!0}),string:(e="Enter a valid value.")=>m("string",e,(t)=>typeof t==="string"),email:(e="Enter a valid email address.")=>m("email",e,(t)=>t===""||/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(t),{type:"email"}),number:(e="Enter a valid number.")=>m("number",e,(t)=>t===""||Number.isFinite(typeof t==="number"?t:Number(t)),{type:"number"}),boolean:(e="Enter a valid boolean value.")=>m("boolean",e,(t)=>typeof t==="boolean"),minLength:(e,t=`Enter at least ${e} characters.`)=>{let r=Z(e,"Minimum length");return m("minLength",t,(i)=>i===""||i.length>=r,{minLength:r})},maxLength:(e,t=`Enter no more than ${e} characters.`)=>{let r=Z(e,"Maximum length");return m("maxLength",t,(i)=>i.length<=r,{maxLength:r})},min:(e,t=`Enter a value of at least ${e}.`)=>{let r=Q(e,"Minimum");return m("min",t,(i)=>i===""||Number(i)>=r,{min:r})},max:(e,t=`Enter a value no greater than ${e}.`)=>{let r=Q(e,"Maximum");return m("max",t,(i)=>i===""||Number(i)<=r,{max:r})},pattern:(e,t="Enter a value in the required format.")=>{let r=Fe(e),i=new RegExp(`^(?:${r})$`,typeof e==="string"?"u":e.flags.replaceAll("g","").replaceAll("y",""));return m("pattern",t,(o)=>o===""||i.test(o),{pattern:r})},match:(e,t,r="Values do not match.")=>Object.freeze({scope:"form",kind:"match",validate:(i)=>Object.is(i[e],i[t])?null:Object.freeze({field:t,message:r})}),form:(e,t)=>Object.freeze({scope:"form",kind:"form",validate:(r)=>e(r)?null:Object.freeze({...t.field===void 0?{}:{field:t.field},message:t.message})})})});function g(e,t,r={}){if(typeof document>"u")throw Error("Warbler FormBuilder requires a browser document.");let i=D(e,document);return ee.replace(i,()=>{let o=t(L),n=Object.create(null);try{for(let[f,p]of Object.entries(o)){let[he,...pe]=p;n[f]=new O(f,i,q(i,f),he,pe)}}catch(f){for(let p of Object.values(n))p.destroy();throw f}let a=typeof r.validators==="function"?r.validators(L):r.validators??Object.freeze([]),h;try{h=new V(i,n,a,r.fetch??globalThis.fetch.bind(globalThis),()=>ee.release(i,h))}catch(f){for(let p of Object.values(n))p.destroy();throw f}return h})}var ee;var te=s(()=>{E();G();X();Y();ee=new A});function v(e,t){if(document.documentElement.dataset.page!==e)return;console.log("Current page:",document.documentElement.dataset.page),t()}var re=s(()=>{te();N()});var ie=()=>{};var oe=()=>{};var ne=()=>{};var se=s(()=>{oe();ne()});var ae=()=>{};var le=()=>{};var de=()=>{};var ue=()=>{};var I=s(()=>{M();H();re();ie();se();ae();le();de();F();ue()});var ce=s(()=>{I();v("register",()=>{g("register-form",(t)=>({email:["bellib6@gmail.com",t.required("Email is required"),t.email("Enter a valid email")],password:["",t.required("Password is required"),t.string(),t.minLength(8,"Password must contain at least 8 characters")],confirmPassword:["",t.required("Confirm your password")]}),{validators:(t)=>[t.match("password","confirmPassword","Passwords do not match")]}).onSubmit((t)=>{console.log("submit:",t);let r=document.getElementById("login-form")})})});var me=s(()=>{I();v("login",()=>{console.log("Login page dev"),g("login-form",(t)=>({email:["bellib6@gmail.com",t.required("Email is required"),t.email("Enter a valid email")],password:["",t.required("Password is required"),t.string(),t.minLength(8,"Password must contain at least 8 characters")],remember:[!1,t.boolean()]})).onSubmit((t)=>{console.log("submit:",t);let r=document.getElementById("login-form")})})});var we={};var fe=s(()=>{ce();me()});Promise.resolve().then(() => fe());document.documentElement.dataset.warbler="ready";
+var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
+
+// ../packages/frontend/src/http/errors.ts
+var init_errors = () => {};
+
+// ../packages/frontend/src/http/client.ts
+var init_client = () => {};
+
+// ../packages/frontend/src/http/index.ts
+var init_http = __esm(() => {
+  init_client();
+  init_errors();
+});
+
+// ../packages/frontend/src/csrf/token.ts
+var init_token = () => {};
+
+// ../packages/frontend/src/csrf/index.ts
+var init_csrf = __esm(() => {
+  init_token();
+});
+
+// ../packages/frontend/src/forms/serialize.ts
+var init_serialize = () => {};
+
+// ../packages/frontend/src/forms/errors.ts
+var FormBuilderError;
+var init_errors2 = __esm(() => {
+  FormBuilderError = class FormBuilderError extends Error {
+    constructor(message) {
+      super(`Warbler FormBuilder: ${message}`);
+      this.name = "FormBuilderError";
+    }
+  };
+});
+
+// ../packages/frontend/src/forms/dom.ts
+function findForm(id, root) {
+  const candidate = root.getElementById(id);
+  if (candidate === null || candidate.tagName !== "FORM") {
+    throw new FormBuilderError(`form "#${id}" was not found.`);
+  }
+  return candidate;
+}
+function findNamedControls(form, name) {
+  const controls = [];
+  for (const item of Array.from(form.elements)) {
+    if (isFormControl(item) && item.name === name)
+      controls.push(item);
+  }
+  if (controls.length === 0)
+    throw new FormBuilderError(`field "${name}" was not found in form "#${form.id}".`);
+  return Object.freeze(controls);
+}
+function findErrorElement(form, name) {
+  for (const item of Array.from(form.querySelectorAll("[data-wbr-error-for]"))) {
+    if (item.getAttribute("data-wbr-error-for") === name)
+      return item;
+  }
+  return;
+}
+function findFormErrorElement(form) {
+  return form.querySelector("[data-wbr-form-errors]") ?? undefined;
+}
+function isFormControl(value) {
+  return value.tagName === "INPUT" || value.tagName === "SELECT" || value.tagName === "TEXTAREA";
+}
+function safeDomId(value) {
+  return value.replace(/[^A-Za-z0-9_-]/gu, "-");
+}
+var init_dom = __esm(() => {
+  init_errors2();
+});
+
+// ../packages/frontend/src/signals/init.ts
+function track(dependency) {
+  const observer = activeObserver;
+  if (observer === undefined || observer.disposed || dependency.has(observer))
+    return;
+  dependency.add(observer);
+  observer.dependencies.add(dependency);
+}
+function publish(dependency) {
+  for (const observer of [...dependency])
+    if (!observer.disposed)
+      observer.notify();
+}
+function signal(initialValue) {
+  let value = initialValue;
+  const subscribers = new Set;
+  const read = () => {
+    track(subscribers);
+    return value;
+  };
+  read.set = (nextValue) => {
+    if (Object.is(value, nextValue))
+      return;
+    value = nextValue;
+    publish(subscribers);
+  };
+  read.update = (updater) => read.set(updater(value));
+  return read;
+}
+var activeObserver;
+
+// ../packages/frontend/src/signals/index.ts
+var init_signals = () => {};
+
+// ../packages/frontend/src/forms/state.ts
+function synchronizeStatus(element, status) {
+  element.removeAttribute("data-wbr-valid");
+  element.removeAttribute("data-wbr-invalid");
+  element.removeAttribute("data-wbr-pending");
+  element.setAttribute(`data-wbr-${status}`, "");
+}
+function synchronizeBooleanState(element, name, enabled) {
+  if (enabled)
+    element.setAttribute(name, "");
+  else
+    element.removeAttribute(name);
+}
+
+// ../packages/frontend/src/forms/lifecycle.ts
+class CleanupRegistry {
+  #cleanups = [];
+  #destroyed = false;
+  get destroyed() {
+    return this.#destroyed;
+  }
+  add(cleanup) {
+    if (this.#destroyed) {
+      safely(cleanup);
+      return;
+    }
+    this.#cleanups.push(once(cleanup));
+  }
+  destroy() {
+    if (this.#destroyed)
+      return;
+    this.#destroyed = true;
+    for (const cleanup of this.#cleanups.splice(0).reverse())
+      safely(cleanup);
+  }
+}
+
+class InstanceRegistry {
+  #instances = new WeakMap;
+  replace(element, create) {
+    this.#instances.get(element)?.destroy();
+    const instance = create();
+    this.#instances.set(element, instance);
+    return instance;
+  }
+  release(element, instance) {
+    if (this.#instances.get(element) === instance)
+      this.#instances.delete(element);
+  }
+  get(element) {
+    return this.#instances.get(element);
+  }
+}
+function once(cleanup) {
+  let active = true;
+  return () => {
+    if (!active)
+      return;
+    active = false;
+    cleanup();
+  };
+}
+function safely(cleanup) {
+  try {
+    cleanup();
+  } catch {}
+}
+
+// ../packages/frontend/src/forms/form-control.ts
+class FormControl {
+  name;
+  element;
+  elements;
+  value;
+  status = signal("valid");
+  touched = signal(false);
+  dirty = signal(false);
+  errors = signal(Object.freeze([]));
+  #initial;
+  #validators;
+  #errorElement;
+  #lifecycle = new CleanupRegistry;
+  #originalAttributes = new Map;
+  #inputCallbacks = new Set;
+  #changeCallbacks = new Set;
+  #focusCallbacks = new Set;
+  #blurCallbacks = new Set;
+  #externalError;
+  #formErrors = Object.freeze([]);
+  #showErrors = false;
+  #onMutation = () => {};
+  #originalErrorText;
+  #errorHadId;
+  constructor(name, form, elements, initial, validators) {
+    this.name = name;
+    this.element = elements[0];
+    this.elements = elements;
+    this.#initial = initial;
+    this.#validators = validators;
+    this.#errorElement = findErrorElement(form, name);
+    this.#originalErrorText = this.#errorElement?.textContent ?? undefined;
+    this.#errorHadId = (this.#errorElement?.id.length ?? 0) > 0;
+    this.#prepareAccessibility(form.id);
+    this.#applyConstraints();
+    this.#write(initial);
+    this.value = signal(initial);
+    this.#listen();
+    this.validate(false);
+  }
+  valid = () => this.status() === "valid";
+  invalid = () => this.status() === "invalid";
+  setMutationCallback(callback) {
+    this.#assertActive();
+    this.#onMutation = callback;
+  }
+  setValue(value) {
+    this.#assertActive();
+    this.#externalError = undefined;
+    this.#write(value);
+    this.value.set(value);
+    this.#synchronizeDirty();
+    this.#onMutation();
+  }
+  setError(message) {
+    this.#assertActive();
+    this.#externalError = message;
+    this.validate(true);
+    this.#onMutation();
+  }
+  clearError() {
+    this.#assertActive();
+    this.#externalError = undefined;
+    this.validate(this.#showErrors);
+    this.#onMutation();
+  }
+  setFormErrors(errors2) {
+    if (this.#lifecycle.destroyed)
+      return;
+    this.#formErrors = errors2;
+    this.validate(this.#showErrors);
+  }
+  markAsTouched() {
+    this.#assertActive();
+    this.touched.set(true);
+    for (const element of this.elements)
+      synchronizeBooleanState(element, "data-wbr-touched", true);
+    this.#showErrors = true;
+    this.#renderErrors();
+  }
+  markAsUntouched() {
+    this.#assertActive();
+    this.touched.set(false);
+    for (const element of this.elements)
+      synchronizeBooleanState(element, "data-wbr-touched", false);
+    this.#showErrors = false;
+    this.#renderErrors();
+  }
+  markAsDirty() {
+    this.#assertActive();
+    this.dirty.set(true);
+    for (const element of this.elements)
+      synchronizeBooleanState(element, "data-wbr-dirty", true);
+  }
+  markAsPristine() {
+    this.#assertActive();
+    this.dirty.set(false);
+    for (const element of this.elements)
+      synchronizeBooleanState(element, "data-wbr-dirty", false);
+  }
+  validate(showErrors = this.#showErrors) {
+    this.#assertActive();
+    this.#showErrors = showErrors;
+    for (const element of this.elements)
+      element.setCustomValidity("");
+    const messages = [];
+    for (const validator of this.#validators)
+      if (!validator.validate(this.value()))
+        messages.push(validator.message);
+    if (messages.length === 0) {
+      for (const element of this.elements) {
+        if (!element.checkValidity()) {
+          messages.push(element.validationMessage);
+          break;
+        }
+      }
+    }
+    messages.push(...this.#formErrors);
+    if (this.#externalError !== undefined)
+      messages.push(this.#externalError);
+    const unique = Object.freeze([...new Set(messages.filter((message) => message.length > 0))]);
+    this.errors.set(unique);
+    const status = unique.length === 0 ? "valid" : "invalid";
+    this.status.set(status);
+    for (const element of this.elements) {
+      synchronizeStatus(element, status);
+      if (status === "invalid")
+        element.setAttribute("aria-invalid", "true");
+      else
+        element.removeAttribute("aria-invalid");
+    }
+    this.#renderErrors();
+    return status === "valid";
+  }
+  onInput(callback) {
+    this.#assertActive();
+    return subscribe(this.#inputCallbacks, callback);
+  }
+  onChange(callback) {
+    this.#assertActive();
+    return subscribe(this.#changeCallbacks, callback);
+  }
+  onFocus(callback) {
+    this.#assertActive();
+    return subscribe(this.#focusCallbacks, callback);
+  }
+  onBlur(callback) {
+    this.#assertActive();
+    return subscribe(this.#blurCallbacks, callback);
+  }
+  destroy() {
+    if (this.#lifecycle.destroyed)
+      return;
+    this.#lifecycle.destroy();
+    this.#inputCallbacks.clear();
+    this.#changeCallbacks.clear();
+    this.#focusCallbacks.clear();
+    this.#blurCallbacks.clear();
+    this.#externalError = undefined;
+    this.#formErrors = Object.freeze([]);
+    this.#onMutation = () => {};
+    this.#validators = Object.freeze([]);
+    for (const element of this.elements) {
+      for (const name of ["data-wbr-valid", "data-wbr-invalid", "data-wbr-pending", "data-wbr-touched", "data-wbr-dirty"])
+        element.removeAttribute(name);
+      this.#restoreAttributes(element);
+    }
+    if (this.#errorElement !== undefined) {
+      this.#errorElement.textContent = this.#originalErrorText ?? "";
+      if (!this.#errorHadId)
+        this.#errorElement.removeAttribute("id");
+    }
+    this.#errorElement = undefined;
+    this.#originalAttributes.clear();
+  }
+  #listen() {
+    for (const element of this.elements) {
+      this.#add(element, "input", () => this.#handleValue(this.#inputCallbacks));
+      this.#add(element, "change", () => this.#handleValue(this.#changeCallbacks));
+      this.#add(element, "focus", () => {
+        for (const callback of this.#focusCallbacks)
+          callback();
+      });
+      this.#add(element, "blur", () => {
+        this.markAsTouched();
+        this.validate(true);
+        for (const callback of this.#blurCallbacks)
+          callback();
+      });
+    }
+  }
+  #add(element, type, callback) {
+    element.addEventListener(type, callback);
+    this.#lifecycle.add(() => element.removeEventListener(type, callback));
+  }
+  #handleValue(callbacks) {
+    if (this.#lifecycle.destroyed)
+      return;
+    this.#externalError = undefined;
+    const value = this.#read();
+    this.value.set(value);
+    this.#synchronizeDirty();
+    for (const callback of callbacks)
+      callback(value);
+    this.#onMutation();
+  }
+  #synchronizeDirty() {
+    const dirty = !equalValue(this.value(), this.#initial);
+    this.dirty.set(dirty);
+    for (const element of this.elements)
+      synchronizeBooleanState(element, "data-wbr-dirty", dirty);
+  }
+  #applyConstraints() {
+    for (const validator of this.#validators) {
+      const constraint = validator.constraint;
+      if (constraint === undefined)
+        continue;
+      for (const element of this.elements) {
+        if (constraint.required) {
+          this.#capture(element, "required");
+          element.required = true;
+        }
+        if (constraint.type !== undefined && element.tagName === "INPUT") {
+          this.#capture(element, "type");
+          element.type = constraint.type;
+        }
+        if (constraint.minLength !== undefined && element.tagName !== "SELECT") {
+          this.#capture(element, "minlength");
+          element.minLength = constraint.minLength;
+        }
+        if (constraint.maxLength !== undefined && element.tagName !== "SELECT") {
+          this.#capture(element, "maxlength");
+          element.maxLength = constraint.maxLength;
+        }
+        if (constraint.min !== undefined && element.tagName === "INPUT") {
+          this.#capture(element, "min");
+          element.min = String(constraint.min);
+        }
+        if (constraint.max !== undefined && element.tagName === "INPUT") {
+          this.#capture(element, "max");
+          element.max = String(constraint.max);
+        }
+        if (constraint.pattern !== undefined && element.tagName === "INPUT") {
+          this.#capture(element, "pattern");
+          element.pattern = constraint.pattern;
+        }
+      }
+    }
+  }
+  #read() {
+    const first = this.element;
+    if (first.tagName === "INPUT") {
+      const input = first;
+      if (input.type === "radio")
+        return this.elements.find((item) => item.checked)?.value ?? "";
+      if (input.type === "checkbox") {
+        if (Array.isArray(this.#initial))
+          return this.elements.filter((item) => item.checked).map((item) => item.value);
+        return input.checked;
+      }
+      if (input.type === "number" && typeof this.#initial === "number")
+        return Number.isNaN(input.valueAsNumber) ? 0 : input.valueAsNumber;
+    }
+    return first.value;
+  }
+  #write(value) {
+    const first = this.element;
+    if (first.tagName === "INPUT" && first.type === "radio") {
+      for (const item of this.elements)
+        item.checked = String(item.value) === String(value);
+    } else if (first.tagName === "INPUT" && first.type === "checkbox") {
+      for (const item of this.elements)
+        item.checked = Array.isArray(value) ? value.map(String).includes(item.value) : Boolean(value);
+    } else
+      first.value = value === null ? "" : String(value);
+  }
+  #prepareAccessibility(formId) {
+    const error = this.#errorElement;
+    if (error === undefined)
+      return;
+    const id = error.id || `wbr-${safeDomId(formId)}-${safeDomId(this.name)}-error`;
+    error.id = id;
+    for (const element of this.elements) {
+      this.#capture(element, "aria-describedby");
+      this.#capture(element, "aria-invalid");
+      const describedBy = new Set((element.getAttribute("aria-describedby") ?? "").split(/\s+/u).filter(Boolean));
+      describedBy.add(id);
+      element.setAttribute("aria-describedby", [...describedBy].join(" "));
+    }
+    return id;
+  }
+  #renderErrors() {
+    if (this.#errorElement !== undefined)
+      this.#errorElement.textContent = this.#showErrors ? this.errors()[0] ?? "" : "";
+  }
+  #capture(element, name) {
+    let attributes = this.#originalAttributes.get(element);
+    if (attributes === undefined) {
+      attributes = new Map;
+      this.#originalAttributes.set(element, attributes);
+    }
+    if (!attributes.has(name))
+      attributes.set(name, element.getAttribute(name));
+  }
+  #restoreAttributes(element) {
+    for (const [name, value] of this.#originalAttributes.get(element) ?? []) {
+      if (value === null)
+        element.removeAttribute(name);
+      else
+        element.setAttribute(name, value);
+    }
+  }
+  #assertActive() {
+    if (this.#lifecycle.destroyed)
+      throw new FormBuilderError(`field "${this.name}" has been destroyed.`);
+  }
+}
+function subscribe(callbacks, callback) {
+  callbacks.add(callback);
+  return once(() => {
+    callbacks.delete(callback);
+  });
+}
+function equalValue(left, right) {
+  return Array.isArray(left) && Array.isArray(right) ? left.length === right.length && left.every((value, index) => Object.is(value, right[index])) : Object.is(left, right);
+}
+var init_form_control = __esm(() => {
+  init_signals();
+  init_dom();
+  init_errors2();
+});
+
+// ../packages/frontend/src/forms/request-owner.ts
+class SubmissionRequestOwner {
+  #current;
+  #destroyed = false;
+  begin() {
+    if (this.#destroyed)
+      throw new Error("Form request owner has been destroyed.");
+    this.#current?.abort();
+    const controller = new AbortController;
+    this.#current = controller;
+    return controller;
+  }
+  owns(controller) {
+    return !this.#destroyed && this.#current === controller;
+  }
+  finish(controller) {
+    if (!this.owns(controller))
+      return false;
+    this.#current = undefined;
+    return true;
+  }
+  destroy() {
+    if (this.#destroyed)
+      return;
+    this.#destroyed = true;
+    this.#current?.abort();
+    this.#current = undefined;
+  }
+}
+function isIntentionalAbort(error) {
+  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
+}
+
+// ../packages/frontend/src/forms/submit.ts
+function createFetchSubmission(form, pageUrl) {
+  const method = (form.getAttribute("method") ?? "get").trim().toUpperCase() || "GET";
+  const data = new FormData(form);
+  if (method === "GET" || method === "HEAD") {
+    const url = new URL(pageUrl);
+    for (const [name, value] of data) {
+      if (typeof value === "string")
+        url.searchParams.append(name, value);
+      else
+        url.searchParams.append(name, value.name);
+    }
+    return Object.freeze({ url: url.href, init: Object.freeze({ method }) });
+  }
+  return Object.freeze({ url: pageUrl, init: Object.freeze({ method, body: data }) });
+}
+function normalizeServerErrors(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    return Object.freeze({ fields: Object.freeze({}) });
+  const record = value;
+  const fields = Object.create(null);
+  const errors2 = record["errors"];
+  if (typeof errors2 === "object" && errors2 !== null && !Array.isArray(errors2)) {
+    for (const [name, message] of Object.entries(errors2)) {
+      if (name !== "__proto__" && name !== "prototype" && name !== "constructor" && typeof message === "string")
+        fields[name] = message;
+    }
+  }
+  return Object.freeze({
+    ...typeof record["message"] === "string" ? { message: record["message"] } : {},
+    fields: Object.freeze(fields)
+  });
+}
+
+// ../packages/frontend/src/forms/form-group.ts
+class FormGroup {
+  element;
+  value;
+  status = signal("valid");
+  touched = signal(false);
+  dirty = signal(false);
+  submitted = signal(false);
+  submitting = signal(false);
+  #controls;
+  #validators;
+  #fetch;
+  #formErrorElement;
+  #originalFormErrorText;
+  #changeCallbacks = new Set;
+  #submitCallbacks = new Set;
+  #successCallbacks = new Set;
+  #errorCallbacks = new Set;
+  #formError;
+  #validationFormError;
+  #lastChange;
+  #destroyed = false;
+  #submitListener;
+  #invalidListener;
+  #lifecycle = new CleanupRegistry;
+  #requests = new SubmissionRequestOwner;
+  constructor(element, controls, validators, fetchImplementation, onDestroy) {
+    this.element = element;
+    this.#controls = controls;
+    this.#validators = validators;
+    this.#fetch = fetchImplementation;
+    this.#formErrorElement = findFormErrorElement(element);
+    this.#originalFormErrorText = this.#formErrorElement?.textContent ?? undefined;
+    this.value = signal(this.#readValue());
+    this.#lastChange = stableValue(this.value());
+    for (const control of Object.values(this.#controls)) {
+      control.setMutationCallback(() => this.#mutated());
+    }
+    this.#submitListener = (event) => {
+      this.#submit(event);
+    };
+    this.#invalidListener = () => {
+      this.submitted.set(true);
+      synchronizeBooleanState(this.element, "data-wbr-submitted", true);
+      this.markAsTouched();
+      this.validate();
+    };
+    element.addEventListener("submit", this.#submitListener);
+    element.addEventListener("invalid", this.#invalidListener, true);
+    this.#lifecycle.add(() => element.removeEventListener("submit", this.#submitListener));
+    this.#lifecycle.add(() => element.removeEventListener("invalid", this.#invalidListener, true));
+    this.#lifecycle.add(() => this.#requests.destroy());
+    this.#lifecycle.add(onDestroy);
+    for (const control of this.#values())
+      this.#lifecycle.add(() => control.destroy());
+    this.validate(false);
+  }
+  valid = () => this.status() === "valid";
+  invalid = () => this.status() === "invalid";
+  field(name) {
+    this.#assertActive();
+    const control = this.#controls[name];
+    if (control === undefined)
+      throw new FormBuilderError(`field "${name}" is not registered.`);
+    return control;
+  }
+  setValue(value) {
+    this.#assertActive();
+    const expected = Object.keys(this.#controls);
+    const received = Object.keys(value);
+    if (expected.length !== received.length || expected.some((name) => !Object.hasOwn(value, name))) {
+      throw new FormBuilderError("setValue() requires every registered field and no unknown fields.");
+    }
+    this.patchValue(value);
+  }
+  patchValue(value) {
+    this.#assertActive();
+    for (const key of Object.keys(value)) {
+      const control = this.#controls[key];
+      if (control === undefined)
+        throw new FormBuilderError(`patchValue() received unknown field "${key}".`);
+      const next = value[key];
+      if (next !== undefined)
+        control.setValue(next);
+    }
+    this.#mutated();
+  }
+  setError(message) {
+    this.#assertActive();
+    this.#formError = message;
+    this.#renderFormError();
+    this.#synchronizeStatus("invalid");
+  }
+  clearError() {
+    this.#assertActive();
+    this.#formError = undefined;
+    this.#renderFormError();
+    this.validate();
+  }
+  markAsTouched() {
+    this.#assertActive();
+    for (const control of this.#values())
+      control.markAsTouched();
+    this.#syncInteraction();
+  }
+  markAsUntouched() {
+    this.#assertActive();
+    for (const control of this.#values())
+      control.markAsUntouched();
+    this.#syncInteraction();
+  }
+  markAsDirty() {
+    this.#assertActive();
+    for (const control of this.#values())
+      control.markAsDirty();
+    this.#syncInteraction();
+  }
+  markAsPristine() {
+    this.#assertActive();
+    for (const control of this.#values())
+      control.markAsPristine();
+    this.#syncInteraction();
+  }
+  validate(showErrors = this.submitted() || this.touched()) {
+    this.#assertActive();
+    this.#validationFormError = undefined;
+    for (const control of this.#values())
+      control.setFormErrors(Object.freeze([]));
+    let valid = this.#values().every((control) => control.validate(showErrors));
+    const issues = new Map;
+    for (const validator of this.#validators) {
+      const issue = validator.validate(this.#readValue());
+      if (issue === null)
+        continue;
+      valid = false;
+      if (issue.field === undefined)
+        this.#validationFormError = issue.message;
+      else {
+        const key = issue.field;
+        const messages = issues.get(key) ?? [];
+        messages.push(issue.message);
+        issues.set(key, messages);
+      }
+    }
+    for (const [key, messages] of issues)
+      this.#controls[key]?.setFormErrors(Object.freeze(messages));
+    if (this.#formError !== undefined || this.#validationFormError !== undefined)
+      valid = false;
+    this.#synchronizeStatus(valid ? "valid" : "invalid");
+    this.#renderFormError();
+    return valid;
+  }
+  onChange(callback) {
+    this.#assertActive();
+    return subscribe2(this.#changeCallbacks, callback);
+  }
+  onSubmit(callback) {
+    this.#assertActive();
+    return subscribe2(this.#submitCallbacks, callback);
+  }
+  onSuccess(callback) {
+    this.#assertActive();
+    return subscribe2(this.#successCallbacks, callback);
+  }
+  onError(callback) {
+    this.#assertActive();
+    return subscribe2(this.#errorCallbacks, callback);
+  }
+  destroy() {
+    if (this.#destroyed)
+      return;
+    this.#destroyed = true;
+    this.#lifecycle.destroy();
+    this.#changeCallbacks.clear();
+    this.#submitCallbacks.clear();
+    this.#successCallbacks.clear();
+    this.#errorCallbacks.clear();
+    this.#validators = Object.freeze([]);
+    this.#fetch = undefined;
+    for (const key of Object.keys(this.#controls))
+      delete this.#controls[key];
+    this.#formError = undefined;
+    this.#validationFormError = undefined;
+    for (const name of ["data-wbr-valid", "data-wbr-invalid", "data-wbr-pending", "data-wbr-touched", "data-wbr-dirty", "data-wbr-submitted", "data-wbr-submitting"])
+      this.element.removeAttribute(name);
+    if (this.#formErrorElement !== undefined)
+      this.#formErrorElement.textContent = this.#originalFormErrorText ?? "";
+    this.#formErrorElement = undefined;
+  }
+  #mutated() {
+    if (this.#destroyed)
+      return;
+    this.clearErrorWithoutValidation();
+    const next = this.#readValue();
+    this.value.set(next);
+    this.validate();
+    this.#syncInteraction();
+    const serialized = stableValue(next);
+    if (serialized !== this.#lastChange) {
+      this.#lastChange = serialized;
+      for (const callback of this.#changeCallbacks)
+        callback(next);
+    }
+  }
+  async#submit(event) {
+    if (this.#destroyed) {
+      event.preventDefault();
+      return;
+    }
+    const submitsNatively = this.element.hasAttribute("action");
+    this.submitted.set(true);
+    synchronizeBooleanState(this.element, "data-wbr-submitted", true);
+    if (this.submitting()) {
+      event.preventDefault();
+      return;
+    }
+    this.markAsTouched();
+    if (!this.validate(true)) {
+      event.preventDefault();
+      this.element.reportValidity();
+      return;
+    }
+    const current = this.#readValue();
+    for (const callback of this.#submitCallbacks)
+      callback(current);
+    if (submitsNatively)
+      return;
+    event.preventDefault();
+    this.submitting.set(true);
+    synchronizeBooleanState(this.element, "data-wbr-submitting", true);
+    const controller = this.#requests.begin();
+    try {
+      const request = createFetchSubmission(this.element, globalThis.location.href);
+      const fetchImplementation = this.#fetch;
+      if (fetchImplementation === undefined)
+        return;
+      const response = await fetchImplementation(request.url, { ...request.init, signal: controller.signal });
+      if (!this.#requests.owns(controller))
+        return;
+      if (!response.ok) {
+        await this.#mapResponseErrors(response);
+        if (!this.#requests.owns(controller))
+          return;
+        const failure = new Error(`Form submission failed with HTTP ${response.status}.`);
+        for (const callback of this.#errorCallbacks)
+          callback(failure);
+        return;
+      }
+      for (const callback of this.#successCallbacks)
+        callback(response);
+    } catch (error) {
+      if (this.#requests.owns(controller) && !isIntentionalAbort(error)) {
+        for (const callback of this.#errorCallbacks)
+          callback(error);
+      }
+    } finally {
+      if (this.#requests.finish(controller) && !this.#destroyed) {
+        this.submitting.set(false);
+        synchronizeBooleanState(this.element, "data-wbr-submitting", false);
+      }
+    }
+  }
+  async#mapResponseErrors(response) {
+    if (this.#destroyed)
+      return;
+    if (!response.headers.get("content-type")?.toLowerCase().includes("application/json"))
+      return;
+    let body;
+    try {
+      body = await response.clone().json();
+    } catch {
+      return;
+    }
+    if (this.#destroyed)
+      return;
+    const normalized = normalizeServerErrors(body);
+    for (const [name, message] of Object.entries(normalized.fields)) {
+      const control = this.#controls[name];
+      if (control !== undefined)
+        control.setError(message);
+    }
+    if (normalized.message !== undefined)
+      this.setError(normalized.message);
+    this.markAsTouched();
+    this.validate(true);
+  }
+  #readValue() {
+    const output = Object.create(null);
+    for (const [name, control] of Object.entries(this.#controls))
+      output[name] = control.value();
+    return Object.freeze(output);
+  }
+  #values() {
+    return Object.values(this.#controls);
+  }
+  #syncInteraction() {
+    const touched = this.#values().some((control) => control.touched());
+    const dirty = this.#values().some((control) => control.dirty());
+    this.touched.set(touched);
+    this.dirty.set(dirty);
+    synchronizeBooleanState(this.element, "data-wbr-touched", touched);
+    synchronizeBooleanState(this.element, "data-wbr-dirty", dirty);
+  }
+  #synchronizeStatus(status) {
+    this.status.set(status);
+    synchronizeStatus(this.element, status);
+  }
+  #renderFormError() {
+    if (this.#formErrorElement !== undefined) {
+      this.#formErrorElement.textContent = this.#formError ?? (this.submitted() || this.touched() ? this.#validationFormError ?? "" : "");
+    }
+  }
+  clearErrorWithoutValidation() {
+    this.#formError = undefined;
+    this.#renderFormError();
+  }
+  #assertActive() {
+    if (this.#destroyed)
+      throw new FormBuilderError(`form "#${this.element.id}" has been destroyed.`);
+  }
+}
+function subscribe2(callbacks, callback) {
+  callbacks.add(callback);
+  return once(() => {
+    callbacks.delete(callback);
+  });
+}
+function stableValue(value) {
+  return JSON.stringify(value, (_key, item) => item instanceof File ? Object.freeze({ name: item.name, size: item.size, type: item.type }) : item);
+}
+var init_form_group = __esm(() => {
+  init_signals();
+  init_dom();
+  init_errors2();
+});
+
+// ../packages/frontend/src/forms/validators.ts
+var field = (kind, message, validate, constraint) => Object.freeze({
+  scope: "field",
+  kind,
+  message,
+  validate,
+  ...constraint === undefined ? {} : { constraint: Object.freeze(constraint) }
+}), finiteInteger = (value, name) => {
+  if (!Number.isSafeInteger(value) || value < 0)
+    throw new RangeError(`${name} must be a non-negative safe integer.`);
+  return value;
+}, finiteNumber = (value, name) => {
+  if (!Number.isFinite(value))
+    throw new RangeError(`${name} must be finite.`);
+  return value;
+}, empty = (value) => value === null || value === "" || value === false || Array.isArray(value) && value.length === 0, regexSource = (input) => {
+  const source = typeof input === "string" ? input : input.source;
+  if (source.length === 0)
+    throw new RangeError("Pattern must not be empty.");
+  return source;
+}, validators;
+var init_validators = __esm(() => {
+  validators = Object.freeze({
+    required: (message = "This field is required.") => field("required", message, (value) => !empty(value), { required: true }),
+    string: (message = "Enter a valid value.") => field("string", message, (value) => typeof value === "string"),
+    email: (message = "Enter a valid email address.") => field("email", message, (value) => value === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value), { type: "email" }),
+    number: (message = "Enter a valid number.") => field("number", message, (value) => value === "" || Number.isFinite(typeof value === "number" ? value : Number(value)), { type: "number" }),
+    boolean: (message = "Enter a valid boolean value.") => field("boolean", message, (value) => typeof value === "boolean"),
+    minLength: (length, message = `Enter at least ${length} characters.`) => {
+      const limit = finiteInteger(length, "Minimum length");
+      return field("minLength", message, (value) => value === "" || value.length >= limit, { minLength: limit });
+    },
+    maxLength: (length, message = `Enter no more than ${length} characters.`) => {
+      const limit = finiteInteger(length, "Maximum length");
+      return field("maxLength", message, (value) => value.length <= limit, { maxLength: limit });
+    },
+    min: (minimum, message = `Enter a value of at least ${minimum}.`) => {
+      const limit = finiteNumber(minimum, "Minimum");
+      return field("min", message, (value) => value === "" || Number(value) >= limit, { min: limit });
+    },
+    max: (maximum, message = `Enter a value no greater than ${maximum}.`) => {
+      const limit = finiteNumber(maximum, "Maximum");
+      return field("max", message, (value) => value === "" || Number(value) <= limit, { max: limit });
+    },
+    pattern: (pattern, message = "Enter a value in the required format.") => {
+      const source = regexSource(pattern);
+      const expression = new RegExp(`^(?:${source})$`, typeof pattern === "string" ? "u" : pattern.flags.replaceAll("g", "").replaceAll("y", ""));
+      return field("pattern", message, (value) => value === "" || expression.test(value), { pattern: source });
+    },
+    match: (first, second, message = "Values do not match.") => Object.freeze({ scope: "form", kind: "match", validate: (value) => Object.is(value[first], value[second]) ? null : Object.freeze({ field: second, message }) }),
+    form: (predicate, options) => Object.freeze({ scope: "form", kind: "form", validate: (value) => predicate(value) ? null : Object.freeze({ ...options.field === undefined ? {} : { field: options.field }, message: options.message }) })
+  });
+});
+
+// ../packages/frontend/src/forms/form.ts
+function FormBuilder(formId, definition, options = {}) {
+  if (typeof document === "undefined")
+    throw new Error("Warbler FormBuilder requires a browser document.");
+  const form = findForm(formId, document);
+  return owners.replace(form, () => {
+    const declared = definition(validators);
+    const controls = Object.create(null);
+    try {
+      for (const [name, item] of Object.entries(declared)) {
+        const [initial, ...rules] = item;
+        controls[name] = new FormControl(name, form, findNamedControls(form, name), initial, rules);
+      }
+    } catch (error) {
+      for (const control of Object.values(controls))
+        control.destroy();
+      throw error;
+    }
+    const configured = typeof options.validators === "function" ? options.validators(validators) : options.validators ?? Object.freeze([]);
+    let group;
+    try {
+      group = new FormGroup(form, controls, configured, options.fetch ?? globalThis.fetch.bind(globalThis), () => owners.release(form, group));
+    } catch (error) {
+      for (const control of Object.values(controls))
+        control.destroy();
+      throw error;
+    }
+    return group;
+  });
+}
+var owners;
+var init_form = __esm(() => {
+  init_dom();
+  init_form_control();
+  init_form_group();
+  init_validators();
+  owners = new InstanceRegistry;
+});
+
+// ../packages/frontend/src/forms/page.ts
+function page(name, callback) {
+  if (document.documentElement.dataset.page !== name) {
+    return;
+  }
+  console.log("Current page:", document.documentElement.dataset.page);
+  callback();
+}
+
+// ../packages/frontend/src/forms/index.ts
+var init_forms = __esm(() => {
+  init_form();
+  init_serialize();
+});
+
+// ../packages/frontend/src/dom/index.ts
+var init_dom2 = () => {};
+
+// ../packages/frontend/src/storage/local.ts
+var init_local = () => {};
+
+// ../packages/frontend/src/storage/session.ts
+var init_session = () => {};
+
+// ../packages/frontend/src/storage/index.ts
+var init_storage = __esm(() => {
+  init_local();
+  init_session();
+});
+
+// ../packages/frontend/src/url/index.ts
+var init_url = () => {};
+
+// ../packages/frontend/src/security/index.ts
+var init_security = () => {};
+
+// ../packages/frontend/src/utils/index.ts
+var init_utils = () => {};
+
+// ../packages/frontend/src/selectors/index.ts
+var init_selectors = () => {};
+
+// ../packages/frontend/src/index.ts
+var init_src = __esm(() => {
+  init_http();
+  init_csrf();
+  init_forms();
+  init_dom2();
+  init_storage();
+  init_url();
+  init_security();
+  init_utils();
+  init_signals();
+  init_selectors();
+});
+
+// resources/js/pages/auth/register.ts
+var init_register = __esm(() => {
+  init_src();
+  page("register", () => {
+    const loginForm = FormBuilder("register-form", (v) => ({
+      email: [
+        "bellib6@gmail.com",
+        v.required("Email is required"),
+        v.email("Enter a valid email")
+      ],
+      password: [
+        "",
+        v.required("Password is required"),
+        v.string(),
+        v.minLength(8, "Password must contain at least 8 characters")
+      ],
+      confirmPassword: [
+        "",
+        v.required("Confirm your password")
+      ]
+    }), {
+      validators: (v) => [
+        v.match("password", "confirmPassword", "Passwords do not match")
+      ]
+    });
+    loginForm.onSubmit((value) => {
+      console.log("submit:", value);
+      const form = document.getElementById("login-form");
+    });
+  });
+});
+
+// resources/js/pages/auth/login.ts
+var init_login = __esm(() => {
+  init_src();
+  page("login", () => {
+    console.log("Login page dev");
+    const loginForm = FormBuilder("login-form", (v) => ({
+      email: [
+        "bellib6@gmail.com",
+        v.required("Email is required"),
+        v.email("Enter a valid email")
+      ],
+      password: [
+        "",
+        v.required("Password is required"),
+        v.string(),
+        v.minLength(8, "Password must contain at least 8 characters")
+      ],
+      remember: [false, v.boolean()]
+    }));
+    loginForm.onSubmit((value) => {
+      console.log("submit:", value);
+      const form = document.getElementById("login-form");
+    });
+  });
+});
+
+// resources/js/pages/auth/index.ts
+var exports_auth = {};
+var init_auth = __esm(() => {
+  init_register();
+  init_login();
+});
+
+// resources/js/app.ts
+Promise.resolve().then(() => init_auth());
+document.documentElement.dataset.warbler = "ready";
+
+//# debugId=F3C4AE713B372A3F64756E2164756E21
