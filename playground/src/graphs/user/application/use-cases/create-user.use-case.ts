@@ -1,4 +1,4 @@
-import { Service, inject } from "@warbler/core";
+import { Service, inject } from "@warbler/framework";
 import { EventDispatcher } from "@warbler/events";
 import { UserRepositoryPort } from "../../domain/ports/user.repository.port";
 import { UserCreated } from "../../domain/events/user-created.event";

@@ -1,4 +1,4 @@
-import { inject } from "@warbler/core";
+import { inject } from "@warbler/framework";
 import { Email } from "@warbler/email";
 import { listen } from "@warbler/events";
 import { UserCreated } from "../../domain/events/user-created.event";

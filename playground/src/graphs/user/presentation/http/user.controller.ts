@@ -1,5 +1,5 @@
-import { inject } from "@warbler/core";
-import { Controller, Get, JsonRes, Post, type AppRequest, view, csrf } from "@warbler/http";
+import { inject } from "@warbler/framework";
+import { Controller, Get, JsonRes, Post, type AppRequest, view, csrf } from "@warbler/framework";
 import { AppErrorCode } from "../../../../shared/errors/app-error-code";
 import { CreateUserUseCase } from "../../application/use-cases/create-user.use-case";
 import { FindUserUseCase } from "../../application/use-cases/find-user.use-case";
@@ -10,7 +10,7 @@ import { userPermissionGuard } from "../guards/user-permission.guard";
 import { postUserValidatore } from "../validators/post_user.validator";
 import { Email } from "@warbler/email";
 import { auditMiddleware, authMiddleware } from "../../../../shared/middlewares/scope.middleware";
-import { defineValidator, v } from "@warbler/validators";
+import { defineValidator, v } from "@warbler/framework";
 
 export const tenantHeaderValidator = defineValidator({
   headerRules: {

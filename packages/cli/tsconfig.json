@@ -8,6 +8,7 @@
       "@warbler/config": ["../config/src/index.ts"],
       "@warbler/config/validator": ["../config/src/validator/index.ts"],
       "@warbler/core": ["../core/src/index.ts"],
+      "@warbler/framework": ["../framework/src/index.ts"],
       "@warbler/runtime": ["../runtime/src/index.ts"]
     },
     "exactOptionalPropertyTypes": true

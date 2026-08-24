@@ -1,6 +1,6 @@
 
 
-import type { Guard } from "@warbler/http";
+import type { Guard } from "@warbler/framework";
 
 export const userPermissionGuard: Guard = (request, context): boolean => {
   if (typeof context.get("requestId") === "string") context.set("permission", "granted");

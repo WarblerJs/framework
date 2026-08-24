@@ -16,6 +16,7 @@ import { doctorCommand } from "./doctor/doctor-command";
 import { CLIError } from "./errors";
 import { generateSource } from "./generate/generate-command";
 import { inspectCommand } from "./inspect/inspect-command";
+import { makeGraphCommand } from "./make/make-graph-command";
 import { createStarterProject } from "./new/new-command";
 import { terminalOutput, writeDiagnostic, writeResult, type CLIOutput } from "./output";
 import { parseCLI } from "./parser";
@@ -104,6 +105,17 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
     await validateProject(root);
     const plan = await generateSource(root, context.args[0], context.args[1], { force: context.flags.force === true, dryRun: context.flags["dry-run"] === true });
     writeResult(output, context.format, { command: "generate", status: "success", file: plan.path, dryRun: context.flags["dry-run"] === true }, `${context.flags["dry-run"] === true ? "Would generate" : "Generated"} ${plan.path}`);
+    return ExitCode.SUCCESS;
+  }
+  if (context.command === "make:graph") {
+    assertArgs(context, 1);
+    const result = await makeGraphCommand(context);
+    writeResult(
+      output,
+      context.format,
+      { command: "make:graph", status: "success", ...result },
+      `${context.flags["dry-run"] === true ? "Would generate" : "Generated"} graph ${result.graphName} (${result.architecture}, ${result.transports.join(",")})`,
+    );
     return ExitCode.SUCCESS;
   }
   const layout = await validateProject(root);
@@ -303,6 +315,7 @@ function validateCommandFlags(context: CLIContext): void {
     doctor: [...common, "project"],
     inspect: [...common, "project"],
     new: [...common, "dry-run"],
+    "make:graph": [...common, "project", "architecture", "transport", "dry-run"],
     generate: [...common, "project", "dry-run", "force"],
     "db:pg": [...common, "project", "seed", "step", "only", "no-soft-delete"],
     clean: [...common, "project", "dry-run"],
@@ -329,7 +342,7 @@ Usage:
   warbler doctor
   warbler inspect [graphs|routes|providers|transports|config]
   warbler new <name>
-  warbler generate <kind> <name>
+  warbler make:graph <name> [-a minimal|hexagonal|clean|mvc] [-t http|socket|http,socket]
   warbler db:pg migration [<kind>:<name>] [--no-soft-delete]
   warbler db:pg rollback [--step 3]
   warbler db:pg generate

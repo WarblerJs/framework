@@ -1,4 +1,4 @@
-import { Graph } from "@warbler/core";
+import { Graph } from "@warbler/framework";
 import { UserController } from "./presentation/http/user.controller";
 import { CreateUserUseCase } from "./application/use-cases/create-user.use-case";
 import { FindUserUseCase } from "./application/use-cases/find-user.use-case";

@@ -1,4 +1,4 @@
-import { NotFoundError, Service, inject } from "@warbler/core";
+import { NotFoundError, Service, inject } from "@warbler/framework";
 import { AppErrorCode } from "../../../../shared/errors/app-error-code";
 import { UserRepositoryPort } from "../../domain/ports/user.repository.port";
 

@@ -893,7 +893,7 @@ function parseRouteKey(key: string): { readonly method: string; readonly path: s
   if (space <= 0) return undefined;
   const method = key.slice(0, space);
   const path = key.slice(space + 1);
-  if (!SUPPORTED_HTTP_METHODS.has(method) || !path.startsWith("/") || path.length < 2) return undefined;
+  if (!SUPPORTED_HTTP_METHODS.has(method) || !path.startsWith("/") || path.length < 1) return undefined;
   return Object.freeze({ method, path });
 }
 function parseSocketEventKey(key: string): { readonly kind: "event" | "lifecycle"; readonly event: string } | undefined {

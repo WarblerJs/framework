@@ -1,4 +1,4 @@
-import { defineValidator, v } from "@warbler/validators";
+import { defineValidator, v } from "@warbler/framework";
 
 export const validateRequest = defineValidator({
     csrf: false,

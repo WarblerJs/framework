@@ -1,4 +1,4 @@
-import { Repository } from "@warbler/core";
+import { Repository } from "@warbler/framework";
 import { password } from "@warbler/crypto";
 import { WlbPg } from "@pg/client";
 import type { UserEntity } from "../../domain/entities/user.entity";

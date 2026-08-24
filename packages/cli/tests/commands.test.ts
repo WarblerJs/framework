@@ -32,11 +32,11 @@ describe("top-level commands", () => {
     expect(capture.errors[0]).toContain("CLI1001");
   });
 
-  test("generate and clean run through project orchestration", async () => {
+  test("make:graph and clean run through project orchestration", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
     const capture = captureOutput();
-    expect(await runCLI(["generate", "service", "Account", "--project", project.root], { output: capture.output })).toBe(0);
-    expect(await Bun.file(join(project.root, "src/graphs/account/account.service.ts")).exists()).toBe(true);
+    expect(await runCLI(["make:graph", "Account", "--project", project.root], { output: capture.output })).toBe(0);
+    expect(await Bun.file(join(project.root, "src/graphs/account/account.graph.ts")).exists()).toBe(true);
     expect(await runCLI(["clean", "--project", project.root], { output: capture.output })).toBe(0);
     expect(await Bun.file(join(project.root, "package.json")).exists()).toBe(true);
   });

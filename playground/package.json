@@ -21,6 +21,7 @@
     "@warbler/database": "workspace:*",
     "@warbler/email": "workspace:*",
     "@warbler/events": "workspace:*",
+    "@warbler/framework": "workspace:*",
     "@warbler/http": "workspace:*",
     "@warbler/runtime": "workspace:*",
     "@warbler/validators": "workspace:*",

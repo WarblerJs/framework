@@ -9,7 +9,7 @@ warbler start
 warbler doctor
 warbler inspect [section]
 warbler new <name>
-warbler generate <kind> <name>
+warbler make:graph <name> [-a <architecture>] [-t <transport[,transport]>]
 warbler db:pg migration [<kind>:<name>] [--no-soft-delete]
 warbler db:pg rollback [--step 3]
 warbler db:pg generate
@@ -33,6 +33,49 @@ compiling.
 
 All generators enforce project boundaries, reject traversal and symlink output, and avoid
 overwriting unless `--force` is explicit. `clean` can remove only `dist/` and `.warbler/`.
+
+## Graph Generation
+
+`warbler make:graph <name>` is the architecture-aware generation boundary. It generates a
+feature Graph under `src/graphs/<name>/` and uses `@warbler/framework` for application-facing
+imports.
+
+```text
+warbler make:graph users
+warbler make:graph users -a hexagonal
+warbler make:graph chat -t socket
+warbler make:graph realtime -a hexagonal -t http,socket
+```
+
+Options:
+
+- `-a, --architecture <architecture>`: `minimal`, `hexagonal`, `clean`, or `mvc`.
+- `-t, --transport <transport[,transport]>`: `http`, `socket`, or a comma-separated list.
+
+The default architecture is `minimal`. The default transport is `http`, so
+`warbler make:graph users` generates a minimal HTTP Graph.
+
+Generated presentation code is transport-aware:
+
+```text
+presentation/
+└── http/
+    ├── handlers/
+    ├── validation/
+    ├── guards/
+    └── middleware/
+```
+
+Application templates import stable public APIs from the façade:
+
+```ts
+import {
+  defineHttpGraph,
+  defineHandler,
+  defineValidator,
+  v,
+} from "@warbler/framework";
+```
 
 Exit codes are: `0` success, `1` command/build failure, `2` invalid arguments, `3` invalid project
 or configuration, `4` missing dependency, `5` Runtime startup, `6` filesystem, and `7` process.

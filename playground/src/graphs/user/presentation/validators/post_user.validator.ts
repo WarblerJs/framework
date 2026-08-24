@@ -1,6 +1,6 @@
 
-import { defineValidator, v, type ValidationErrors, type ValidationIssue, type ValidationRequest } from "@warbler/validators";
-import { JsonRes, view } from "@warbler/http";
+import { defineValidator, v, type ValidationErrors, type ValidationIssue, type ValidationRequest } from "@warbler/framework";
+import { JsonRes, view } from "@warbler/framework";
 
 function firstIssue(errors: ValidationErrors): ValidationIssue | undefined {
   const groups = Object.values(errors);

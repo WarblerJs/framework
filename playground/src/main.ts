@@ -1,4 +1,4 @@
-import { createApp, Transport } from "@warbler/core";
+import { createApp, Transport } from "@warbler/framework";
 
 export default createApp({
   transports: [

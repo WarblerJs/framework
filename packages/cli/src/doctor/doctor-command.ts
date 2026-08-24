@@ -22,7 +22,14 @@ export async function doctorCommand(layout: ProjectLayout): Promise<readonly CLI
   if ((version[0] ?? 0) < 1 || ((version[0] ?? 0) === 1 && (version[1] ?? 0) < 3)) diagnostics.push(cliDiagnostic({ code: "CLI4001", severity: "error", message: `Bun >= 1.3 is required; found ${Bun.version}.` }));
   const packageJson = await readProjectPackage(layout.root);
   const dependencies = packageNames(packageJson);
-  if (!dependencies.has("@warbler/core")) diagnostics.push(cliDiagnostic({ code: "CLI4002", severity: "error", message: "Missing @warbler/core dependency.", suggestion: "Add @warbler/core to application dependencies." }));
+  if (!dependencies.has("@warbler/framework") && !dependencies.has("@warbler/core")) {
+    diagnostics.push(cliDiagnostic({
+      code: "CLI4002",
+      severity: "error",
+      message: "Missing @warbler/framework dependency.",
+      suggestion: "Add @warbler/framework to application dependencies.",
+    }));
+  }
   try {
     const config = await loadCLIConfig(layout.root);
     await loadEnabledTransportConfigs(config, layout.root);

@@ -1,4 +1,4 @@
-import { inject, left, right, Service, type Either } from "@warbler/core";
+import { inject, left, right, Service, type Either } from "@warbler/framework";
 import type { AuthTranslationKey } from "src/graphs/auth/application/types/auth-translation-key";
 import { FindUserRepositoryPort } from "../../domain/ports/user.repository.port";
 
