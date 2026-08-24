@@ -1,6 +1,6 @@
 import { interpretSendResult, type SocketSendResult } from "./backpressure";
-import { Console } from "@warbler/console";
-import type { TranslationParameters } from "@warbler/i18n";
+import { Console } from "@warblerjs/console";
+import type { TranslationParameters } from "@warblerjs/i18n";
 import { internalPublish } from "./internal-publish";
 import { encodeSocketMessage, type SocketMessageFormat, type SocketOutgoingMessage } from "./message";
 import { validateTopic } from "./pubsub";

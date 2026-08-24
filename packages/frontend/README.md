@@ -1,13 +1,13 @@
-# @warbler/frontend
+# @warblerjs/frontend
 
 Small, dependency-free browser utilities for Warbler applications. The package stays close to native Web APIs and removes repetitive frontend boilerplate.
 
 ```bash
-bun add @warbler/frontend
+bun add @warblerjs/frontend
 ```
 
 ```ts
-import { http, csrf, form, storage, debounce } from "@warbler/frontend";
+import { http, csrf, form, storage, debounce } from "@warblerjs/frontend";
 
 const users = await http.get("/api/users");
 await http.post("/api/users", { name: "John" });
@@ -19,7 +19,7 @@ storage.set("theme", "dark");
 ## Native forms
 
 ```ts
-import { FormBuilder } from "@warbler/frontend/forms";
+import { FormBuilder } from "@warblerjs/frontend/forms";
 
 const login = FormBuilder("login-form", (v) => ({
   email: ["", v.required(), v.email()],

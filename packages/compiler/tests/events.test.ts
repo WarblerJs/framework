@@ -3,8 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { compileProject } from "../src";
-import { EventDispatcher } from "@warbler/events";
-import { createExecutableBindingsRuntime } from "@warbler/runtime";
+import { EventDispatcher } from "@warblerjs/events";
+import { createExecutableBindingsRuntime } from "@warblerjs/runtime";
 
 const temporaryProjects: string[] = [];
 afterEach(() => {
@@ -15,7 +15,7 @@ async function eventProject(source: string): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), "warbler-events-"));
   temporaryProjects.push(root);
   const packagesRoot = resolve(import.meta.dir, "..", "..");
-  const scope = join(root, "node_modules", "@warbler");
+  const scope = join(root, "node_modules", "@warblerjs");
   mkdirSync(scope, { recursive: true });
   for (const name of ["config", "console", "core", "events", "http", "i18n", "runtime", "transport", "validators", "websocket"]) {
     symlinkSync(join(packagesRoot, name), join(scope, name));
@@ -36,10 +36,10 @@ async function eventProject(source: string): Promise<string> {
       experimentalDecorators: true,
       noEmit: true,
       paths: {
-        "@warbler/console": ["node_modules/@warbler/console/src/index.ts"],
-        "@warbler/core": ["node_modules/@warbler/core/src/index.ts"],
-        "@warbler/events": ["node_modules/@warbler/events/src/index.ts"],
-        "@warbler/runtime": ["node_modules/@warbler/runtime/src/index.ts"],
+        "@warblerjs/console": ["node_modules/@warblerjs/console/src/index.ts"],
+        "@warblerjs/core": ["node_modules/@warblerjs/core/src/index.ts"],
+        "@warblerjs/events": ["node_modules/@warblerjs/events/src/index.ts"],
+        "@warblerjs/runtime": ["node_modules/@warblerjs/runtime/src/index.ts"],
       },
     },
     include: ["src/**/*.ts"],
@@ -49,8 +49,8 @@ async function eventProject(source: string): Promise<string> {
 }
 
 const SOURCE = `
-  import { Graph, Service, inject } from "@warbler/core";
-  import { event, listen, interceptEvent, EventDispatcher } from "@warbler/events";
+  import { Graph, Service, inject } from "@warblerjs/core";
+  import { event, listen, interceptEvent, EventDispatcher } from "@warblerjs/events";
 
   export const UserCreated = event((userId: string, email: string) => ({ userId, email } as const));
   export const UserUpdated = event((userId: string) => ({ userId } as const));
@@ -102,8 +102,8 @@ describe("events compiler integration", () => {
 
   test("binds duplicate event export names by module path and export name", async () => {
     const root = await eventProject(`
-      import { Graph, Service, inject } from "@warbler/core";
-      import { EventDispatcher } from "@warbler/events";
+      import { Graph, Service, inject } from "@warblerjs/core";
+      import { EventDispatcher } from "@warblerjs/events";
       import { UserCreated } from "./auth/user-created.event";
 
       @Service()
@@ -120,20 +120,20 @@ describe("events compiler integration", () => {
     mkdirSync(join(root, "src", "auth", "listeners"), { recursive: true });
     mkdirSync(join(root, "src", "user", "listeners"), { recursive: true });
     await Bun.write(join(root, "src", "auth", "user-created.event.ts"), `
-      import { event } from "@warbler/events";
+      import { event } from "@warblerjs/events";
       export const UserCreated = event((scope: string) => ({ scope } as const));
     `);
     await Bun.write(join(root, "src", "user", "user-created.event.ts"), `
-      import { event } from "@warbler/events";
+      import { event } from "@warblerjs/events";
       export const UserCreated = event((userId: string) => ({ userId } as const));
     `);
     await Bun.write(join(root, "src", "auth", "listeners", "audit-user-created.listener.ts"), `
-      import { listen } from "@warbler/events";
+      import { listen } from "@warblerjs/events";
       import { UserCreated } from "../user-created.event";
       export const auditUserCreated = listen(UserCreated, event => event.scope);
     `);
     await Bun.write(join(root, "src", "user", "listeners", "audit-user-created.listener.ts"), `
-      import { listen } from "@warbler/events";
+      import { listen } from "@warblerjs/events";
       import { UserCreated } from "../user-created.event";
       export const auditUserCreated = listen(UserCreated, event => event.userId);
     `);
@@ -156,8 +156,8 @@ describe("events compiler integration", () => {
 
   test("reports definite cycles as errors and conditional cycles as warnings", async () => {
     const root = await eventProject(`
-      import { Graph } from "@warbler/core";
-      import { event, listen } from "@warbler/events";
+      import { Graph } from "@warblerjs/core";
+      import { event, listen } from "@warblerjs/events";
       export const A = event(() => ({ ok: true } as const));
       export const B = event(() => ({ ok: true } as const));
       export const onA = listen(A, event => { void event; events.dispatch(B()); });

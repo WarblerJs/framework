@@ -1,4 +1,4 @@
-import type { Middleware } from "@warbler/http";
+import type { Middleware } from "@warblerjs/framework";
 
 export interface Tenant {
   readonly id: string;

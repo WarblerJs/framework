@@ -1,8 +1,11 @@
 {
-  "name": "@warbler/crypto",
+  "name": "@warblerjs/crypto",
   "version": "0.1.0",
   "type": "module",
   "private": false,
+  "files": [
+    "src"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./config": "./src/config/index.ts",
@@ -20,7 +23,7 @@
     "typecheck": "bunx tsc --noEmit"
   },
   "dependencies": {
-    "@warbler/config": "workspace:*"
+    "@warblerjs/config": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest",

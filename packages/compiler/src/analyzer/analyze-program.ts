@@ -62,7 +62,7 @@ const EMPTY_HANDLER_OPTIONS: HandlerOptions = Object.freeze({
 });
 /** Framework-owned provider imported by application code and registered by generated bindings. */
 export interface FrameworkProviderReference extends SourceLocationWIR {
-  readonly module: "@warbler/email" | "@warbler/events" | "@warbler/websocket";
+  readonly module: "@warblerjs/email" | "@warblerjs/events" | "@warblerjs/websocket";
   readonly imported: "Email" | "EventDispatcher" | "SocketPublisher";
   readonly local: string;
 }
@@ -647,18 +647,18 @@ function collectFrameworkProviders(source: ts.SourceFile): readonly FrameworkPro
   for (const statement of source.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteralLike(statement.moduleSpecifier)) continue;
     const module = statement.moduleSpecifier.text;
-    if (module !== "@warbler/email" && module !== "@warbler/events" && module !== "@warbler/websocket") continue;
+    if (module !== "@warblerjs/email" && module !== "@warblerjs/events" && module !== "@warblerjs/websocket") continue;
     const bindings = statement.importClause?.namedBindings;
     if (bindings === undefined || !ts.isNamedImports(bindings)) continue;
     for (const element of bindings.elements) {
       const imported = element.propertyName?.text ?? element.name.text;
-      if (module === "@warbler/websocket" && imported === "SocketPublisher") {
+      if (module === "@warblerjs/websocket" && imported === "SocketPublisher") {
         result.push(Object.freeze({ ...location(element, source), module, imported, local: element.name.text }));
       }
-      if (module === "@warbler/events" && imported === "EventDispatcher") {
+      if (module === "@warblerjs/events" && imported === "EventDispatcher") {
         result.push(Object.freeze({ ...location(element, source), module, imported, local: element.name.text }));
       }
-      if (module === "@warbler/email" && imported === "Email") {
+      if (module === "@warblerjs/email" && imported === "Email") {
         result.push(Object.freeze({ ...location(element, source), module, imported, local: element.name.text }));
       }
     }
@@ -893,7 +893,7 @@ function parseRouteKey(key: string): { readonly method: string; readonly path: s
   if (space <= 0) return undefined;
   const method = key.slice(0, space);
   const path = key.slice(space + 1);
-  if (!SUPPORTED_HTTP_METHODS.has(method) || !path.startsWith("/") || path.length < 2) return undefined;
+  if (!SUPPORTED_HTTP_METHODS.has(method) || !path.startsWith("/") || path.length < 1) return undefined;
   return Object.freeze({ method, path });
 }
 function parseSocketEventKey(key: string): { readonly kind: "event" | "lifecycle"; readonly event: string } | undefined {

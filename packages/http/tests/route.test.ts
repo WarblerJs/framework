@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { defineValidator, v } from "@warbler/validators";
+import { defineValidator, v } from "@warblerjs/validators";
 import { Delete, Get, Head, Options, Patch, Post, Put, Sse, getRouteMetadata } from "../src/route";
 import { redirect, redirectTo } from "../src/response";
 import type { AppRequest, Guard, Middleware } from "../src/request";

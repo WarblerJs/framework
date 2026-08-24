@@ -29,8 +29,8 @@ export interface RequestContextHandle {
  * `settle()` resolves — a later guard/middleware reading the same key before that
  * factory's promise settles will see `undefined`.
  *
- * Lives in `@warbler/core` (not `@warbler/http`) so it's usable from `@warbler/runtime`
- * without giving the runtime a dependency on the HTTP package — `@warbler/http`
+ * Lives in `@warblerjs/core` (not `@warblerjs/http`) so it's usable from `@warblerjs/runtime`
+ * without giving the runtime a dependency on the HTTP package — `@warblerjs/http`
  * re-exports it as part of its own public surface.
  */
 export class RequestContextStore implements RequestContextHandle {

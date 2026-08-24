@@ -13,7 +13,7 @@ async function contextProject(): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), "warbler-context-"));
   temporaryProjects.push(root);
   const packagesRoot = resolve(import.meta.dir, "..", "..");
-  const scope = join(root, "node_modules", "@warbler");
+  const scope = join(root, "node_modules", "@warblerjs");
   mkdirSync(scope, { recursive: true });
   for (const name of ["config", "console", "core", "http", "i18n", "runtime", "transport", "validators", "websocket"]) {
     symlinkSync(join(packagesRoot, name), join(scope, name));
@@ -35,8 +35,8 @@ async function contextProject(): Promise<string> {
     export function loadProfile(): ExternalProfile | null { return { userId: "1" }; }
   `);
   await Bun.write(join(root, "src", "application.ts"), `
-    import { Graph, Service, inject } from "@warbler/core";
-    import { Controller, Get, type Guard, type Middleware } from "@warbler/http";
+    import { Graph, Service, inject } from "@warblerjs/core";
+    import { Controller, Get, type Guard, type Middleware } from "@warblerjs/http";
     import { loadProfile } from "./session";
     import type { User, Tenant } from "./types";
 
@@ -70,7 +70,7 @@ describe("context.set(...) analysis and WarblerRequestContext generation", () =>
     const root = mkdtempSync(join(tmpdir(), "warbler-context-empty-"));
     temporaryProjects.push(root);
     const packagesRoot = resolve(import.meta.dir, "..", "..");
-    const scope = join(root, "node_modules", "@warbler");
+    const scope = join(root, "node_modules", "@warblerjs");
     mkdirSync(scope, { recursive: true });
     for (const name of ["config", "console", "core", "http", "i18n", "runtime", "transport", "validators", "websocket"]) {
       symlinkSync(join(packagesRoot, name), join(scope, name));
@@ -83,8 +83,8 @@ describe("context.set(...) analysis and WarblerRequestContext generation", () =>
       include: ["src/**/*.ts", ".warbler/generated/context.generated.d.ts"],
     }));
     await Bun.write(join(root, "src", "application.ts"), `
-      import { Graph, Service } from "@warbler/core";
-      import { Controller, Get } from "@warbler/http";
+      import { Graph, Service } from "@warblerjs/core";
+      import { Controller, Get } from "@warblerjs/http";
       @Service() export class Logger {}
       @Controller("/users") export class UsersController { @Get("") list() {} }
       @Graph({ prefix: "/api", controllers: [UsersController], providers: [Logger] })
@@ -93,7 +93,7 @@ describe("context.set(...) analysis and WarblerRequestContext generation", () =>
     await Bun.write(join(root, "warbler-env.d.ts"), `/// <reference path="./.warbler/generated/context.generated.d.ts" />\n`);
     await compileProject(root);
     const text = await Bun.file(join(root, ".warbler", "generated", "context.generated.d.ts")).text();
-    expect(text).toContain("declare module \"@warbler/http\"");
+    expect(text).toContain("declare module \"@warblerjs/http\"");
     expect(text).toContain("interface WarblerRequestContext");
     expect(text).toContain("export {};");
     expect(await Bun.file(join(root, "warbler-env.d.ts")).exists()).toBe(false);
@@ -103,7 +103,7 @@ describe("context.set(...) analysis and WarblerRequestContext generation", () =>
     const root = await contextProject();
     await compileProject(root);
     const text = await Bun.file(join(root, ".warbler", "generated", "context.generated.d.ts")).text();
-    expect(text).toContain("declare module \"@warbler/http\"");
+    expect(text).toContain("declare module \"@warblerjs/http\"");
     expect(text).toMatch(/readonly user\?: User;/);
     expect(text).toMatch(/readonly tenant\?: Tenant;/);
     expect(text).toMatch(/readonly profile\?: ExternalProfile;/);
@@ -130,7 +130,7 @@ describe("context.set(...) analysis and WarblerRequestContext generation", () =>
     const ts = await import("typescript");
     const probe = join(root, "src", "probe.ts");
     await Bun.write(probe, `
-      import type { AppRequest } from "@warbler/http";
+      import type { AppRequest } from "@warblerjs/http";
       declare const req: AppRequest;
       const userId: string | undefined = req.context.user?.id;
       const tenantId: string | undefined = req.context.tenant?.id;
@@ -141,7 +141,7 @@ describe("context.set(...) analysis and WarblerRequestContext generation", () =>
       options: {
         strict: true, skipLibCheck: true, noEmit: true, target: ts.ScriptTarget.ESNext,
         module: ts.ModuleKind.Preserve, moduleResolution: ts.ModuleResolutionKind.Bundler,
-        baseUrl: root, paths: { "@warbler/http": [join(root, "node_modules/@warbler/http/src/index.ts")] },
+        baseUrl: root, paths: { "@warblerjs/http": [join(root, "node_modules/@warblerjs/http/src/index.ts")] },
       },
     });
     const diagnostics = ts.getPreEmitDiagnostics(program).filter((d) => d.file?.fileName === probe);

@@ -67,7 +67,7 @@ describe("messages and security", () => {
 
   test("validates topics and safe close reasons", () => {
     expect(validateTopic("room.general")).toBe("room.general");
-    expect(() => validateTopic("@warbler/private")).toThrow();
+    expect(() => validateTopic("@warblerjs/private")).toThrow();
     expect(new TextEncoder().encode(safeCloseReason("x".repeat(200))).byteLength).toBeLessThanOrEqual(123);
   });
 });

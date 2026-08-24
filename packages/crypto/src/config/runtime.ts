@@ -1,5 +1,5 @@
-import { ConfigError } from "@warbler/config";
-import { parseEnv } from "@warbler/config/parser";
+import { ConfigError } from "@warblerjs/config";
+import { parseEnv } from "@warblerjs/config/parser";
 import { decodeBase64, decodeBase64Url, decodeHex, type EncodingName } from "../encoding";
 import { CryptoConfigError } from "../errors";
 import { wipeBytes, type CryptoBytes } from "../internal/bytes";

@@ -1,19 +1,34 @@
 {
-  "name": "@warbler/cli",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@warblerjs/cli",
+  "version": "0.1.2",
+  "private": false,
   "type": "module",
-  "bin": { "warbler": "./src/bin.ts" },
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
-  "dependencies": {
-    "@warbler/console": "workspace:*",
-    "@warbler/compiler": "workspace:*",
-    "@warbler/config": "workspace:*",
-    "@warbler/core": "workspace:*",
-    "@warbler/database": "workspace:*",
-    "@warbler/runtime": "workspace:*",
-    "@warbler/view": "workspace:*"
+  "bin": {
+    "warbler": "./src/bin.ts"
   },
-  "devDependencies": { "@types/bun": "latest", "typescript": "^5.9.2" }
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@warblerjs/console": "workspace:*",
+    "@warblerjs/compiler": "workspace:*",
+    "@warblerjs/config": "workspace:*",
+    "@warblerjs/core": "workspace:*",
+    "@warblerjs/database": "workspace:*",
+    "@warblerjs/framework": "workspace:*",
+    "@warblerjs/runtime": "workspace:*",
+    "@warblerjs/view": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.2"
+  }
 }

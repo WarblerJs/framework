@@ -1,4 +1,4 @@
-import { runInInjectionContext, type InjectionResolver, type ProviderToken } from "@warbler/core";
+import { runInInjectionContext, type InjectionResolver, type ProviderToken } from "@warblerjs/core";
 import { RuntimeDiagnosticCode } from "../diagnostics/runtime-diagnostic-codes";
 import { InvalidApplicationBindingsError, ProviderResolutionError, RuntimeProviderNotFoundError } from "../errors/runtime-errors";
 import type { ProviderBinding, ProviderBindingContext } from "../generated/executable-bindings";
@@ -8,7 +8,7 @@ import type { ProviderBinding, ProviderBindingContext } from "../generated/execu
  *
  * Token resolution is one `Map` hop (token -> dense provider id, built once from the bindings array at
  * construction) followed entirely by array indexing — no per-resolve token-keyed record lookup, and no
- * separate `@warbler/core` `Container` shadowing the instance cache: an instance lives in exactly one
+ * separate `@warblerjs/core` `Container` shadowing the instance cache: an instance lives in exactly one
  * place, `#instances[id]`.
  */
 export class GeneratedProviderContainer implements InjectionResolver {

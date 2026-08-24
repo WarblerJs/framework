@@ -77,7 +77,7 @@ describe("tracked seed integration", () => {
     const sql = connection();
     const { schema, model } = schemaFor(table);
 
-    await Bun.write(`${root}/seeds/0001_items.seed.ts`, `import type { PgSeed } from "@warbler/database";
+    await Bun.write(`${root}/seeds/0001_items.seed.ts`, `import type { PgSeed } from "@warblerjs/database";
 
 type SeedDb = {
   readonly item: {

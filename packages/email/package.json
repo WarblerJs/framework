@@ -1,7 +1,12 @@
 {
-  "name": "@warbler/email",
+  "name": "@warblerjs/email",
   "version": "0.1.0",
   "type": "module",
+  "private": false,
+  "files": [
+    "src",
+    "README.md"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing.ts"
@@ -11,9 +16,9 @@
     "typecheck": "bunx --package typescript@5.9.2 tsc --noEmit"
   },
   "dependencies": {
-    "@warbler/config": "workspace:*",
-    "@warbler/crypto": "workspace:*",
-    "@warbler/view": "workspace:*"
+    "@warblerjs/config": "workspace:*",
+    "@warblerjs/crypto": "workspace:*",
+    "@warblerjs/view": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest",

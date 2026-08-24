@@ -1,4 +1,4 @@
-import { parseValidationMessage, type TranslationParameter, type ValidationMessage } from "@warbler/i18n";
+import { parseValidationMessage, type TranslationParameter, type ValidationMessage } from "@warblerjs/i18n";
 import { ValidatorError, ValidatorErrorCode } from "./errors";
 
 const cache = new Map<string, Readonly<{ key: string; parameterNames: readonly string[] }>>();

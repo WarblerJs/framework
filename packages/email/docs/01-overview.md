@@ -1,6 +1,6 @@
 # Overview
 
-`@warbler/email` owns email normalization, validation, MIME encoding, and
+`@warblerjs/email` owns email normalization, validation, MIME encoding, and
 transport delivery. Warbler views own HTML rendering. Application code wires
 events or jobs to `Email.send()`.
 

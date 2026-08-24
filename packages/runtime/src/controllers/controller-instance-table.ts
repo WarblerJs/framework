@@ -1,4 +1,4 @@
-import { runInInjectionContext, type ProviderToken } from "@warbler/core";
+import { runInInjectionContext, type ProviderToken } from "@warblerjs/core";
 import { ControllerProviderContainer, type GraphProviderContainer } from "../container/generated-provider-containers";
 import { ControllerCreationError, GeneratedArtifactError } from "../errors/runtime-errors";
 import { RuntimeDiagnosticCode } from "../diagnostics/runtime-diagnostic-codes";

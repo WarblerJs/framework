@@ -1,4 +1,4 @@
-import { createPgConnection, generateFromDatabase } from "@warbler/database";
+import { createPgConnection, generateFromDatabase } from "@warblerjs/database";
 import { loadDatabaseConfig } from "../config";
 import { CLIError } from "../errors";
 import type { ProjectLayout } from "../project";

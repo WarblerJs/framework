@@ -1,6 +1,6 @@
-# @warbler/http
+# @warblerjs/http
 
-`@warbler/http` is Warbler’s Bun-native HTTP transport. It owns HTTP metadata and contracts, secure request and response primitives, compiled route consumption, static assets, streaming, CSRF, and native server lifecycle.
+`@warblerjs/http` is Warbler’s Bun-native HTTP transport. It owns HTTP metadata and contracts, secure request and response primitives, compiled route consumption, static assets, streaming, CSRF, and native server lifecycle.
 
 Normal routes are emitted directly into `Bun.serve({ routes, fetch })`. Bun performs matching and parameter extraction; the fallback handler is reserved for unmatched requests. This package has no custom router or source-code discovery.
 
@@ -14,14 +14,14 @@ Static assets are scanned once at startup and inserted into the native route tab
 
 The request pipeline checks framing ambiguity before headers, host, timeout, CSRF, and application execution. CSRF and signed cookies cache imported HMAC keys. Security policies are compiled to route flags and startup-time header templates.
 
-The package intentionally does not implement WebSocket, TCP, UDP, MCP, WebRTC, runtime discovery, compiler source analysis, the template engine itself (owned by `@warbler/view`), persistence, or CLI behavior.
+The package intentionally does not implement WebSocket, TCP, UDP, MCP, WebRTC, runtime discovery, compiler source analysis, the template engine itself (owned by `@warblerjs/view`), persistence, or CLI behavior.
 
 ## View rendering and built-ins
 
-`view(name, data, options?)` is the application-facing replacement for calling `@warbler/view`'s `View()` directly. It renders exactly the same way, plus makes five framework built-ins available to every template automatically — no controller needs to pass them:
+`view(name, data, options?)` is the application-facing replacement for calling `@warblerjs/view`'s `View()` directly. It renders exactly the same way, plus makes five framework built-ins available to every template automatically — no controller needs to pass them:
 
 ```ts
-import { Controller, Get, view } from "@warbler/http";
+import { Controller, Get, view } from "@warblerjs/http";
 
 @Controller()
 export class HomeController {
@@ -71,7 +71,7 @@ return view("home", {
 {{ security.token }}
 ```
 
-Both access styles — the automatic `csrfField`/`csrfToken` built-ins and explicit `csrf()` — read the same request-scoped, memoized token. Within one request, `csrf().token === csrfToken` and `csrfField` embeds that same token, always. The token is minted once (lazily, on first access) per request via a synchronous HMAC signature (`node:crypto`) over a fresh random value, and reused for every subsequent access in that request — it is never regenerated mid-request and never shared across concurrent requests (each request gets its own ambient scope, propagated via `AsyncLocalStorage`, mirroring `@warbler/core`'s dependency-injection request scope).
+Both access styles — the automatic `csrfField`/`csrfToken` built-ins and explicit `csrf()` — read the same request-scoped, memoized token. Within one request, `csrf().token === csrfToken` and `csrfField` embeds that same token, always. The token is minted once (lazily, on first access) per request via a synchronous HMAC signature (`node:crypto`) over a fresh random value, and reused for every subsequent access in that request — it is never regenerated mid-request and never shared across concurrent requests (each request gets its own ambient scope, propagated via `AsyncLocalStorage`, mirroring `@warblerjs/core`'s dependency-injection request scope).
 
 `view()`/`csrf()` may be called from anywhere that runs inside an active HTTP request — controller methods, guards, middleware, and validator `onValidationError` callbacks — without needing an `AppRequest` parameter. Calling either outside of a request throws a clear `ServerStateError`.
 
@@ -80,7 +80,7 @@ Both access styles — the automatic `csrfField`/`csrfToken` built-ins and expli
 Use `redirect()` for explicit locations and `redirectTo()` for precompiled named routes:
 
 ```ts
-import { Controller, Get, redirect, redirectTo, type Guard } from "@warbler/http";
+import { Controller, Get, redirect, redirectTo, type Guard } from "@warblerjs/http";
 
 const authGuard: Guard = (_request, context) =>
   context.get("auth") === undefined ? redirectTo("login") : true;
@@ -138,7 +138,7 @@ synchronously, or in a rejected promise after an `await` — is caught exactly o
 as a safe `Response`. Application code never needs a `try/catch` for this:
 
 ```ts
-import { NotFoundError } from "@warbler/core";
+import { NotFoundError } from "@warblerjs/core";
 
 @Get("/users/:id")
 async show(req: AppRequest) {
@@ -146,7 +146,7 @@ async show(req: AppRequest) {
 }
 ```
 
-The boundary reuses `@warbler/core`'s `WarblerError`/`normalizeError` (see that package's
+The boundary reuses `@warblerjs/core`'s `WarblerError`/`normalizeError` (see that package's
 README) — `HttpError` and its subclasses (`CsrfError`, ...) are translated into a
 `WarblerError` first, so they're rendered identically to an application-thrown one.
 
@@ -180,8 +180,8 @@ way as above. A failure *after* streaming has started (headers already committed
 back to a normal response — the stream instead emits one final `event: error` frame
 (`{code, message}`, same normalization) and closes cleanly.
 
-**WebSocket** has its own boundary — see `@warbler/websocket`'s README.
+**WebSocket** has its own boundary — see `@warblerjs/websocket`'s README.
 
 A route handler throwing repeatedly never affects other requests or crashes the process — only
-a call to `@warbler/runtime`'s `installFatalErrorHandlers` (wired into the CLI's production
+a call to `@warblerjs/runtime`'s `installFatalErrorHandlers` (wired into the CLI's production
 entrypoint, not into ordinary request handling) exists for that.

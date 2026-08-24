@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { inject } from "@warbler/core";
-import type { RuntimeConfig } from "@warbler/config";
+import { inject } from "@warblerjs/core";
+import type { RuntimeConfig } from "@warblerjs/config";
 import {
   GeneratedRuntimeOwner,
   InvalidApplicationBindingsError,
@@ -748,7 +748,7 @@ describe("validator onValidationError", () => {
     await runtime.stop();
   });
 
-  // The unified exception boundary (@warbler/http's `createBunRouteHandler`, one layer
+  // The unified exception boundary (@warblerjs/http's `createBunRouteHandler`, one layer
   // above the Runtime pipeline tested here) now catches exactly this rejection and
   // renders it safely — see packages/http/tests/native-server.test.ts's "unified
   // exception boundary" suite. This test's contract is intentionally unchanged: the

@@ -3,7 +3,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@warbler/console": ["../console/src/index.ts"]
+      "@warblerjs/console": ["../console/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts", "tests/**/*.ts"]

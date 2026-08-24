@@ -1,8 +1,8 @@
-import { ViewError } from "@warbler/view";
+import { ViewError } from "@warblerjs/view";
 
 /**
  * View-domain errors raised by the `route()` template built-in. Defined here (not in
- * `@warbler/view`, which has no concept of routing) but extending `ViewError` so
+ * `@warblerjs/view`, which has no concept of routing) but extending `ViewError` so
  * `evaluateExpression`'s "rethrow known view errors as-is" branch preserves their
  * identity instead of flattening them into a generic `TemplateExpressionError`.
  */

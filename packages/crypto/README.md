@@ -1,6 +1,6 @@
-# @warbler/crypto
+# @warblerjs/crypto
 
-`@warbler/crypto` is Warbler's production crypto toolkit for Bun applications. It provides password hashing, non-secret digests, authenticated encryption, HMAC signatures, secure random generation, strict encoding helpers, key import utilities, and constant-time equality checks.
+`@warblerjs/crypto` is Warbler's production crypto toolkit for Bun applications. It provides password hashing, non-secret digests, authenticated encryption, HMAC signatures, secure random generation, strict encoding helpers, key import utilities, and constant-time equality checks.
 
 It is not a general cryptography lab. It does not implement custom primitives, stream ciphers, RSA helpers, source-map tooling, watchers, or development conveniences. The implementation uses Bun and Web Crypto only: `Bun.password`, `Bun.CryptoHasher`, `Bun.file`, `crypto.subtle`, `crypto.getRandomValues`, and `crypto.randomUUID`.
 
@@ -9,7 +9,7 @@ It is not a general cryptography lab. It does not implement custom primitives, s
 Configure crypto once during application bootstrap. Configuration is side-effect-free at import time and is lazily memoized until `configureCrypto` is called.
 
 ```ts
-import { configureCrypto } from "@warbler/crypto";
+import { configureCrypto } from "@warblerjs/crypto";
 
 await configureCrypto({
   encryption: {
@@ -30,7 +30,7 @@ await configureCrypto({
 Generate key material:
 
 ```ts
-import { keys } from "@warbler/crypto";
+import { keys } from "@warblerjs/crypto";
 
 console.log(keys.generate({ for: "encryption" }));
 console.log(keys.generate({ for: "hmac" }));
@@ -41,7 +41,7 @@ console.log(keys.generate({ for: "hmac" }));
 Use `password` for user passwords. Use `hash` for non-secret checksums.
 
 ```ts
-import { password } from "@warbler/crypto";
+import { password } from "@warblerjs/crypto";
 
 const storedHash = await password.hash("correct horse battery staple");
 const valid = await password.verify("correct horse battery staple", storedHash);
@@ -55,7 +55,7 @@ Malformed stored password hashes return `false` from `verify`.
 Use `hash` for non-secret digests such as cache keys, file integrity, and stable identifiers. Use `hmac` when authenticity matters.
 
 ```ts
-import { hash } from "@warbler/crypto";
+import { hash } from "@warblerjs/crypto";
 
 const id = hash.sha256("public payload");
 const digest = await hash.digest("public payload", { algorithm: "sha512", output: "base64url" });
@@ -69,7 +69,7 @@ const fileDigest = await hash.file("storage/report.csv");
 Use `crypt` for confidential data. Use `hmac` for authenticating data that must remain readable.
 
 ```ts
-import { crypt } from "@warbler/crypto";
+import { crypt } from "@warblerjs/crypto";
 
 const envelope = await crypt.encryptJson({ userId: "usr_123" }, { context: "tenant:acme" });
 const payload = await crypt.decryptJson<{ readonly userId: string }>(envelope, {
@@ -97,7 +97,7 @@ Keep old keys configured during rotation so old envelopes continue to decrypt. R
 Use `hmac` for webhook signatures, signed cookies, and payload authenticity without confidentiality. Verification uses `crypto.subtle.verify`.
 
 ```ts
-import { hmac } from "@warbler/crypto";
+import { hmac } from "@warblerjs/crypto";
 
 const signature = await hmac.sign("payload");
 const valid = await hmac.verify("payload", signature);
@@ -116,7 +116,7 @@ await hmac.sign("payload", {
 Use `random.token` for application tokens and `random.bytes` when a byte array is required.
 
 ```ts
-import { random } from "@warbler/crypto";
+import { random } from "@warblerjs/crypto";
 
 const token = await random.token();
 const raw = random.bytes(32);
@@ -130,7 +130,7 @@ Random byte requests are capped at 1 MiB.
 Use `encoding` when data must cross text boundaries. Decoders are strict and reject malformed payloads.
 
 ```ts
-import { encoding } from "@warbler/crypto";
+import { encoding } from "@warblerjs/crypto";
 
 const bytes = encoding.decodeBase64Url("d2FyYmxlcg");
 const text = encoding.bytesToUtf8(bytes);
@@ -141,7 +141,7 @@ const text = encoding.bytesToUtf8(bytes);
 Use `secureCompare` for equal-length secret comparisons when Web Crypto verification is not available. Use `hmac.verify` for HMAC signatures.
 
 ```ts
-import { secureCompare } from "@warbler/crypto";
+import { secureCompare } from "@warblerjs/crypto";
 
 secureCompare("expected", "provided");
 ```

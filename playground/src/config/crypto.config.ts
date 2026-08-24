@@ -1,4 +1,4 @@
-import type { CryptoConfigInput } from "@warbler/crypto";
+import type { CryptoConfigInput } from "@warblerjs/crypto";
 
 /*
 |--------------------------------------------------------------------------

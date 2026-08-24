@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { buildCommand, validateProject } from "@warbler/cli";
+import { buildCommand, validateProject } from "@warblerjs/cli";
 import { playgroundRoot } from "./helpers";
 import { cp, mkdtemp, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -13,8 +13,8 @@ test("production build contains executable application, generated provider bindi
     });
     expect(await Bun.file(result.entry).exists()).toBe(true);
     const source = await Bun.file(result.entry).text();
-    expect(source).not.toContain("@warbler/compiler");
-    expect(source).not.toContain("@warbler/cli");
+    expect(source).not.toContain("@warblerjs/compiler");
+    expect(source).not.toContain("@warblerjs/cli");
     expect(source).not.toContain("SourceWatcher");
     const manifest = await Bun.file(`${isolatedRoot}/dist/.warbler/build-manifest.json`).json();
     expect(manifest.enabledTransports).toEqual(["http", "websocket"]);

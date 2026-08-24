@@ -1,4 +1,4 @@
-# @warbler/websocket
+# @warblerjs/websocket
 
 Production-oriented, Bun-native WebSocket transport contracts and execution for Warbler. It uses `server.upgrade`, `ws.data`, native send/cork/drain, and Bun Pub/Sub directly. It does not implement a socket server, source discovery, compiler analysis, distributed rooms, or application authentication.
 
@@ -34,9 +34,9 @@ Shared HTTP mode exposes `fetch` and `websocket` handlers for an existing server
 Use `SocketPublisher` when HTTP controllers, services, jobs, or providers need to publish to the same Bun Pub/Sub topics as WebSocket handlers:
 
 ```ts
-import { inject } from "@warbler/core";
-import { Controller, Post } from "@warbler/http";
-import { SocketPublisher } from "@warbler/websocket";
+import { inject } from "@warblerjs/core";
+import { Controller, Post } from "@warblerjs/http";
+import { SocketPublisher } from "@warblerjs/websocket";
 
 @Controller()
 export class NotificationController {
@@ -54,7 +54,7 @@ export class NotificationController {
 ```
 
 The compiler registers `SocketPublisher` as a root provider when it is imported from
-`@warbler/websocket`, so no app-level provider registration is required. The class is a thin facade:
+`@warblerjs/websocket`, so no app-level provider registration is required. The class is a thin facade:
 it owns no socket registry, no topic map, and no subscriber list. Each `publish()` call resolves the
 current live runtime target and delegates to the same internal validation, encoding, logging, native
 Bun publish, and backpressure result path used by `SocketContext.publish()`.
@@ -75,7 +75,7 @@ lookup in `SocketPublisher`; any extra per-topic JavaScript fan-out or registry 
 
 A subscribed event handler, or an `@OnOpen`/`@OnDrain`/`@OnClose` lifecycle callback, throwing
 — synchronously or in a rejected promise — never crashes the connection or the process. It's
-normalized (`@warbler/core`'s `normalizeError`), logged, and handled one of two ways:
+normalized (`@warblerjs/core`'s `normalizeError`), logged, and handled one of two ways:
 
 - **Recoverable (the default)**: the client receives a safe envelope and the connection stays
   open and usable for the next message —

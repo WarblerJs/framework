@@ -1,5 +1,5 @@
 {
-  "name": "@warbler/playground",
+  "name": "@warblerjs/playground",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,23 +16,24 @@
     "clean": "warbler clean"
   },
   "dependencies": {
-    "@warbler/crypto": "workspace:*",
-    "@warbler/core": "workspace:*",
-    "@warbler/database": "workspace:*",
-    "@warbler/email": "workspace:*",
-    "@warbler/events": "workspace:*",
-    "@warbler/http": "workspace:*",
-    "@warbler/runtime": "workspace:*",
-    "@warbler/validators": "workspace:*",
-    "@warbler/view": "workspace:*",
-    "@warbler/config": "workspace:*",
-    "@warbler/websocket": "workspace:*",
-    "@warbler/frontend": "workspace:*"
+    "@warblerjs/crypto": "workspace:*",
+    "@warblerjs/core": "workspace:*",
+    "@warblerjs/database": "workspace:*",
+    "@warblerjs/email": "workspace:*",
+    "@warblerjs/events": "workspace:*",
+    "@warblerjs/framework": "workspace:*",
+    "@warblerjs/http": "workspace:*",
+    "@warblerjs/runtime": "workspace:*",
+    "@warblerjs/validators": "workspace:*",
+    "@warblerjs/view": "workspace:*",
+    "@warblerjs/config": "workspace:*",
+    "@warblerjs/websocket": "workspace:*",
+    "@warblerjs/frontend": "workspace:*"
   },
   "devDependencies": {
-    "@warbler/cli": "workspace:*",
-    "@warbler/compiler": "workspace:*",
-    "@warbler/transport": "workspace:*",
+    "@warblerjs/cli": "workspace:*",
+    "@warblerjs/compiler": "workspace:*",
+    "@warblerjs/transport": "workspace:*",
     "@types/bun": "latest",
     "typescript": "^5.9.2"
   },

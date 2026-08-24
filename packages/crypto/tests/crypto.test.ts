@@ -44,7 +44,7 @@ beforeEach(async () => {
   await configureDefaultCrypto();
 });
 
-describe("@warbler/crypto encoding", () => {
+describe("@warblerjs/crypto encoding", () => {
   test("round-trips strict text encodings", () => {
     const bytes = encoding.utf8ToBytes("warbler");
 
@@ -60,7 +60,7 @@ describe("@warbler/crypto encoding", () => {
   });
 });
 
-describe("@warbler/crypto random", () => {
+describe("@warblerjs/crypto random", () => {
   test("generates bounded random bytes and tokens", async () => {
     expect(random.bytes(16)).toHaveLength(16);
     expect(random.hex(8)).toHaveLength(16);
@@ -74,7 +74,7 @@ describe("@warbler/crypto random", () => {
   });
 });
 
-describe("@warbler/crypto secureCompare", () => {
+describe("@warblerjs/crypto secureCompare", () => {
   test("compares equal-length inputs without accepting length mismatches", () => {
     expect(secureCompare("same", "same")).toBe(true);
     expect(secureCompare("same", "diff")).toBe(false);
@@ -82,7 +82,7 @@ describe("@warbler/crypto secureCompare", () => {
   });
 });
 
-describe("@warbler/crypto hash", () => {
+describe("@warblerjs/crypto hash", () => {
   test("hashes bytes, text, and files with Bun.CryptoHasher", async () => {
     const known = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
     expect(hash.sha256("hello")).toBe(known);
@@ -96,7 +96,7 @@ describe("@warbler/crypto hash", () => {
   });
 });
 
-describe("@warbler/crypto password", () => {
+describe("@warblerjs/crypto password", () => {
   test("hashes, verifies, and reports rehash requirements safely", async () => {
     const storedHash = await password.hash("correct horse battery staple");
 
@@ -109,7 +109,7 @@ describe("@warbler/crypto password", () => {
   });
 });
 
-describe("@warbler/crypto hmac", () => {
+describe("@warblerjs/crypto hmac", () => {
   test("signs and verifies configured keys with subtle.verify", async () => {
     const signature = await hmac.sign("payload");
 
@@ -133,7 +133,7 @@ describe("@warbler/crypto hmac", () => {
   });
 });
 
-describe("@warbler/crypto keys", () => {
+describe("@warblerjs/crypto keys", () => {
   test("imports generated material and exports only extractable keys", async () => {
     const material = keys.generate({ for: "encryption" });
     const extractableKey = await keys.import(material, { extractable: true, for: "encryption" });
@@ -144,7 +144,7 @@ describe("@warbler/crypto keys", () => {
   });
 });
 
-describe("@warbler/crypto encryption", () => {
+describe("@warblerjs/crypto encryption", () => {
   test("encrypts and decrypts text, bytes, and JSON envelopes", async () => {
     const textEnvelope = await crypt.encryptText("secret", { context: "tenant:1" });
     expect(textEnvelope).toMatchObject({ alg: "AES-256-GCM", kid: "application-v1", v: 1 });
@@ -208,8 +208,8 @@ describe("@warbler/crypto encryption", () => {
   });
 });
 
-describe("@warbler/crypto configuration", () => {
-  test("resolves key material through @warbler/config env parsing", async () => {
+describe("@warblerjs/crypto configuration", () => {
+  test("resolves key material through @warblerjs/config env parsing", async () => {
     Bun.env.WARBLER_TEST_CRYPTO_KEY = encryptionKeyV1;
 
     const config = await configureCrypto({

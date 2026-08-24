@@ -1,9 +1,14 @@
 {
-  "name": "@warbler/i18n",
-  "version": "0.1.0",
+  "name": "@warblerjs/i18n",
+  "version": "0.1.1",
   "type": "module",
+  "private": false,
+  "files": [
+    "src",
+    "README.md"
+  ],
   "exports": { ".": "./src/index.ts" },
   "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
-  "dependencies": { "@warbler/console": "workspace:*" },
+  "dependencies": { "@warblerjs/console": "0.1.0" },
   "devDependencies": { "@types/bun": "latest", "typescript": "^5.9.2" }
 }

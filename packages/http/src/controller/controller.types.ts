@@ -1,4 +1,4 @@
-import type { ProviderDefinition } from "@warbler/core";
+import type { ProviderDefinition } from "@warblerjs/core";
 import type { Middleware } from "../request/middleware";
 
 /** Immutable HTTP controller metadata consumed by the compiler. */

@@ -1,4 +1,4 @@
-import { TransportKind, type TransportAdapter, type TransportStartContext, type TransportStopContext } from "@warbler/transport";
+import { TransportKind, type TransportAdapter, type TransportStartContext, type TransportStopContext } from "@warblerjs/transport";
 import type { CompiledSocketGraph } from "./compiled";
 import type { NormalizedWebSocketConfig } from "./config";
 import { createBunWebSocketHandler } from "./native";

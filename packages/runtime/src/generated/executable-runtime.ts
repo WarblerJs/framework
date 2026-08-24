@@ -1,4 +1,4 @@
-import { Container, runInInjectionContext } from "@warbler/core";
+import { Container, runInInjectionContext } from "@warblerjs/core";
 import { GeneratedArtifactError, RuntimeProviderNotFoundError } from "../errors/runtime-errors";
 import type {
   ControllerBinding,

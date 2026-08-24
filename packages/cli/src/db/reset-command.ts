@@ -1,4 +1,4 @@
-import { createPgConnection, resetDatabase, runMigrations, runSeeds, type ExecutedMigration, type ExecutedSeed } from "@warbler/database";
+import { createPgConnection, resetDatabase, runMigrations, runSeeds, type ExecutedMigration, type ExecutedSeed } from "@warblerjs/database";
 import type { ProjectLayout } from "../project";
 import { requireDatabaseConfig } from "./shared";
 import { createLazySeedClientFactory } from "./seed-command";

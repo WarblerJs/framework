@@ -1,7 +1,7 @@
 import ts from "typescript";
 import { readFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import { Console, createCorrelationId } from "@warbler/console";
+import { Console, createCorrelationId } from "@warblerjs/console";
 import { analyzeProgram } from "../analyzer/analyze-program";
 import { discoverProject, loadProjectConfig } from "../filesystem/discover-project";
 import { DiagnosticCode, type CompilerDiagnostic } from "../diagnostics/diagnostic";

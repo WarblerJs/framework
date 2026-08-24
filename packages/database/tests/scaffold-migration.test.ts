@@ -30,7 +30,7 @@ describe("scaffoldMigration", () => {
     for (const arg of kinds) {
       const { fileName, content } = scaffoldMigration(arg, FIXED_DATE);
       expect(fileName).toBe(`20260805143025_${arg.replaceAll(":", "_")}.ts`);
-      expect(content).toContain('import type { PgMigration } from "@warbler/database"');
+      expect(content).toContain('import type { PgMigration } from "@warblerjs/database"');
       expect(content).toContain("export const up: PgMigration");
       expect(content).toContain("export const down: PgMigration");
     }

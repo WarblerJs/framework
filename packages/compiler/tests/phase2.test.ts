@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import ts from "typescript";
 import { compileProject } from "../src";
 import { RouteFlag, SocketFlag } from "../src/flags/flags";
-import { createExecutableBindingsRuntime } from "@warbler/runtime";
+import { createExecutableBindingsRuntime } from "@warblerjs/runtime";
 
 const temporaryProjects: string[] = [];
 afterEach(() => {
@@ -16,7 +16,7 @@ async function phase2Project(): Promise<string> {
   const root = mkdtempSync(join(tmpdir(), "warbler-phase2-"));
   temporaryProjects.push(root);
   const packagesRoot = resolve(import.meta.dir, "..", "..");
-  const scope = join(root, "node_modules", "@warbler");
+  const scope = join(root, "node_modules", "@warblerjs");
   mkdirSync(scope, { recursive: true });
   for (const name of ["config", "console", "core", "http", "i18n", "runtime", "transport", "validators", "websocket"]) {
     symlinkSync(join(packagesRoot, name), join(scope, name));
@@ -29,10 +29,10 @@ async function phase2Project(): Promise<string> {
     include: ["src/**/*.ts"],
   }));
   await Bun.write(join(root, "src", "application.ts"), `
-    import { Graph, Service, ProviderScope, inject } from "@warbler/core";
-    import { Controller, Get, Post } from "@warbler/http";
-    import { SocketController, Subscribe, OnOpen } from "@warbler/websocket";
-    import { defineValidator, v } from "@warbler/validators";
+    import { Graph, Service, ProviderScope, inject } from "@warblerjs/core";
+    import { Controller, Get, Post } from "@warblerjs/http";
+    import { SocketController, Subscribe, OnOpen } from "@warblerjs/websocket";
+    import { defineValidator, v } from "@warblerjs/validators";
     export const ValidateMessage: any = defineValidator({ bodyRules: { value: v.string("invalid_string") } });
     export const ValidateRequest: any = defineValidator({ bodyRules: { value: v.string("invalid_string") } });
     export const AuthGuard = (_request: any, _context: any) => true;
@@ -104,7 +104,7 @@ describe("Phase 2 optimization", () => {
     const sourcePath = join(root, "src", "application.ts");
     const source = await Bun.file(sourcePath).text();
     await Bun.write(sourcePath, source
-      .replace("import { Graph, Service, ProviderScope, inject } from \"@warbler/core\";", "import { createApp, Graph, Service, ProviderScope, inject } from \"@warbler/core\";")
+      .replace("import { Graph, Service, ProviderScope, inject } from \"@warblerjs/core\";", "import { createApp, Graph, Service, ProviderScope, inject } from \"@warblerjs/core\";")
       .replace("export const AuditMiddleware = (_request: any, _context: any, next: any) => next();", `export const AuditMiddleware = (_request: any, _context: any, next: any) => next();
     export const GraphMiddleware = (_request: any, _context: any, next: any) => next();
     export const ControllerMiddleware = (_request: any, _context: any, next: any) => next();
@@ -200,9 +200,9 @@ describe("executable bindings", () => {
   test("emits executable bindings for inline defineHttpRoute graph routes", async () => {
     const root = await phase2Project();
     await Bun.write(join(root, "src", "application.ts"), `
-      import { createApp } from "@warbler/core";
-      import { defineHttpGraph, defineHttpRoute, JsonRes } from "@warbler/http";
-      import { defineValidator, v } from "@warbler/validators";
+      import { createApp } from "@warblerjs/core";
+      import { defineHttpGraph, defineHttpRoute, JsonRes } from "@warblerjs/http";
+      import { defineValidator, v } from "@warblerjs/validators";
 
       export const ValidateUser = defineValidator({
         paramRules: { id: v.number() },

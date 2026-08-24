@@ -1,7 +1,7 @@
-import { defineHttpGraph } from "@warbler/http";
+import { defineHttpGraph } from "@warblerjs/framework";
 
 import * as handlers from "./presentation/http/handlers/test.handlers";
-import { Provider } from "@warbler/core";
+import { Provider } from "@warblerjs/framework";
 import { FindUserRepositoryPort } from "./domain/ports/user.repository.port";
 import { WlbPgFindUserRepository } from "./infrastructure/persistence/wlb-pg-user.repository";
 

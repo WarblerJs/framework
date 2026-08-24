@@ -3,8 +3,8 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { ManagedDevSession, type DevelopmentRuntimeHandle, type DevelopmentRuntimeLauncher } from "../src/dev/dev-session";
 import { importGeneratedApplication } from "../src/dev/runtime-launcher";
-import { startRuntime, type RuntimeTransportLauncher, type RuntimeTransportStartInput } from "@warbler/runtime";
-import { compileProject, type CompilerContext } from "@warbler/compiler";
+import { startRuntime, type RuntimeTransportLauncher, type RuntimeTransportStartInput } from "@warblerjs/runtime";
+import { compileProject, type CompilerContext } from "@warblerjs/compiler";
 import { createTestProject } from "./helpers";
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -24,10 +24,11 @@ describe("managed development reload", () => {
     };
     const events: import("../src").DevelopmentEvent[] = [];
     const session = await new ManagedDevSession(project.root, launcher, false, {}, (event) => events.push(event)).start();
-    const controller = join(project.root, "src/graphs/home/home.controller.ts");
-    const valid = await Bun.file(controller).text();
-    await Bun.write(controller, valid.replace('@Get("/")', '@Get("/changed")'));
-    await session.notifyChanges(["src/graphs/home/home.controller.ts"]);
+    const graph = join(project.root, "src/graphs/home/home.graph.ts");
+    const handler = join(project.root, "src/graphs/home/presentation/http/handlers/home.handlers.ts");
+    const valid = await Bun.file(graph).text();
+    await Bun.write(graph, valid.replace('"GET /":', '"GET /changed":'));
+    await session.notifyChanges(["src/graphs/home/home.graph.ts"]);
     expect(starts).toBe(2);
     expect(stops).toBe(1);
 
@@ -35,8 +36,8 @@ describe("managed development reload", () => {
     expect(stops).toBe(2);
     expect(starts).toBe(3);
 
-    await Bun.write(controller, "this is invalid TypeScript");
-    await session.notifyChanges(["src/graphs/home/home.controller.ts"]);
+    await Bun.write(handler, "this is invalid TypeScript");
+    await session.notifyChanges(["src/graphs/home/presentation/http/handlers/home.handlers.ts"]);
     expect(starts).toBe(3);
     expect(session.state).toBe("running");
     expect(events.some((event) => event.stage === "compiler" && event.status === "failure")).toBe(true);
@@ -93,7 +94,7 @@ describe("managed development reload", () => {
     expect(stops).toBe(2);
   });
 
-  test("imports fresh Controller code after a full successful rebuild", async () => {
+  test("imports fresh handler code after a full successful rebuild", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
     let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
     const transport: RuntimeTransportLauncher = Object.freeze({
@@ -128,10 +129,10 @@ describe("managed development reload", () => {
     const session = await new ManagedDevSession(project.root, launcher, false).start();
     const before = await routes["/"]!.GET!(new Request("http://127.0.0.1/"));
     expect(await before.json()).toEqual({ message: "Warbler" });
-    const controller = join(project.root, "src/graphs/home/home.controller.ts");
-    const source = await Bun.file(controller).text();
-    await Bun.write(controller, source.replace('{ message: "Warbler" }', '{ message: "Fresh" }'));
-    await session.notifyChanges(["src/graphs/home/home.controller.ts"]);
+    const handler = join(project.root, "src/graphs/home/presentation/http/handlers/home.handlers.ts");
+    const source = await Bun.file(handler).text();
+    await Bun.write(handler, source.replace('"Warbler"', '"Fresh"'));
+    await session.notifyChanges(["src/graphs/home/presentation/http/handlers/home.handlers.ts"]);
     const after = await routes["/"]!.GET!(new Request("http://127.0.0.1/"));
     expect(await after.json()).toEqual({ message: "Fresh" });
     expect(session.buildNumber).toBe(2);
@@ -148,17 +149,17 @@ describe("managed development reload", () => {
       },
     }, false).start();
 
-    const controller = join(project.root, "src/graphs/home/home.controller.ts");
+    const handler = join(project.root, "src/graphs/home/presentation/http/handlers/home.handlers.ts");
     const graph = join(project.root, "src/graphs/home/home.graph.ts");
-    const source = await Bun.file(controller).text();
-    await Bun.write(controller, source.replace('@Get("/")', '@Get("/cached")'));
-    await session.notifyChanges(["src/graphs/home/home.controller.ts"]);
+    const source = await Bun.file(handler).text();
+    await Bun.write(handler, source.replace('"Warbler"', '"Cached"'));
+    await session.notifyChanges(["src/graphs/home/presentation/http/handlers/home.handlers.ts"]);
 
     expect(contexts).toHaveLength(2);
-    expect(contexts[1]!.program.getSourceFile(controller)).not.toBe(contexts[0]!.program.getSourceFile(controller));
+    expect(contexts[1]!.program.getSourceFile(handler)).not.toBe(contexts[0]!.program.getSourceFile(handler));
     expect(contexts[1]!.program.getSourceFile(graph)).toBe(contexts[0]!.program.getSourceFile(graph));
-    expect(contexts[1]!.applicationWIR).not.toBe(contexts[0]!.applicationWIR);
-    expect(contexts[1]!.generatedApplication).not.toBe(contexts[0]!.generatedApplication);
+    expect(contexts[1]!.applicationWIR).toBe(contexts[0]!.applicationWIR);
+    expect(contexts[1]!.generatedApplication).toBe(contexts[0]!.generatedApplication);
     await session.stop();
   }, 20_000);
 
@@ -172,29 +173,29 @@ describe("managed development reload", () => {
       },
     }, false).start();
 
-    const controller = join(project.root, "src/graphs/home/home.controller.ts");
+    const handler = join(project.root, "src/graphs/home/presentation/http/handlers/home.handlers.ts");
     const generatedTable = join(project.root, ".warbler/generated/tables.generated.ts");
     const generatedTableMtime = (await stat(generatedTable)).mtimeMs;
-    const source = await Bun.file(controller).text();
-    await Bun.write(controller, source.replace('{ message: "Warbler" }', '{ message: "Fresh" }'));
-    await session.notifyChanges(["src/graphs/home/home.controller.ts"]);
+    const source = await Bun.file(handler).text();
+    await Bun.write(handler, source.replace('"Warbler"', '"Fresh"'));
+    await session.notifyChanges(["src/graphs/home/presentation/http/handlers/home.handlers.ts"]);
 
     expect(contexts).toHaveLength(2);
     expect(contexts[1]!.applicationWIR).toBe(contexts[0]!.applicationWIR);
     expect(contexts[1]!.generatedApplication).toBe(contexts[0]!.generatedApplication);
     expect(contexts[1]!.fingerprint).not.toBe(contexts[0]!.fingerprint);
     expect(contexts[1]!.applicationEntry).not.toBe(contexts[0]!.applicationEntry);
-    const snapshot = await Bun.file(join(project.root, ".warbler/generated", `build-${contexts[1]!.fingerprint}`, "source/src/graphs/home/home.controller.ts")).text();
-    expect(snapshot).toContain('{ message: "Fresh" }');
+    const snapshot = await Bun.file(join(project.root, ".warbler/generated", `build-${contexts[1]!.fingerprint}`, "source/src/graphs/home/presentation/http/handlers/home.handlers.ts")).text();
+    expect(snapshot).toContain('const message = "Fresh"');
     expect((await stat(generatedTable)).mtimeMs).toBe(generatedTableMtime);
 
     const fresh = await compileProject(project.root, { semanticDiagnostics: false });
     expect(contexts[1]!.fingerprint).toBe(fresh.fingerprint);
     expect(contexts[1]!.generatedApplication!.files).toEqual(fresh.generatedApplication!.files);
 
-    const secondSource = await Bun.file(controller).text();
-    await Bun.write(controller, secondSource.replace('{ message: "Fresh" }', '{ message: "Fresh Again" }'));
-    await session.notifyChanges(["src/graphs/home/home.controller.ts"]);
+    const secondSource = await Bun.file(handler).text();
+    await Bun.write(handler, secondSource.replace('"Fresh"', '"Fresh Again"'));
+    await session.notifyChanges(["src/graphs/home/presentation/http/handlers/home.handlers.ts"]);
     expect(contexts).toHaveLength(3);
     expect(contexts[2]!.applicationWIR).toBe(contexts[0]!.applicationWIR);
     expect(contexts[2]!.generatedApplication).toBe(contexts[0]!.generatedApplication);
@@ -206,14 +207,14 @@ describe("managed development reload", () => {
 
   test("repeated declarative graph reloads do not retain unbounded compiler or runtime state", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
-    await Bun.write(join(project.root, "src/main.ts"), `import { createApp, Transport } from "@warbler/core";
+    await Bun.write(join(project.root, "src/main.ts"), `import { createApp, Transport } from "@warblerjs/core";
 export default createApp({
   transports: [Transport.HTTP],
   graphs: "src/graphs/**/*.graph.ts",
 });
 `);
     await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), declarativeHandlerSource(0));
-    await Bun.write(join(project.root, "src/graphs/test/test.graph.ts"), `import { defineHttpGraph } from "@warbler/http";
+    await Bun.write(join(project.root, "src/graphs/test/test.graph.ts"), `import { defineHttpGraph } from "@warblerjs/http";
 import * as handlers from "./test.handlers";
 export default defineHttpGraph({
   prefix: "/api",
@@ -249,23 +250,36 @@ export default defineHttpGraph({
 
   test("imports fresh compiled validator bindings after a full Runtime restart", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
-    const controller = join(project.root, "src/graphs/home/home.controller.ts");
-    const source = `import { Controller, JsonRes, Post, type AppRequest } from "@warbler/http";
-import { defineValidator, v, type InferValidatorOutput } from "@warbler/validators";
+    const graph = join(project.root, "src/graphs/home/home.graph.ts");
+    await Bun.write(graph, `import { defineHttpGraph } from "@warblerjs/framework";
+
+import * as handlers from "./presentation/http/handlers/home.handlers";
+
+export default defineHttpGraph({
+  prefix: "/",
+  middlewares: [],
+  providers: [],
+  routes: {
+    "POST /": {
+      name: "home.submit",
+      handler: handlers.index,
+    },
+  },
+});
+`);
+    const handler = join(project.root, "src/graphs/home/presentation/http/handlers/home.handlers.ts");
+    const source = `import { defineHandler, defineValidator, JsonRes, v, type AppRequest } from "@warblerjs/framework";
+
 export const PayloadValidator = defineValidator({
   rules: { value: v.string("invalid_string").max(3, "too_long") },
 });
-type Payload = InferValidatorOutput<typeof PayloadValidator>;
-@Controller()
-export default class HomeController {
-  @Post("/", { validator: PayloadValidator, csrf: false })
-  index(input: unknown): Response {
-    const request = input as AppRequest<Payload>;
-    return JsonRes({ value: request.body.value });
-  }
-}
+
+export const index = defineHandler({
+  validator: PayloadValidator,
+  run: (request: AppRequest<typeof PayloadValidator>) => JsonRes({ value: request.body.value }),
+});
 `;
-    await Bun.write(controller, source);
+    await Bun.write(handler, source);
     let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
     let starts = 0;
     let stops = 0;
@@ -293,8 +307,8 @@ export default class HomeController {
     const session = await new ManagedDevSession(project.root, launcher, false).start();
     expect((await routes["/"]!.POST!(jsonRequest("four"))).status).toBe(400);
 
-    await Bun.write(controller, source.replace(".max(3,", ".max(10,"));
-    await session.notifyChanges(["src/graphs/home/home.controller.ts"]);
+    await Bun.write(handler, source.replace(".max(3,", ".max(10,"));
+    await session.notifyChanges(["src/graphs/home/presentation/http/handlers/home.handlers.ts"]);
     const response = await routes["/"]!.POST!(jsonRequest("four"));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ value: "four" });
@@ -320,11 +334,11 @@ export default class HomeController {
         return { stop() {} };
       },
     }, false).start();
-    const first = session.notifyChanges(["src/graphs/home/home.controller.ts"]);
+    const first = session.notifyChanges(["src/graphs/home/presentation/http/handlers/home.handlers.ts"]);
     await restartEntered.promise;
     const second = session.notifyChanges([
-      "src/graphs/home/home.controller.ts",
-      "src/graphs/home/home.controller.ts",
+      "src/graphs/home/presentation/http/handlers/home.handlers.ts",
+      "src/graphs/home/presentation/http/handlers/home.handlers.ts",
     ]);
     releaseRestart.resolve();
     await Promise.all([first, second]);
@@ -335,8 +349,8 @@ export default class HomeController {
 });
 
 function declarativeHandlerSource(version: number): string {
-  return `import { defineHandler } from "@warbler/core";
-import { JsonRes, type AppRequest } from "@warbler/http";
+  return `import { defineHandler } from "@warblerjs/core";
+import { JsonRes, type AppRequest } from "@warblerjs/http";
 export const getTest = defineHandler({
   run: (_ctx: AppRequest) => JsonRes({ version: ${version} }),
 });

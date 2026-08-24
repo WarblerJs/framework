@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { activateCompiledViews, createCompiledViewArtifact, ViewReservedVariableError } from "@warbler/view";
+import { activateCompiledViews, createCompiledViewArtifact, ViewReservedVariableError } from "@warblerjs/view";
 import { RESERVED_VIEW_BUILTIN_NAMES, runInViewRequestScope, view, type ViewRequestScope } from "../src/view";
 import { buildNamedRouteTable, resolveRouteUrl, ViewRouteNotFoundError, ViewRouteParameterMissingError } from "../src/route";
 import { joinPaths } from "../src/internal";

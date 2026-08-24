@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { RuntimeExecutionContext, RuntimeTransportStartInput } from "@warbler/transport";
-import { NotFoundError, WarblerError } from "@warbler/core";
-import { Console } from "@warbler/console";
+import type { RuntimeExecutionContext, RuntimeTransportStartInput } from "@warblerjs/transport";
+import { NotFoundError, WarblerError } from "@warblerjs/core";
+import { Console } from "@warblerjs/console";
 import { createWebSocketRuntimeLauncher } from "../src/runtime-launcher";
 import type { WebSocketConfig } from "../src/config";
 import {

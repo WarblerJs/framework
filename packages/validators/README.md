@@ -1,4 +1,4 @@
-# @warbler/validators
+# @warblerjs/validators
 
 Transport-independent strict validation powered by Warbler's native validator engine.
 
@@ -8,7 +8,7 @@ Transports parse bytes and requests before passing plain values to a compiled
 validator.
 
 ```ts
-import { compileValidator, v } from "@warbler/validators";
+import { compileValidator, v } from "@warblerjs/validators";
 
 const validator = compileValidator({
   rules: { name: v.string("validators.invalid_name") },
@@ -46,8 +46,8 @@ onValidationError not defined → Warbler's default validation-error response is
   throwing.
 
 ```ts
-import { defineValidator, v } from "@warbler/validators";
-import { view } from "@warbler/view";
+import { defineValidator, v } from "@warblerjs/validators";
+import { view } from "@warblerjs/view";
 
 export const validateUserId = defineValidator({
   paramRules: {

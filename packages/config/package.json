@@ -1,8 +1,12 @@
 {
-  "name": "@warbler/config",
+  "name": "@warblerjs/config",
   "version": "0.1.0",
   "type": "module",
   "private": false,
+  "files": [
+    "src",
+    "README.md"
+  ],
   "exports": {
     ".": "./src/index.ts",
     "./discovery": "./src/discovery/index.ts",

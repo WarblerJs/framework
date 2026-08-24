@@ -1,4 +1,4 @@
-import { interceptEvent } from "@warbler/events";
+import { interceptEvent } from "@warblerjs/events";
 
 export const eventTelemetry = interceptEvent(async (context, next) => {
   const start = performance.now();

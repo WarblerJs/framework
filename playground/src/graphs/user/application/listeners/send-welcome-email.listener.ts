@@ -1,6 +1,6 @@
-import { inject } from "@warbler/core";
-import { Email } from "@warbler/email";
-import { listen } from "@warbler/events";
+import { inject } from "@warblerjs/framework";
+import { Email } from "@warblerjs/email";
+import { listen } from "@warblerjs/events";
 import { UserCreated } from "../../domain/events/user-created.event";
 
 export const sendWelcomeEmail = listen(UserCreated, async (event) => {

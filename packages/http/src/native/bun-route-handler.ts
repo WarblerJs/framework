@@ -1,6 +1,6 @@
 import { csrfFailureResponse, stripCsrfBodyField, type CsrfPolicy, CsrfVerifier } from "../csrf";
-import { Console, createCorrelationId, type RequestHandle } from "@warbler/console";
-import { WarblerError } from "@warbler/core";
+import { Console, createCorrelationId, type RequestHandle } from "@warblerjs/console";
+import { WarblerError } from "@warblerjs/core";
 import { HttpError, renderRequestError } from "../errors";
 import { RouteFlag } from "../compiled";
 import {

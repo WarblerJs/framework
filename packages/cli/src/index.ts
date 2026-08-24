@@ -7,6 +7,25 @@ export { CLIError } from "./errors";
 export type { CLIOutput } from "./output";
 export { locateProject, validateProject, type ProjectLayout } from "./project";
 export { generateSource, type GeneratedFilePlan, type GeneratorKind } from "./generate/generate-command";
+export {
+  architecturePresets,
+  createGraphGenerationPlan,
+  DEFAULT_ARCHITECTURE,
+  DEFAULT_TRANSPORT,
+  generateGraph,
+  normalizeGraphName,
+  normalizeTransports,
+  resolveArchitecture,
+  transportPresets,
+  type Architecture,
+  type GraphGeneratedFile,
+  type GraphGenerationInput,
+  type GraphGenerationPlan,
+  type GraphGenerationResult,
+  type GraphTransport,
+  type NormalizedGraphName,
+} from "./generators/graph";
+export { makeGraphCommand } from "./make/make-graph-command";
 export { createStarterProject } from "./new/new-command";
 export { devCommand } from "./dev/dev-command";
 export type {

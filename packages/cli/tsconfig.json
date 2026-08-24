@@ -3,12 +3,13 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@warbler/console": ["../console/src/index.ts"],
-      "@warbler/compiler": ["../compiler/src/index.ts"],
-      "@warbler/config": ["../config/src/index.ts"],
-      "@warbler/config/validator": ["../config/src/validator/index.ts"],
-      "@warbler/core": ["../core/src/index.ts"],
-      "@warbler/runtime": ["../runtime/src/index.ts"]
+      "@warblerjs/console": ["../console/src/index.ts"],
+      "@warblerjs/compiler": ["../compiler/src/index.ts"],
+      "@warblerjs/config": ["../config/src/index.ts"],
+      "@warblerjs/config/validator": ["../config/src/validator/index.ts"],
+      "@warblerjs/core": ["../core/src/index.ts"],
+      "@warblerjs/framework": ["../framework/src/index.ts"],
+      "@warblerjs/runtime": ["../runtime/src/index.ts"]
     },
     "exactOptionalPropertyTypes": true
   },

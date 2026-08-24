@@ -9,19 +9,20 @@
       },
     },
     "packages/cli": {
-      "name": "@warbler/cli",
+      "name": "@warblerjs/cli",
       "version": "0.1.0",
       "bin": {
         "warbler": "./src/bin.ts",
       },
       "dependencies": {
-        "@warbler/compiler": "workspace:*",
-        "@warbler/config": "workspace:*",
-        "@warbler/console": "workspace:*",
-        "@warbler/core": "workspace:*",
-        "@warbler/database": "workspace:*",
-        "@warbler/runtime": "workspace:*",
-        "@warbler/view": "workspace:*",
+        "@warblerjs/compiler": "workspace:*",
+        "@warblerjs/config": "workspace:*",
+        "@warblerjs/console": "workspace:*",
+        "@warblerjs/core": "workspace:*",
+        "@warblerjs/database": "workspace:*",
+        "@warblerjs/framework": "workspace:*",
+        "@warblerjs/runtime": "workspace:*",
+        "@warblerjs/view": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -29,21 +30,21 @@
       },
     },
     "packages/compiler": {
-      "name": "@warbler/compiler",
+      "name": "@warblerjs/compiler",
       "version": "0.1.0",
       "dependencies": {
-        "@warbler/console": "workspace:*",
-        "@warbler/core": "workspace:*",
-        "@warbler/events": "workspace:*",
-        "@warbler/validators": "workspace:*",
+        "@warblerjs/console": "workspace:*",
+        "@warblerjs/core": "workspace:*",
+        "@warblerjs/events": "workspace:*",
+        "@warblerjs/validators": "workspace:*",
+        "typescript": "^5.9.2",
       },
       "devDependencies": {
         "@types/bun": "latest",
-        "typescript": "^5.9.2",
       },
     },
     "packages/config": {
-      "name": "@warbler/config",
+      "name": "@warblerjs/config",
       "version": "0.1.0",
       "devDependencies": {
         "@types/bun": "latest",
@@ -51,7 +52,7 @@
       },
     },
     "packages/console": {
-      "name": "@warbler/console",
+      "name": "@warblerjs/console",
       "version": "0.1.0",
       "devDependencies": {
         "@types/bun": "latest",
@@ -59,7 +60,7 @@
       },
     },
     "packages/core": {
-      "name": "@warbler/core",
+      "name": "@warblerjs/core",
       "version": "0.1.0",
       "devDependencies": {
         "@types/bun": "latest",
@@ -67,10 +68,10 @@
       },
     },
     "packages/crypto": {
-      "name": "@warbler/crypto",
+      "name": "@warblerjs/crypto",
       "version": "0.1.0",
       "dependencies": {
-        "@warbler/config": "workspace:*",
+        "@warblerjs/config": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -78,7 +79,7 @@
       },
     },
     "packages/database": {
-      "name": "@warbler/database",
+      "name": "@warblerjs/database",
       "version": "0.1.0",
       "devDependencies": {
         "@types/bun": "latest",
@@ -86,12 +87,12 @@
       },
     },
     "packages/email": {
-      "name": "@warbler/email",
+      "name": "@warblerjs/email",
       "version": "0.1.0",
       "dependencies": {
-        "@warbler/config": "workspace:*",
-        "@warbler/crypto": "workspace:*",
-        "@warbler/view": "workspace:*",
+        "@warblerjs/config": "workspace:*",
+        "@warblerjs/crypto": "workspace:*",
+        "@warblerjs/view": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -99,11 +100,25 @@
       },
     },
     "packages/events": {
-      "name": "@warbler/events",
+      "name": "@warblerjs/events",
       "version": "0.1.0",
       "dependencies": {
-        "@warbler/console": "workspace:*",
-        "@warbler/core": "workspace:*",
+        "@warblerjs/console": "workspace:*",
+        "@warblerjs/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "typescript": "^5.9.2",
+      },
+    },
+    "packages/framework": {
+      "name": "@warblerjs/framework",
+      "version": "0.1.0",
+      "dependencies": {
+        "@warblerjs/core": "workspace:*",
+        "@warblerjs/http": "workspace:*",
+        "@warblerjs/validators": "workspace:*",
+        "@warblerjs/websocket": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -111,23 +126,23 @@
       },
     },
     "packages/frontend": {
-      "name": "@warbler/frontend",
+      "name": "@warblerjs/frontend",
       "version": "0.1.0",
       "devDependencies": {
         "typescript": "^5.9.0",
       },
     },
     "packages/http": {
-      "name": "@warbler/http",
+      "name": "@warblerjs/http",
       "version": "0.1.0",
       "dependencies": {
-        "@warbler/config": "workspace:*",
-        "@warbler/console": "workspace:*",
-        "@warbler/core": "workspace:*",
-        "@warbler/i18n": "workspace:*",
-        "@warbler/transport": "workspace:*",
-        "@warbler/validators": "workspace:*",
-        "@warbler/view": "workspace:*",
+        "@warblerjs/config": "workspace:*",
+        "@warblerjs/console": "workspace:*",
+        "@warblerjs/core": "workspace:*",
+        "@warblerjs/i18n": "workspace:*",
+        "@warblerjs/transport": "workspace:*",
+        "@warblerjs/validators": "workspace:*",
+        "@warblerjs/view": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -135,10 +150,10 @@
       },
     },
     "packages/i18n": {
-      "name": "@warbler/i18n",
-      "version": "0.1.0",
+      "name": "@warblerjs/i18n",
+      "version": "0.1.1",
       "dependencies": {
-        "@warbler/console": "workspace:*",
+        "@warblerjs/console": "0.1.0",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -146,14 +161,14 @@
       },
     },
     "packages/runtime": {
-      "name": "@warbler/runtime",
+      "name": "@warblerjs/runtime",
       "version": "0.1.0",
       "dependencies": {
-        "@warbler/config": "workspace:*",
-        "@warbler/console": "workspace:*",
-        "@warbler/core": "workspace:*",
-        "@warbler/i18n": "workspace:*",
-        "@warbler/transport": "workspace:*",
+        "@warblerjs/config": "workspace:*",
+        "@warblerjs/console": "workspace:*",
+        "@warblerjs/core": "workspace:*",
+        "@warblerjs/i18n": "workspace:*",
+        "@warblerjs/transport": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -161,7 +176,7 @@
       },
     },
     "packages/transport": {
-      "name": "@warbler/transport",
+      "name": "@warblerjs/transport",
       "version": "0.1.0",
       "devDependencies": {
         "@types/bun": "latest",
@@ -169,11 +184,11 @@
       },
     },
     "packages/validators": {
-      "name": "@warbler/validators",
+      "name": "@warblerjs/validators",
       "version": "0.1.0",
       "dependencies": {
-        "@warbler/core": "workspace:*",
-        "@warbler/i18n": "workspace:*",
+        "@warblerjs/core": "workspace:*",
+        "@warblerjs/i18n": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -181,7 +196,7 @@
       },
     },
     "packages/view": {
-      "name": "@warbler/view",
+      "name": "@warblerjs/view",
       "version": "0.1.0-rc.0",
       "dependencies": {
         "@tailwindcss/cli": "^4.0.0",
@@ -194,15 +209,15 @@
       },
     },
     "packages/websocket": {
-      "name": "@warbler/websocket",
+      "name": "@warblerjs/websocket",
       "version": "0.1.0",
       "dependencies": {
-        "@warbler/config": "workspace:*",
-        "@warbler/console": "workspace:*",
-        "@warbler/core": "workspace:*",
-        "@warbler/i18n": "workspace:*",
-        "@warbler/transport": "workspace:*",
-        "@warbler/validators": "workspace:*",
+        "@warblerjs/config": "workspace:*",
+        "@warblerjs/console": "workspace:*",
+        "@warblerjs/core": "workspace:*",
+        "@warblerjs/i18n": "workspace:*",
+        "@warblerjs/transport": "workspace:*",
+        "@warblerjs/validators": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -210,27 +225,28 @@
       },
     },
     "playground": {
-      "name": "@warbler/playground",
+      "name": "@warblerjs/playground",
       "version": "0.1.0",
       "dependencies": {
-        "@warbler/config": "workspace:*",
-        "@warbler/core": "workspace:*",
-        "@warbler/crypto": "workspace:*",
-        "@warbler/database": "workspace:*",
-        "@warbler/email": "workspace:*",
-        "@warbler/events": "workspace:*",
-        "@warbler/frontend": "workspace:*",
-        "@warbler/http": "workspace:*",
-        "@warbler/runtime": "workspace:*",
-        "@warbler/validators": "workspace:*",
-        "@warbler/view": "workspace:*",
-        "@warbler/websocket": "workspace:*",
+        "@warblerjs/config": "workspace:*",
+        "@warblerjs/core": "workspace:*",
+        "@warblerjs/crypto": "workspace:*",
+        "@warblerjs/database": "workspace:*",
+        "@warblerjs/email": "workspace:*",
+        "@warblerjs/events": "workspace:*",
+        "@warblerjs/framework": "workspace:*",
+        "@warblerjs/frontend": "workspace:*",
+        "@warblerjs/http": "workspace:*",
+        "@warblerjs/runtime": "workspace:*",
+        "@warblerjs/validators": "workspace:*",
+        "@warblerjs/view": "workspace:*",
+        "@warblerjs/websocket": "workspace:*",
       },
       "devDependencies": {
         "@types/bun": "latest",
-        "@warbler/cli": "workspace:*",
-        "@warbler/compiler": "workspace:*",
-        "@warbler/transport": "workspace:*",
+        "@warblerjs/cli": "workspace:*",
+        "@warblerjs/compiler": "workspace:*",
+        "@warblerjs/transport": "workspace:*",
         "typescript": "^5.9.2",
       },
     },
@@ -310,41 +326,43 @@
 
     "@types/node": ["@types/node@26.2.0", "", { "dependencies": { "undici-types": "~8.3.0" } }, "sha512-5IviulTZeRNp2vAJ514cc/HUlY5nZ9fCbq9DMyC52BrhFZACo3nI0R7qBxhQmo/d27NFe96ur/b7Wwxklda+kg=="],
 
-    "@warbler/cli": ["@warbler/cli@workspace:packages/cli"],
+    "@warblerjs/cli": ["@warblerjs/cli@workspace:packages/cli"],
 
-    "@warbler/compiler": ["@warbler/compiler@workspace:packages/compiler"],
+    "@warblerjs/compiler": ["@warblerjs/compiler@workspace:packages/compiler"],
 
-    "@warbler/config": ["@warbler/config@workspace:packages/config"],
+    "@warblerjs/config": ["@warblerjs/config@workspace:packages/config"],
 
-    "@warbler/console": ["@warbler/console@workspace:packages/console"],
+    "@warblerjs/console": ["@warblerjs/console@workspace:packages/console"],
 
-    "@warbler/core": ["@warbler/core@workspace:packages/core"],
+    "@warblerjs/core": ["@warblerjs/core@workspace:packages/core"],
 
-    "@warbler/crypto": ["@warbler/crypto@workspace:packages/crypto"],
+    "@warblerjs/crypto": ["@warblerjs/crypto@workspace:packages/crypto"],
 
-    "@warbler/database": ["@warbler/database@workspace:packages/database"],
+    "@warblerjs/database": ["@warblerjs/database@workspace:packages/database"],
 
-    "@warbler/email": ["@warbler/email@workspace:packages/email"],
+    "@warblerjs/email": ["@warblerjs/email@workspace:packages/email"],
 
-    "@warbler/events": ["@warbler/events@workspace:packages/events"],
+    "@warblerjs/events": ["@warblerjs/events@workspace:packages/events"],
 
-    "@warbler/frontend": ["@warbler/frontend@workspace:packages/frontend"],
+    "@warblerjs/framework": ["@warblerjs/framework@workspace:packages/framework"],
 
-    "@warbler/http": ["@warbler/http@workspace:packages/http"],
+    "@warblerjs/frontend": ["@warblerjs/frontend@workspace:packages/frontend"],
 
-    "@warbler/i18n": ["@warbler/i18n@workspace:packages/i18n"],
+    "@warblerjs/http": ["@warblerjs/http@workspace:packages/http"],
 
-    "@warbler/playground": ["@warbler/playground@workspace:playground"],
+    "@warblerjs/i18n": ["@warblerjs/i18n@workspace:packages/i18n"],
 
-    "@warbler/runtime": ["@warbler/runtime@workspace:packages/runtime"],
+    "@warblerjs/playground": ["@warblerjs/playground@workspace:playground"],
 
-    "@warbler/transport": ["@warbler/transport@workspace:packages/transport"],
+    "@warblerjs/runtime": ["@warblerjs/runtime@workspace:packages/runtime"],
 
-    "@warbler/validators": ["@warbler/validators@workspace:packages/validators"],
+    "@warblerjs/transport": ["@warblerjs/transport@workspace:packages/transport"],
 
-    "@warbler/view": ["@warbler/view@workspace:packages/view"],
+    "@warblerjs/validators": ["@warblerjs/validators@workspace:packages/validators"],
 
-    "@warbler/websocket": ["@warbler/websocket@workspace:packages/websocket"],
+    "@warblerjs/view": ["@warblerjs/view@workspace:packages/view"],
+
+    "@warblerjs/websocket": ["@warblerjs/websocket@workspace:packages/websocket"],
 
     "braces": ["braces@3.0.3", "", { "dependencies": { "fill-range": "^7.1.1" } }, "sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA=="],
 
@@ -428,58 +446,6 @@
 
     "@tailwindcss/oxide-wasm32-wasi/tslib": ["tslib@2.8.1", "", { "bundled": true }, "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w=="],
 
-    "@warbler/cli/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
-
-    "@warbler/compiler/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
-
-    "@warbler/config/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
-
-    "@warbler/crypto/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
-
-    "@warbler/database/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
-
-    "@warbler/email/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
-
-    "@warbler/events/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
-
-    "@warbler/http/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
-
-    "@warbler/playground/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
-
-    "@warbler/runtime/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
-
-    "@warbler/transport/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
-
-    "@warbler/view/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
-
-    "@warbler/websocket/@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
-
     "lightningcss/detect-libc": ["detect-libc@2.1.2", "", {}, "sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ=="],
-
-    "@warbler/cli/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
-
-    "@warbler/compiler/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
-
-    "@warbler/config/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
-
-    "@warbler/crypto/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
-
-    "@warbler/database/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
-
-    "@warbler/email/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
-
-    "@warbler/events/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
-
-    "@warbler/http/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
-
-    "@warbler/playground/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
-
-    "@warbler/runtime/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
-
-    "@warbler/transport/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
-
-    "@warbler/view/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
-
-    "@warbler/websocket/@types/bun/bun-types": ["bun-types@1.3.14", "", { "dependencies": { "@types/node": "*" } }, "sha512-4N0ig0fEomHt5R0KCFWjovxow98rIoRwKolrYdCcknNwMekCXRnWEUvgu5soYV8QXtVsrUD8B95MBOZGPvr6KQ=="],
   }
 }

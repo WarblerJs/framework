@@ -25,10 +25,10 @@ async function project(source: string): Promise<string> {
 describe("compiler foundation", () => {
   test("discovers Graphs, controllers, providers, routes, sockets, aliases, and dependencies", async () => {
     const root = await project(`
-      import { Graph as G, Service as S, Repository, ProviderScope as PS, inject, Transport } from "@warbler/core";
-      import { createApp } from "@warbler/core";
-      import { Controller, Get, Post } from "@warbler/http";
-      import { SocketController, Subscribe, OnOpen } from "@warbler/websocket";
+      import { Graph as G, Service as S, Repository, ProviderScope as PS, inject, Transport } from "@warblerjs/core";
+      import { createApp } from "@warblerjs/core";
+      import { Controller, Get, Post } from "@warblerjs/http";
+      import { SocketController, Subscribe, OnOpen } from "@warblerjs/websocket";
 
       const globalMiddleware = (_request: unknown, _context: unknown, next: () => unknown) => next();
       const graphMiddleware = (_request: unknown, _context: unknown, next: () => unknown) => next();
@@ -80,7 +80,7 @@ describe("compiler foundation", () => {
   });
 
   test("compileApplication returns metadata-only WIR", async () => {
-    const root = await project(`import { Graph } from "@warbler/core"; @Graph() class AppGraph {}`);
+    const root = await project(`import { Graph } from "@warblerjs/core"; @Graph() class AppGraph {}`);
     const wir = await compileApplication(root);
     expect(wir.version).toBe(1);
     expect(wir.graphs[0]?.name).toBe("AppGraph");
@@ -88,7 +88,7 @@ describe("compiler foundation", () => {
   });
 
   test("Compiler facade owns independent compilation state", async () => {
-    const root = await project(`import { Graph } from "@warbler/core"; @Graph() class AppGraph {}`);
+    const root = await project(`import { Graph } from "@warblerjs/core"; @Graph() class AppGraph {}`);
     const first = await new Compiler(root).compile();
     const second = await new Compiler(root).compile();
     expect(first).not.toBe(second);
@@ -108,7 +108,7 @@ describe("compiler foundation", () => {
   test("persistent compiler invalidates only changed source files", async () => {
     const root = await project(`
       import "./support";
-      import { Graph } from "@warbler/core";
+      import { Graph } from "@warblerjs/core";
       @Graph() class AppGraph {}
     `);
     await Bun.write(join(root, "src", "support.ts"), `export const support = "stable";`);
@@ -122,7 +122,7 @@ describe("compiler foundation", () => {
 
     await Bun.write(applicationPath, `
       import "./support";
-      import { Graph } from "@warbler/core";
+      import { Graph } from "@warblerjs/core";
       @Graph() class ChangedGraph {}
     `);
     compiler.markChanged("src/application.ts");
@@ -137,9 +137,9 @@ describe("compiler foundation", () => {
 describe("validation diagnostics", () => {
   test("reports declarative graph key and placement errors with source coordinates", async () => {
     const root = await project(`
-      import { defineHandler, createApp } from "@warbler/core";
-      import { defineHttpGraph } from "@warbler/http";
-      import { defineWebSocketGraph } from "@warbler/websocket";
+      import { defineHandler, createApp } from "@warblerjs/core";
+      import { defineHttpGraph } from "@warblerjs/http";
+      import { defineWebSocketGraph } from "@warblerjs/websocket";
       const validator = {};
       const handler = defineHandler({ run: (_ctx: unknown) => undefined });
       export const http = defineHttpGraph({
@@ -180,9 +180,9 @@ describe("validation diagnostics", () => {
 
   test("reports duplicate routes and socket events with source coordinates", async () => {
     const root = await project(`
-      import { Graph } from "@warbler/core";
-      import { Controller, Get } from "@warbler/http";
-      import { SocketController, Subscribe, OnOpen } from "@warbler/websocket";
+      import { Graph } from "@warblerjs/core";
+      import { Controller, Get } from "@warblerjs/http";
+      import { SocketController, Subscribe, OnOpen } from "@warblerjs/websocket";
       @Controller() class One { @Get("/same") one() {} }
       @Controller() class Two { @Get("/same") two() {} }
       @SocketController() class Socket {
@@ -207,8 +207,8 @@ describe("validation diagnostics", () => {
 
   test("reports provider visibility, cycles, duplicate providers, missing ownership, and invalid usage", async () => {
     const root = await project(`
-      import { Graph, Service, inject } from "@warbler/core";
-      import { Get, Controller } from "@warbler/http";
+      import { Graph, Service, inject } from "@warblerjs/core";
+      import { Get, Controller } from "@warblerjs/http";
       @Service() class LocalService {}
       @Service() class AdminService { readonly local = inject(LocalService); }
       @Service() class CycleA { readonly b = inject(CycleB); }

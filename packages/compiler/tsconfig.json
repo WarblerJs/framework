@@ -3,10 +3,10 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@warbler/console": ["../console/src/index.ts"],
-      "@warbler/core": ["../core/src/index.ts"],
-      "@warbler/events": ["../events/src/index.ts"],
-      "@warbler/runtime": ["../runtime/src/index.ts"]
+      "@warblerjs/console": ["../console/src/index.ts"],
+      "@warblerjs/core": ["../core/src/index.ts"],
+      "@warblerjs/events": ["../events/src/index.ts"],
+      "@warblerjs/runtime": ["../runtime/src/index.ts"]
     },
     "exactOptionalPropertyTypes": true
   },

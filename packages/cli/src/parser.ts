@@ -1,9 +1,13 @@
 import { CLIError } from "./errors";
 import { ExitCode, type CLICommandName, type CLIFlagValue, type ParsedCLI } from "./types";
 
-const COMMANDS = new Set<CLICommandName>(["dev", "build", "start", "doctor", "inspect", "new", "generate", "db:pg", "clean", "version", "help"]);
-const VALUE_FLAGS = new Set(["project", "mode", "host", "port", "out", "step", "only"]);
+const COMMANDS = new Set<CLICommandName>(["dev", "build", "start", "doctor", "inspect", "new", "make:graph", "generate", "db:pg", "clean", "version", "help"]);
+const VALUE_FLAGS = new Set(["project", "mode", "host", "port", "out", "step", "only", "architecture", "transport"]);
 const BOOLEAN_FLAGS = new Set(["watch", "no-watch", "minify", "no-minify", "sourcemap", "no-sourcemap", "no-color", "json", "verbose", "quiet", "dry-run", "force", "seed", "no-soft-delete", "help"]);
+const SHORT_VALUE_FLAGS: Readonly<Record<string, string>> = Object.freeze({
+  a: "architecture",
+  t: "transport",
+});
 
 /** Parses CLI arguments without mutating input or retaining global state. */
 export function parseCLI(input: readonly string[]): ParsedCLI {
@@ -16,7 +20,17 @@ export function parseCLI(input: readonly string[]): ParsedCLI {
   const args: string[] = [];
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index]!;
-    if (!token.startsWith("--")) { args.push(token); continue; }
+    if (!token.startsWith("-")) { args.push(token); continue; }
+    if (!token.startsWith("--")) {
+      const shortName = token.slice(1);
+      const name = SHORT_VALUE_FLAGS[shortName];
+      if (name === undefined) throw new CLIError("CLI1002", `Unknown flag: -${shortName}`, ExitCode.INVALID_ARGUMENTS);
+      if (name in flags) throw new CLIError("CLI1003", `Duplicate flag: --${name}`, ExitCode.INVALID_ARGUMENTS);
+      const value = tokens[++index];
+      if (value === undefined || value === "" || value.startsWith("-")) throw new CLIError("CLI1004", `Flag -${shortName} requires a value.`, ExitCode.INVALID_ARGUMENTS);
+      flags[name] = value;
+      continue;
+    }
     const equal = token.indexOf("=");
     const name = token.slice(2, equal === -1 ? undefined : equal);
     if (!VALUE_FLAGS.has(name) && !BOOLEAN_FLAGS.has(name)) throw new CLIError("CLI1002", `Unknown flag: --${name}`, ExitCode.INVALID_ARGUMENTS);

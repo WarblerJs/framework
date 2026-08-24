@@ -1,6 +1,6 @@
 # Warbler PostgreSQL ORM (`database/warbler/pg`)
 
-Migration-first PostgreSQL ORM for this project, powered by `@warbler/database`. **PostgreSQL
+Migration-first PostgreSQL ORM for this project, powered by `@warblerjs/database`. **PostgreSQL
 itself is the source of truth.** There are no hand-written model files — you evolve the schema
 through typed migrations, then generate the client by introspecting the live database.
 
@@ -26,7 +26,7 @@ database/warbler/pg/
 `src/config/database.config.ts` (already present):
 
 ```ts
-import { envBoolean, envNumber, envString } from "@warbler/config";
+import { envBoolean, envNumber, envString } from "@warblerjs/config";
 
 export const databaseConfig = {
   pg: {
@@ -85,8 +85,8 @@ builders as before:
 
 ```ts
 // migrations/20260805143025_create_table_user.ts
-import type { PgMigration } from "@warbler/database";
-import { PgDefault, PgTypes } from "@warbler/database";
+import type { PgMigration } from "@warblerjs/database";
+import { PgDefault, PgTypes } from "@warblerjs/database";
 
 export const up: PgMigration = async (pgm) => {
   await pgm.createTable("users", {
@@ -105,8 +105,8 @@ export const down: PgMigration = async (pgm) => {
 
 ```ts
 // migrations/20260806090000_add_column_user_role.ts
-import type { PgMigration } from "@warbler/database";
-import { OnDeleteAction, PgTypes } from "@warbler/database";
+import type { PgMigration } from "@warblerjs/database";
+import { OnDeleteAction, PgTypes } from "@warblerjs/database";
 
 export const up: PgMigration = async (pgm) => {
   await pgm.addColumns("users", {
@@ -222,7 +222,7 @@ exists then `seed:make categories` creates `0005_categories.seed.ts`. Only files
 Seed files export a named `seed` function and receive the generated transaction-bound ORM client:
 
 ```ts
-import type { PgSeed } from "@warbler/database";
+import type { PgSeed } from "@warblerjs/database";
 import type { WlbPgTransactionClient } from "../generated/client";
 
 export const seed: PgSeed<WlbPgTransactionClient> = async (db) => {

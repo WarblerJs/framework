@@ -1,4 +1,4 @@
-# @warbler/runtime
+# @warblerjs/runtime
 
 Warbler Runtime is the small production bootstrap layer for compiler-generated artifacts. It loads
 one explicitly supplied generated application module, creates isolated root and Graph provider
@@ -30,7 +30,7 @@ applications, discover routes/events, implement transports, or generate artifact
 
 Ordinary application errors (a controller/handler/socket-event throwing) never reach this
 package — they're caught and rendered by each transport's own exception boundary
-(`@warbler/http`, `@warbler/websocket`). `installFatalErrorHandlers(runtime)` is a separate,
+(`@warblerjs/http`, `@warblerjs/websocket`). `installFatalErrorHandlers(runtime)` is a separate,
 opt-in last resort for a genuinely fatal failure that escapes every one of those — it logs,
 gracefully calls the Runtime's existing `stop()`, then exits the process non-zero:
 

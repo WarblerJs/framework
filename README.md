@@ -8,11 +8,11 @@ Warbler is designed around a simple developer-experience goal:
 
 Write the application behavior. Let the framework handle the repetitive infrastructure.
 
-A Warbler application is organized around a small set of concepts:
+A Warbler application is organized around declarative Graphs:
 
 Graph
   ↓
-Controllers
+Handlers
   ↓
 Guards / Middleware
   ↓
@@ -32,27 +32,32 @@ It can define:
 
 route prefix
 
-transport
-
-controllers
+routes or socket events
 
 providers
 
 Example:
 
-@Graph({
+```ts
+import { defineHttpGraph } from "@warblerjs/framework";
+
+import * as handlers from "./presentation/http/handlers/users.handlers";
+
+export default defineHttpGraph({
   prefix: "/api",
-  transport: "http",
-  controllers: [
-    UserController,
-    AuthController,
-  ],
-  providers: [
-    UserService,
-    AuthService,
-  ],
-})
-export class ApiGraph {}
+
+  middlewares: [],
+
+  providers: [],
+
+  routes: {
+    "GET /users": {
+      name: "users.index",
+      handler: handlers.index,
+    },
+  },
+});
+```
 
 The graph gives Warbler enough information to understand how this application area is structured.
 
@@ -68,15 +73,29 @@ Application
 ├── AdminGraph
 └── SocketGraph
 
-A WebSocket area can use another transport:
+The public application-facing import path is:
 
-@Graph({
-  transport: "websocket",
-  controllers: [
-    ChatSocketController,
-  ],
-})
-export class SocketGraph {}
+```ts
+import {
+  defineHttpGraph,
+  defineHandler,
+  defineValidator,
+  v,
+  Provider,
+} from "@warblerjs/framework";
+```
+
+The CLI creates new Graph boundaries with:
+
+```text
+warbler make:graph users
+warbler make:graph users -a hexagonal
+warbler make:graph chat -t socket
+warbler make:graph realtime -a hexagonal -t http,socket
+```
+
+Supported architecture presets are `minimal`, `hexagonal`, `clean`, and `mvc`. The default
+transport is `http`.
 
 2. Controllers
 

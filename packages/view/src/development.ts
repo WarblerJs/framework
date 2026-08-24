@@ -34,7 +34,7 @@ export function createViewDevelopmentRoutes(): Readonly<Record<string, Readonly<
           cancel() { if (active !== undefined) subscribers.delete(active); },
         });
         // Long-lived streams must opt out of Bun's per-request idle timeout, mirroring the
-        // RouteFlag.SSE handling in @warbler/http's compiled route pipeline (see bun-route-handler.ts).
+        // RouteFlag.SSE handling in @warblerjs/http's compiled route pipeline (see bun-route-handler.ts).
         server.timeout(request, 0);
         return new Response(stream, { headers: {
           "cache-control": "no-cache, no-store",

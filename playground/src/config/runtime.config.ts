@@ -1,4 +1,4 @@
-import { envString } from "@warbler/config";
+import { envString } from "@warblerjs/config";
 
 export default {
   network: { host: envString('APP_HOST','0.0.0.0'), bindInterface: undefined },

@@ -1,4 +1,4 @@
-import { Console } from "@warbler/console";
+import { Console } from "@warblerjs/console";
 import { CompiledCatalog, loadTranslationCatalog } from "./catalog";
 import { I18nError, I18nErrorCode } from "./errors";
 import { interpolate } from "./interpolation";

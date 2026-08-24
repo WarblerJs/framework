@@ -1,6 +1,6 @@
 # Testing
 
-Use `MemoryTransport` from `@warbler/email/testing`.
+Use `MemoryTransport` from `@warblerjs/email/testing`.
 
 ```ts
 const transport = new MemoryTransport();

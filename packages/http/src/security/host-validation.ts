@@ -1,4 +1,4 @@
-import { parseHost } from "@warbler/config";
+import { parseHost } from "@warblerjs/config";
 import { InvalidRequestError } from "../errors";
 
 /** Validates Host against syntax and a pre-normalized allow-list. */

@@ -1,7 +1,9 @@
 {
-  "name": "@warbler/events",
+  "name": "@warblerjs/events",
   "version": "0.1.0",
   "type": "module",
+  "private": false,
+"files": ["src"],
   "exports": {
     ".": "./src/index.ts",
     "./testing": "./src/testing.ts"
@@ -11,8 +13,8 @@
     "typecheck": "bunx --package typescript@5.9.2 tsc --noEmit"
   },
   "dependencies": {
-    "@warbler/console": "workspace:*",
-    "@warbler/core": "workspace:*"
+    "@warblerjs/console": "workspace:*",
+    "@warblerjs/core": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest",

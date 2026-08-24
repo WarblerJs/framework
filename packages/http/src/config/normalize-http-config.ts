@@ -1,4 +1,4 @@
-import { parseByteSize, parseHost, parsePort } from "@warbler/config";
+import { parseByteSize, parseHost, parsePort } from "@warblerjs/config";
 import { InvalidHttpConfigError } from "../errors";
 import { HttpMethod } from "../route";
 import type { NormalizedHttpConfig } from "./http-config.types";

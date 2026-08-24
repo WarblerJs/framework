@@ -1,16 +1,19 @@
 {
-  "name": "@warbler/runtime",
+  "name": "@warblerjs/runtime",
   "version": "0.1.0",
   "type": "module",
   "private": false,
+  "files": [
+    "src"
+  ],
   "exports": { ".": "./src/index.ts" },
   "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
   "dependencies": {
-    "@warbler/console": "workspace:*",
-    "@warbler/config": "workspace:*",
-    "@warbler/core": "workspace:*",
-    "@warbler/i18n": "workspace:*",
-    "@warbler/transport": "workspace:*"
+    "@warblerjs/console": "workspace:*",
+    "@warblerjs/config": "workspace:*",
+    "@warblerjs/core": "workspace:*",
+    "@warblerjs/i18n": "workspace:*",
+    "@warblerjs/transport": "workspace:*"
   },
   "devDependencies": { "@types/bun": "latest", "typescript": "^5.9.2" }
 }

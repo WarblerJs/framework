@@ -1,4 +1,4 @@
-# @warbler/i18n
+# @warblerjs/i18n
 
 Warbler's transport-neutral internationalization package. It loads and validates
 flat JSON catalogs once, resolves request locales, and provides immutable

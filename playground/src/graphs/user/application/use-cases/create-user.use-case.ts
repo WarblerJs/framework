@@ -1,9 +1,9 @@
-import { Service, inject } from "@warbler/core";
-import { EventDispatcher } from "@warbler/events";
+import { Service, inject } from "@warblerjs/framework";
+import { EventDispatcher } from "@warblerjs/events";
 import { UserRepositoryPort } from "../../domain/ports/user.repository.port";
 import { UserCreated } from "../../domain/events/user-created.event";
 import type { CreateUserInput } from "../dto/create-user.input";
-import { password } from "@warbler/crypto";
+import { password } from "@warblerjs/crypto";
 // const storedHash = await password.hash("correct horse battery staple");
 // const valid = await password.verify("correct horse battery staple", storedHash);
 // const shouldRehash = await password.needsRehash(storedHash);

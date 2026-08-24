@@ -1,4 +1,4 @@
-import type { ViewBuiltins } from "@warbler/view";
+import type { ViewBuiltins } from "@warblerjs/view";
 import type { ViewRequestScope } from "./view-request-scope";
 
 /** Framework built-in names application `view()` data may never define. */

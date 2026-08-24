@@ -1,4 +1,4 @@
-import type { WebSocketConfig } from "@warbler/websocket";
+import type { WebSocketConfig } from "@warblerjs/websocket";
 
 export const wsConfig = {
   mode: "dedicated",

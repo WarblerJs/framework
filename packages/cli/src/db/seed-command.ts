@@ -1,4 +1,4 @@
-import { DEFAULT_SEED_TABLE, createPgConnection, runSeeds, scaffoldSeed, type ExecutedSeed } from "@warbler/database";
+import { DEFAULT_SEED_TABLE, createPgConnection, runSeeds, scaffoldSeed, type ExecutedSeed } from "@warblerjs/database";
 import type { TransactionSQL } from "bun";
 import { readdir } from "node:fs/promises";
 import { relative } from "node:path";

@@ -1,5 +1,5 @@
-import { activeCompiledViews, renderCompiledView } from "@warbler/view";
-import type { ViewData, ViewDataValue } from "@warbler/view";
+import { activeCompiledViews, renderCompiledView } from "@warblerjs/view";
+import type { ViewData, ViewDataValue } from "@warblerjs/view";
 import { EmailTemplateError } from "../errors";
 
 /** Template data accepted by the email renderer. */

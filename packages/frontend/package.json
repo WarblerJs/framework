@@ -1,8 +1,13 @@
 {
-  "name": "@warbler/frontend",
+  "name": "@warblerjs/frontend",
   "version": "0.1.0",
   "description": "Lightweight browser utilities for Warbler applications, built on native Web APIs.",
   "type": "module",
+  "private" : false,
+  "files": [
+    "src",
+    "README.md"
+  ],
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",

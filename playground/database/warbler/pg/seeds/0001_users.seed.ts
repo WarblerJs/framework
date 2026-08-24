@@ -1,4 +1,4 @@
-import type { PgSeed } from "@warbler/database";
+import type { PgSeed } from "@warblerjs/database";
 import type { WlbPgTransactionClient } from "../generated/client";
 
 

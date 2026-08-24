@@ -1,4 +1,4 @@
-import { ValidatorSourceFlag, type ValidationInput } from "@warbler/validators";
+import { ValidatorSourceFlag, type ValidationInput } from "@warblerjs/validators";
 import { cookieMapRecord, requestCookieMap } from "../cookies";
 import { parseRequestQuery } from "./request-query";
 

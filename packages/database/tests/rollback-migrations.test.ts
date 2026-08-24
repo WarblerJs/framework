@@ -95,7 +95,7 @@ function createFakeSql(tableName: string, initialHistory: readonly HistoryRow[],
   };
 }
 
-const migrationSource = (up: string, down: string): string => `import type { PgMigration } from "@warbler/database";
+const migrationSource = (up: string, down: string): string => `import type { PgMigration } from "@warblerjs/database";
 export const up: PgMigration = async (pgm) => {
   await pgm.raw("${up}");
 };
@@ -104,7 +104,7 @@ export const down: PgMigration = async (pgm) => {
 };
 `;
 
-const failingDownSource = (up: string, down: string): string => `import type { PgMigration } from "@warbler/database";
+const failingDownSource = (up: string, down: string): string => `import type { PgMigration } from "@warblerjs/database";
 export const up: PgMigration = async (pgm) => {
   await pgm.raw("${up}");
 };
@@ -188,7 +188,7 @@ describe("rollbackMigrations", () => {
     const root = `/tmp/warbler-database-rollback-${crypto.randomUUID()}`;
     const name = "20260101000001_no_down";
     const path = `${root}/migrations/${name}.ts`;
-    await Bun.write(path, `import type { PgMigration } from "@warbler/database";
+    await Bun.write(path, `import type { PgMigration } from "@warblerjs/database";
 export const up: PgMigration = async () => {};
 `);
     const fake = createFakeSql("_wrbls_migrations", [{ id: 1, name, checksum: await checksum(path), batch: 1 }]);

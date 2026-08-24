@@ -1,4 +1,4 @@
-import type { MaybePromise } from "@warbler/transport";
+import type { MaybePromise } from "@warblerjs/transport";
 import type { AnyAppRequest, AppRequest } from "./app-request";
 import type { RequestContextHandle } from "./request-context";
 

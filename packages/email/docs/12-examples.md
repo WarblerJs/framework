@@ -1,7 +1,7 @@
 # Examples
 
-Email can be triggered from application events without `@warbler/email`
-depending on `@warbler/events`.
+Email can be triggered from application events without `@warblerjs/email`
+depending on `@warblerjs/events`.
 
 ```ts
 export const sendWelcomeEmail = listen(UserCreated, async event => {
@@ -18,8 +18,8 @@ export const sendWelcomeEmail = listen(UserCreated, async event => {
 Controllers use the generated injectable email provider:
 
 ```ts
-import { inject } from "@warbler/core";
-import { Email } from "@warbler/email";
+import { inject } from "@warblerjs/core";
+import { Email } from "@warblerjs/email";
 
 export class UserController {
   readonly #email = inject(Email);

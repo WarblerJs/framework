@@ -215,7 +215,7 @@ The repository should normally have one workspace-managed installation rather th
 
 ## 4. Package Responsibilities
 
-### `@warbler/core`
+### `@warblerjs/core`
 
 Owns framework-neutral concepts:
 
@@ -239,10 +239,10 @@ import {
   Repository,
   inject,
   Transport,
-} from "@warbler/core";
+} from "@warblerjs/core";
 ```
 
-### `@warbler/config`
+### `@warblerjs/config`
 
 Owns:
 
@@ -255,7 +255,7 @@ Owns:
 
 It must reject invalid values instead of silently using defaults.
 
-### `@warbler/transport`
+### `@warblerjs/transport`
 
 Owns transport-neutral contracts:
 
@@ -269,7 +269,7 @@ Owns transport-neutral contracts:
 
 It must not contain HTTP, WebSocket, TCP, UDP, MCP, or WebRTC implementations.
 
-### `@warbler/http`
+### `@warblerjs/http`
 
 Owns:
 
@@ -288,7 +288,7 @@ Owns:
 - Server-Sent Events
 - Security headers
 
-### `@warbler/websocket`
+### `@warblerjs/websocket`
 
 Owns:
 
@@ -302,7 +302,7 @@ Owns:
 - Backpressure behavior
 - Bun native WebSocket integration
 
-### `@warbler/view`
+### `@warblerjs/view`
 
 Owns:
 
@@ -315,7 +315,7 @@ Owns:
 - Optional HTML post-processing
 - Build-time asset and link extraction
 
-### `@warbler/compiler`
+### `@warblerjs/compiler`
 
 Owns:
 
@@ -331,7 +331,7 @@ Owns:
 - OpenAPI generation
 - Optional binary artifacts
 
-### `@warbler/runtime`
+### `@warblerjs/runtime`
 
 Owns:
 
@@ -343,7 +343,7 @@ Owns:
 
 It must remain small.
 
-### `@warbler/bundler`
+### `@warblerjs/bundler`
 
 Owns Bun build integration:
 
@@ -355,7 +355,7 @@ Owns Bun build integration:
 - Build reports
 - Emitted artifacts
 
-### `@warbler/cli`
+### `@warblerjs/cli`
 
 Owns commands such as:
 
@@ -405,7 +405,7 @@ playground/
 `createApp()` should remain simple.
 
 ```ts
-import { createApp } from "@warbler/core";
+import { createApp } from "@warblerjs/core";
 
 import AuthGraph from "./graphs/auth/auth.graph";
 import ChatGraph from "./graphs/chat/chat.graph";
@@ -429,7 +429,7 @@ A Graph groups controllers and providers.
 HTTP is the default transport.
 
 ```ts
-import { Graph } from "@warbler/core";
+import { Graph } from "@warblerjs/core";
 
 import AuthController from "./auth.controller";
 import AuthService from "./auth.service";
@@ -456,7 +456,7 @@ A WebSocket Graph explicitly selects its transport.
 import {
   Graph,
   Transport,
-} from "@warbler/core";
+} from "@warblerjs/core";
 
 import ChatSocketController from "./chat.socket-controller";
 import ChatService from "./chat.service";
@@ -503,7 +503,7 @@ Warbler supports Angular-style functional injection.
 import {
   Service,
   inject,
-} from "@warbler/core";
+} from "@warblerjs/core";
 
 @Service()
 export default class AuthService {
@@ -515,14 +515,14 @@ export default class AuthService {
 Controller example:
 
 ```ts
-import { inject } from "@warbler/core";
+import { inject } from "@warblerjs/core";
 
 import {
   Controller,
   Post,
   JsonRes,
   type AppRequest,
-} from "@warbler/http";
+} from "@warblerjs/http";
 
 @Controller()
 export default class AuthController {
@@ -663,11 +663,11 @@ Example:
 ```text
 HTTP enabled
 → load http.config.ts
-→ load @warbler/http
+→ load @warblerjs/http
 
 WebSocket disabled
 → do not import ws.config.ts
-→ do not load @warbler/websocket
+→ do not load @warblerjs/websocket
 → do not register WebSocket Graphs
 ```
 
@@ -980,8 +980,8 @@ fully typed against the compiler-generated `WarblerRequestContext` (§18a)
 regardless of whether a generic was supplied.
 
 ```ts
-import { inject } from "@warbler/core";
-import { Controller, Get, Post, JsonRes, defineValidator, v, type AppRequest } from "@warbler/http";
+import { inject } from "@warblerjs/core";
+import { Controller, Get, Post, JsonRes, defineValidator, v, type AppRequest } from "@warblerjs/http";
 
 const createUserValidator = defineValidator({
   bodyRules: { email: v.string(), password: v.string() },
@@ -1039,8 +1039,8 @@ The controller never executes once validation has failed, regardless of
 which branch runs.
 
 ```ts
-import { defineValidator, v } from "@warbler/validators";
-import { view } from "@warbler/view";
+import { defineValidator, v } from "@warblerjs/validators";
+import { view } from "@warblerjs/view";
 
 export const validateUserId = defineValidator({
   paramRules: {
@@ -1079,7 +1079,7 @@ export const validateUserId = defineValidator({
   `onValidationError` is not caught or converted into another validation
   failure — it propagates through Warbler's ordinary runtime/HTTP error
   handling, exactly like a controller throwing.
-- **`@warbler/validators` has no dependency on `@warbler/view`** — the example
+- **`@warblerjs/validators` has no dependency on `@warblerjs/view`** — the example
   above works because application code imports both independently; the
   validator package only needs its return value to be `Response`-compatible.
 - **Backward compatible**: validators that don't define `onValidationError`
@@ -1146,7 +1146,7 @@ Guards and middleware receive the same `AppRequest` the controller handler
 will see, plus a request-scoped context handle:
 
 ```ts
-import type { Guard, Middleware } from "@warbler/http";
+import type { Guard, Middleware } from "@warblerjs/http";
 
 export const authGuard: Guard = async (req, context) => {
   const user = await authenticate(req);
@@ -1203,7 +1203,7 @@ declaration merging:
 import type { User } from "../../src/graphs/auth/user.entity";
 import type { Tenant } from "../../src/graphs/tenant/tenant.entity";
 
-declare module "@warbler/http" {
+declare module "@warblerjs/http" {
   interface WarblerRequestContext {
     readonly user?: User;
     readonly tenant?: Tenant;
@@ -1448,7 +1448,7 @@ SSE must not create hidden polling or heartbeat intervals. Heartbeats are explic
 import {
   Graph,
   Transport,
-} from "@warbler/core";
+} from "@warblerjs/core";
 
 @Graph({
   prefix: "/chat",
@@ -1467,7 +1467,7 @@ export default class ChatGraph {}
 Socket controller:
 
 ```ts
-import { inject } from "@warbler/core";
+import { inject } from "@warblerjs/core";
 
 import {
   SocketController,
@@ -1478,7 +1478,7 @@ import {
   OnError,
   type SocketContext,
   type SocketMessage,
-} from "@warbler/websocket";
+} from "@warblerjs/websocket";
 
 @SocketController()
 export default class ChatSocketController {
@@ -2102,20 +2102,20 @@ Response
 
 Recommended order:
 
-1. `@warbler/core`
-2. `@warbler/config`
-3. `@warbler/transport`
-4. `@warbler/http`
+1. `@warblerjs/core`
+2. `@warblerjs/config`
+3. `@warblerjs/transport`
+4. `@warblerjs/http`
 5. HTTP Playground end-to-end
 6. Config discovery integration
 7. Minimal compiler for HTTP
 8. DI compiler integration
-9. `@warbler/websocket`
-10. `@warbler/view`
-11. `@warbler/runtime`
-12. Full `@warbler/compiler`
-13. `@warbler/bundler`
-14. `@warbler/cli`
+9. `@warblerjs/websocket`
+10. `@warblerjs/view`
+11. `@warblerjs/runtime`
+12. Full `@warblerjs/compiler`
+13. `@warblerjs/bundler`
+14. `@warblerjs/cli`
 15. Binary production artifacts
 16. OpenAPI and generated clients
 17. Remaining transports

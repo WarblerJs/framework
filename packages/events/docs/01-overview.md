@@ -1,6 +1,6 @@
 # Overview
 
-`@warbler/events` is an in-process, compile-first event system for lightweight side effects.
+`@warblerjs/events` is an in-process, compile-first event system for lightweight side effects.
 
 ```ts
 export const UserCreated = event((userId: string, email: string) => ({ userId, email } as const));

@@ -552,8 +552,8 @@ Correctness validation after change:
 
 - `bun test packages/http/tests/validation-input.test.ts packages/runtime/tests/request-context-pipeline.test.ts packages/runtime/tests/start-runtime.test.ts playground/tests/validator-pipeline.integration.test.ts playground/tests/http.integration.test.ts`
 - Result: `20 pass`, `0 fail`, `90 expect() calls`
-- `bun run --filter '@warbler/http' typecheck`
-- `bun run --filter '@warbler/runtime' typecheck`
+- `bun run --filter '@warblerjs/http' typecheck`
+- `bun run --filter '@warblerjs/runtime' typecheck`
 
 Measurement note: no throughput, allocation, p99, or p999 numbers are claimed for this follow-up. This is a Phase 1 structural allocation/object-shape cleanup with correctness guardrails; it still needs the benchmark protocol from the earlier sections before claiming a production performance win.
 
@@ -594,7 +594,7 @@ Correctness validation after change:
 
 - `bun test packages/runtime/tests/start-runtime.test.ts packages/runtime/tests/request-context-pipeline.test.ts packages/runtime/tests/request-scope.test.ts playground/tests/http.integration.test.ts playground/tests/validator-pipeline.integration.test.ts`
 - Result: `24 pass`, `0 fail`, `100 expect() calls`
-- `bun run --filter '@warbler/runtime' typecheck`
+- `bun run --filter '@warblerjs/runtime' typecheck`
 - `bun run typecheck`
 - `bun test`: `583 pass`, `0 fail`, `1860 expect() calls`
 
@@ -642,9 +642,9 @@ Correctness validation after change:
 
 - Focused suite: `bun test packages/http/tests/validation-input.test.ts packages/runtime/tests/request-context-pipeline.test.ts packages/runtime/tests/request-scope.test.ts packages/runtime/tests/start-runtime.test.ts packages/compiler/tests/phase2.test.ts playground/tests/http.integration.test.ts playground/tests/validator-pipeline.integration.test.ts`
 - Result: `39 pass`, `0 fail`, `183 expect() calls`
-- `bun run --filter '@warbler/http' typecheck`
-- `bun run --filter '@warbler/runtime' typecheck`
-- `bun run --filter '@warbler/compiler' typecheck`
+- `bun run --filter '@warblerjs/http' typecheck`
+- `bun run --filter '@warblerjs/runtime' typecheck`
+- `bun run --filter '@warblerjs/compiler' typecheck`
 - `bun run typecheck`
 - `bun test`: `586 pass`, `0 fail`, `1872 expect() calls`
 
@@ -670,7 +670,7 @@ Kept source changes:
 - HTTP browser requests receive a small precompiled monochrome HTML error page. API requests continue to receive structured JSON.
 - SSE stream failures emit a protocol-correct `event: error` frame and close gracefully.
 - WebSocket handler failures dispatch the compiled error lifecycle, send a safe error envelope for recoverable failures, and close with `1011` for fatal errors.
-- `@warbler/console` owns a bounded async `BufferedDailyFileLogger` with daily file names, pretty formatting, retention cleanup, and redaction of common secret patterns.
+- `@warblerjs/console` owns a bounded async `BufferedDailyFileLogger` with daily file names, pretty formatting, retention cleanup, and redaction of common secret patterns.
 - Runtime configures the file logger once from `logging.config.ts`; successful request paths do not enqueue or flush file logs.
 - HTTP error reports include a safely resolved client IP. `X-Forwarded-For` is honored only when the immediate peer is in the trusted proxy list.
 

@@ -14,7 +14,7 @@ const NAME_PATTERN = /^[a-z][a-z0-9_-]*$/u;
 const PREFIX_PATTERN = /^(\d{4,})_[a-z][a-z0-9_-]*\.seed\.ts$/u;
 
 function seedTemplate(clientImportPath: string): string {
-  return `import type { PgSeed } from "@warbler/database";
+  return `import type { PgSeed } from "@warblerjs/database";
 import type { WlbPgTransactionClient } from "${clientImportPath}";
 
 export const seed: PgSeed<WlbPgTransactionClient> = async (db) => {

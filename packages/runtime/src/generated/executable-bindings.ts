@@ -1,4 +1,4 @@
-import type { Constructor, ProviderToken } from "@warbler/core";
+import type { Constructor, ProviderToken } from "@warblerjs/core";
 import type { RuntimeProviderRecord, RuntimeRouteHandler } from "./generated-types";
 
 /** Runtime-owned context used by generated factories and Core inject(). */

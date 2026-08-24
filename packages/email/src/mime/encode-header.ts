@@ -1,4 +1,4 @@
-import { encoding } from "@warbler/crypto";
+import { encoding } from "@warblerjs/crypto";
 import { EmailEncodingError } from "../errors";
 
 const HEADER_NAME_PATTERN = /^[A-Za-z0-9!#$%&'*+\-.^_`|~]+$/u;

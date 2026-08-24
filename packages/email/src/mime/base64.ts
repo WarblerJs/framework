@@ -1,4 +1,4 @@
-import { encoding } from "@warbler/crypto";
+import { encoding } from "@warblerjs/crypto";
 
 const LINE_LENGTH = 76;
 

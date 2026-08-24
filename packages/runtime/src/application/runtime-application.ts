@@ -3,7 +3,7 @@ import {
   loadTransportConfig as defaultTransportConfigLoader,
   type RuntimeConfig,
   type TransportName,
-} from "@warbler/config";
+} from "@warblerjs/config";
 import { RuntimeProviderContainers } from "../container/provider-container";
 import { createRuntimeDiagnostic, type RuntimeDiagnostic } from "../diagnostics/runtime-diagnostic";
 import {

@@ -1,4 +1,4 @@
-import { listen } from "@warbler/events";
+import { listen } from "@warblerjs/events";
 import { UserCreated } from "../../domain/events/user-created.event";
 
 export const auditUserCreated = listen(UserCreated, (event) => {

@@ -1,4 +1,4 @@
-import type { TranslationParameters, ValidationMessage } from "@warbler/i18n";
+import type { TranslationParameters, ValidationMessage } from "@warblerjs/i18n";
 import type { AnyField, FieldOutput, InferRuleShape, RuleShape } from "./builder";
 
 export type { AnyField, FieldOutput, InferRuleShape, RuleShape };

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { activateCompiledViews, createCompiledViewArtifact } from "@warbler/view";
+import { activateCompiledViews, createCompiledViewArtifact } from "@warblerjs/view";
 import { runInViewRequestScope, view, type ViewRequestScope } from "../src/view";
 
 function testScope(development: boolean, request = new Request("http://example.com/login", { method: "POST" })): ViewRequestScope {

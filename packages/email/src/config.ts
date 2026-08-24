@@ -1,4 +1,4 @@
-import { env } from "@warbler/config";
+import { env } from "@warblerjs/config";
 import { EmailConfigurationError } from "./errors";
 import type { EmailAddressInput, EmailTransport } from "./email.types";
 
