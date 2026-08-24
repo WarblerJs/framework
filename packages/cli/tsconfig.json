@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "baseUrl": ".",
+    "resolveJsonModule": true,
     "paths": {
       "@warblerjs/console": ["../console/src/index.ts"],
       "@warblerjs/compiler": ["../compiler/src/index.ts"],

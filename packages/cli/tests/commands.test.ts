@@ -17,6 +17,7 @@ import {
 import { compileProject } from "@warblerjs/compiler";
 import { GeneratedBindingsRuntimeLauncher, loadTransportLaunchers } from "../src/dev/runtime-launcher";
 import { captureOutput, createTestProject } from "./helpers";
+import { CLI_VERSION } from "../src/version";
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const task of cleanup.splice(0)) await task(); });
@@ -27,7 +28,7 @@ describe("top-level commands", () => {
     expect(await runCLI(["--help"], { output: capture.output })).toBe(0);
     expect(capture.lines[0]).toContain("Warbler CLI");
     expect(await runCLI(["version", "--json"], { output: capture.output })).toBe(0);
-    expect(JSON.parse(capture.lines[1]!).version).toBe("0.1.0");
+    expect(JSON.parse(capture.lines[1]!).version).toBe(CLI_VERSION);
     expect(await runCLI(["bad"], { output: capture.output })).toBe(ExitCode.INVALID_ARGUMENTS);
     expect(capture.errors[0]).toContain("CLI1001");
   });
