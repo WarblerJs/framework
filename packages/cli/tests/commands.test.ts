@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHmac } from "node:crypto";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   ExitCode,
@@ -467,6 +468,7 @@ describe("database", () => {
 
   test("db:pg generate fails clearly when database.config.ts is missing", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
+    await rm(join(project.root, "src/config/database.config.ts"), { force: true });
     const capture = captureOutput();
     const code = await runCLI(["db:pg", "generate", "--project", project.root], { output: capture.output });
     expect(code).toBe(ExitCode.INVALID_PROJECT);
@@ -475,6 +477,7 @@ describe("database", () => {
 
   test("db:pg migration fails clearly when database.config.ts is missing", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
+    await rm(join(project.root, "src/config/database.config.ts"), { force: true });
     const capture = captureOutput();
     const code = await runCLI(["db:pg", "migration", "--project", project.root], { output: capture.output });
     expect(code).toBe(ExitCode.INVALID_PROJECT);
@@ -494,6 +497,7 @@ describe("database", () => {
 
   test("db:pg rollback defaults to one step and requires database config", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
+    await rm(join(project.root, "src/config/database.config.ts"), { force: true });
     const capture = captureOutput();
     const code = await runCLI(["db:pg", "rollback", "--project", project.root], { output: capture.output });
     expect(code).toBe(ExitCode.INVALID_PROJECT);
@@ -570,6 +574,7 @@ describe("database", () => {
 
   test("db:pg seed:run fails clearly when database.config.ts is missing", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
+    await rm(join(project.root, "src/config/database.config.ts"), { force: true });
     const capture = captureOutput();
     const code = await runCLI(["db:pg", "seed:run", "--project", project.root], { output: capture.output });
     expect(code).toBe(ExitCode.INVALID_PROJECT);
