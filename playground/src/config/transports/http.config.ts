@@ -1,7 +1,9 @@
+import { envNumber, envString } from "@warblerjs/config";
+
 export const httpConfig = {
-  host: "0.0.0.0",
-  port: 3000, 
-  allowedHosts: ["127.0.0.1","192.168.1.100", "localhost", '0.0.0.0'],
+  host: envString('APP_HOST','0.0.0.0'),
+  port: envNumber('APP_HTTTP_PORT',3000), 
+  allowedHosts: ["127.0.0.1","192.168.1.100", "localhost", envString('APP_HOST','0.0.0.0')],
   request: {
     body: {
       enabled: true,
@@ -40,7 +42,7 @@ export const httpConfig = {
   },
   security: {
     enabled: true,
-    contentSecurityPolicy: "default-src 'self'; connect-src 'self' ws://192.168.1.100:3001 ws://localhost:3001 ws://127.0.0.1:3001 ",
+    contentSecurityPolicy: "default-src 'self'; connect-src 'self' ws://"+ envString('APP_HOST','0.0.0.0') +":3001 ws://localhost:3001 ws://127.0.0.1:3001 ",
     frameOptions: "DENY",
   },
   static: {

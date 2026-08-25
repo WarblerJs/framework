@@ -1,4 +1,4 @@
-import { env } from "@warblerjs/config";
+import { envBoolean, envNumber, envString } from "@warblerjs/config";
 
 export const loggingConfig = {
   /*
@@ -10,7 +10,7 @@ export const loggingConfig = {
    * production disables informational hot-path logs by default. Errors and fatal
    * process failures stay enabled unless explicitly overridden below.
    */
-  environment: env("APP_ENV", "development"),
+  environment: envString("APP_ENV", "development"),
 
   /*
    * HTTP request/access logging.
@@ -19,7 +19,7 @@ export const loggingConfig = {
    * path avoids request-log formatting, request-log objects, logging-only timing,
    * and stdout writes for successful requests.
    */
-  requests: env.bool("LOG_REQUESTS", env("APP_ENV", "development") !== "production"),
+  requests: envBoolean("LOG_REQUESTS", envString("APP_ENV", "development") !== "production"),
 
   /*
    * Runtime lifecycle informational logs.
@@ -27,7 +27,7 @@ export const loggingConfig = {
    * Covers framework-owned runtime stop/status messages. Disable in production
    * to keep process output quiet outside exceptional conditions.
    */
-  runtime: env.bool("LOG_RUNTIME", env("APP_ENV", "development") !== "production"),
+  runtime: envBoolean("LOG_RUNTIME", envString("APP_ENV", "development") !== "production"),
 
   /*
    * Transport informational logs.
@@ -35,7 +35,7 @@ export const loggingConfig = {
    * Used by framework-owned transport startup/stop notices. This does not disable
    * transports or change routing, validation, security, or application behavior.
    */
-  transports: env.bool("LOG_TRANSPORTS", env("APP_ENV", "development") !== "production"),
+  transports: envBoolean("LOG_TRANSPORTS", envString("APP_ENV", "development") !== "production"),
 
   /*
    * WebSocket infrastructure logs.
@@ -44,7 +44,7 @@ export const loggingConfig = {
    * and logging-only timing while preserving subscriptions, publishing, guards,
    * validators, rate limits, and error boundaries.
    */
-  websocket: env.bool("LOG_WEBSOCKET", env("APP_ENV", "development") !== "production"),
+  websocket: envBoolean("LOG_WEBSOCKET", envString("APP_ENV", "development") !== "production"),
 
   /*
    * Error logging.
@@ -52,7 +52,7 @@ export const loggingConfig = {
    * Enabled by default in every environment. Error logs never include request
    * bodies, credentials, passwords, tokens, or secrets.
    */
-  errors: env.bool("LOG_ERRORS", true),
+  errors: envBoolean("LOG_ERRORS", true),
 
   /*
    * Fatal process logging.
@@ -60,7 +60,7 @@ export const loggingConfig = {
    * Enabled by default in every environment. This is only for process-level
    * uncaught exceptions/unhandled rejections that escape normal boundaries.
    */
-  fatal: env.bool("LOG_FATAL", true),
+  fatal: envBoolean("LOG_FATAL", true),
 
   /*
    * Startup output and debug logs.
@@ -68,18 +68,18 @@ export const loggingConfig = {
    * Kept separate from request logging because startup is outside the request hot
    * path. Production defaults keep it quiet unless explicitly enabled.
    */
-  startup: env.bool("LOG_STARTUP", env("APP_ENV", "development") !== "production"),
-  debug: env.bool("LOG_DEBUG", env("APP_ENV", "development") !== "production"),
+  startup: envBoolean("LOG_STARTUP", envString("APP_ENV", "development") !== "production"),
+  debug: envBoolean("LOG_DEBUG", envString("APP_ENV", "development") !== "production"),
 
   channels: {
     console: {
-      enabled: env.bool("LOG_CONSOLE", true),
+      enabled: envBoolean("LOG_CONSOLE", true),
     },
     file: {
-      enabled: env.bool("LOG_FILE", true),
-      path: env("LOG_FILE_PATH", "storage/logs"),
+      enabled: envBoolean("LOG_FILE", true),
+      path: envString("LOG_FILE_PATH", "storage/logs"),
       rotation: "daily",
-      retentionDays: env.int("LOG_RETENTION_DAYS", 14),
+      retentionDays: envNumber("LOG_RETENTION_DAYS", 14),
       cleanup: "internal",
       format: "pretty",
     },

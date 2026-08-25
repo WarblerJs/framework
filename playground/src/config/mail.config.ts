@@ -1,11 +1,11 @@
-import { env, envBoolean, envNumber, envString } from "@warblerjs/config";
+import {  envBoolean, envNumber, envString } from "@warblerjs/config";
 
 export const mailConfig = {
   default: "smtp",
 
   from: {
     address: envString("MAIL_FROM_ADDRESS", "habedev@gmail.com"),
-    name: env("MAIL_FROM_NAME", "Warbler Playground"),
+    name: envString("MAIL_FROM_NAME", "Warbler Playground"),
   },
 
   transports: {
@@ -14,8 +14,8 @@ export const mailConfig = {
       port: envNumber("MAIL_PORT", 587),
       secure: envBoolean("MAIL_SECURE", false),
       auth: {
-        user: env("MAIL_USERNAME"),
-        password: env("MAIL_PASSWORD"),
+        user: envString("MAIL_USERNAME",''),
+        password: envString("MAIL_PASSWORD",''),
       },
       tls: {
         rejectUnauthorized: envBoolean("MAIL_TLS_REJECT_UNAUTHORIZED", true),

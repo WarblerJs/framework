@@ -154,7 +154,7 @@ function storageGitignore(): string {
 function envFile(name: string): string {
   const database = databaseName(name);
   return `APP_ENV=development
-APP_HOST=127.0.0.1
+APP_HOST=0.0.0.0
 
 # Database commands use these values only when you run warbler db:pg commands.
 # DATABASE_URL=
@@ -177,7 +177,7 @@ WARBLER_HTTP_PROFILING_SUMMARY=true
 function envExampleFile(name: string): string {
   const database = databaseName(name);
   return `APP_ENV=development
-APP_HOST=127.0.0.1
+APP_HOST=0.0.0.0
 
 # DATABASE_URL=postgres://warbler:change-me@localhost:5432/${database}
 DB_HOST=localhost
@@ -218,7 +218,7 @@ function runtimeConfig(): string {
 
 export const runtimeConfig = {
   network: {
-    host: envString("APP_HOST", "127.0.0.1"),
+    host: envString("APP_HOST", "0.0.0.0"),
     bindInterface: undefined,
   },
   transports: {
@@ -230,8 +230,8 @@ export const runtimeConfig = {
     webrtc: { enabled: false },
   },
   telemetry: {
-    metrics: { enabled: false, host: "127.0.0.1", port: 9090, path: "/metrics" },
-    healthCheck: { enabled: false, host: "127.0.0.1", port: 9091, path: "/health" },
+    metrics: { enabled: false, host: envString("APP_HOST", "0.0.0.0"), port: 9090, path: "/metrics" },
+    healthCheck: { enabled: false, host: envString("APP_HOST", "0.0.0.0"), port: 9091, path: "/health" },
   },
 } as const;
 
@@ -240,10 +240,12 @@ export default runtimeConfig;
 }
 
 function httpConfig(): string {
-  return `export const httpConfig = {
-  host: "127.0.0.1",
+  return `import { envString } from "@warblerjs/config";
+  
+  export const httpConfig = {
+  host: envString("APP_HOST", "0.0.0.0"),
   port: 3000,
-  allowedHosts: ["127.0.0.1", "localhost"],
+  allowedHosts: [envString("APP_HOST", "0.0.0.0"), "localhost"],
   request: {
     body: {
       enabled: true,

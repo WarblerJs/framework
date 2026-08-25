@@ -1,4 +1,4 @@
-import { env } from "@warblerjs/config";
+import { env, envBoolean } from "@warblerjs/config";
 
 export const profilingConfig = {
   /*
@@ -9,7 +9,7 @@ export const profilingConfig = {
    * in memory. It never prints per-request data and should only be enabled during a
    * controlled benchmark run because every timing call adds measurement overhead.
    */
-  http: env.bool("WARBLER_HTTP_PROFILING", false),
+  http: envBoolean("WARBLER_HTTP_PROFILING", false),
 
   /*
    * Aggregate shutdown summary.
@@ -17,5 +17,5 @@ export const profilingConfig = {
    * Enabled by default so a benchmark run can be stopped with SIGINT/SIGTERM and
    * emit one summary after the runtime has left the request hot path.
    */
-  summaryOnStop: env.bool("WARBLER_HTTP_PROFILING_SUMMARY", true),
+  summaryOnStop: envBoolean("WARBLER_HTTP_PROFILING_SUMMARY", true),
 } as const;

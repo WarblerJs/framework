@@ -1,9 +1,9 @@
-import { envString } from "@warblerjs/config";
+import { envNumber, envString } from "@warblerjs/config";
 
 export default {
   network: { host: envString('APP_HOST','0.0.0.0'), bindInterface: undefined },
   transports: {
-    http: { enabled: true, port: 3000 },
+    http: { enabled: true, port: envNumber('APP_HTTTP_PORT',3000) },
     websocket: { enabled: true, mode: "standalone", port: 3001 },
     tcp: { enabled: false, port: 9000 },
     udp: { enabled: false, port: 9001 },
@@ -11,7 +11,7 @@ export default {
     webrtc: { enabled: false, signaling: { port: 3002 } },
   },
   telemetry: {
-    metrics: { enabled: false, host: "0.0.0.0", port: 9090, path: "/metrics" },
-    healthCheck: { enabled: false, host: "0.0.0.0", port: 8081, path: "/healthz" },
+    metrics: { enabled: false, host: envString("APP_HOST", "0.0.0.0"), port: 9090, path: "/metrics" },
+    healthCheck: { enabled: false, host: envString("APP_HOST", "0.0.0.0"), port: 8081, path: "/healthz" },
   },
 } as const;
