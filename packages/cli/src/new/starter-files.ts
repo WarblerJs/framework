@@ -1,3 +1,6 @@
+import { CLI_VERSION } from "../version";
+import { STARTER_PACKAGE_VERSIONS as versions, type StarterPackageName } from "./starter-package-versions.generated";
+
 export interface StarterFile {
   readonly path: string;
   readonly content: string;
@@ -9,6 +12,10 @@ export interface StarterFileInput {
 
 const comparePath = (left: StarterFile, right: StarterFile): number =>
   left.path < right.path ? -1 : left.path > right.path ? 1 : 0;
+
+export function starterDependencyRange(version: string): string {
+  return version.includes("-") ? version : `^${version}`;
+}
 
 /** Creates the deterministic production starter file list for `warbler new`. */
 export function createStarterFiles(input: StarterFileInput): readonly StarterFile[] {
@@ -70,6 +77,10 @@ function assertUniquePaths(files: readonly StarterFile[]): void {
   }
 }
 
+function starterPackage(packageName: StarterPackageName): string {
+  return starterDependencyRange(versions[packageName]);
+}
+
 function packageJson(name: string): string {
   return `${JSON.stringify({
     name,
@@ -86,19 +97,19 @@ function packageJson(name: string): string {
       typecheck: "tsc --noEmit",
     },
     dependencies: {
-      "@warblerjs/config": "^0.1.0",
-      "@warblerjs/crypto": "^0.1.0",
-      "@warblerjs/database": "^0.1.0",
-      "@warblerjs/email": "^0.1.0",
-      "@warblerjs/framework": "^0.1.0",
-      "@warblerjs/frontend": "^0.1.0",
-      "@warblerjs/http": "^0.1.0",
-      "@warblerjs/i18n": "^0.1.2",
-      "@warblerjs/runtime": "^0.1.0",
-      "@warblerjs/view": "^0.1.0-rc.0",
+      "@warblerjs/config": starterPackage("config"),
+      "@warblerjs/crypto": starterPackage("crypto"),
+      "@warblerjs/database": starterPackage("database"),
+      "@warblerjs/email": starterPackage("email"),
+      "@warblerjs/framework": starterPackage("framework"),
+      "@warblerjs/frontend": starterPackage("frontend"),
+      "@warblerjs/http": starterPackage("http"),
+      "@warblerjs/i18n": starterPackage("i18n"),
+      "@warblerjs/runtime": starterPackage("runtime"),
+      "@warblerjs/view": starterPackage("view"),
     },
     devDependencies: {
-      "@warblerjs/cli": "^0.1.5",
+      "@warblerjs/cli": starterDependencyRange(CLI_VERSION),
       "@types/bun": "latest",
       typescript: "^5.9.2",
     },

@@ -1,0 +1,15 @@
+/** Generated file. Do not edit manually. */
+export const STARTER_PACKAGE_VERSIONS = Object.freeze({
+  config: "0.1.0",
+  crypto: "0.1.3",
+  database: "0.1.0",
+  email: "0.1.3",
+  framework: "0.1.3",
+  frontend: "0.1.0",
+  http: "0.1.3",
+  i18n: "0.1.2",
+  runtime: "0.1.3",
+  view: "0.1.0-rc.0",
+} as const);
+
+export type StarterPackageName = keyof typeof STARTER_PACKAGE_VERSIONS;

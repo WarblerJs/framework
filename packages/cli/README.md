@@ -34,6 +34,38 @@ compiling.
 All generators enforce project boundaries, reject traversal and symlink output, and avoid
 overwriting unless `--force` is explicit. `clean` can remove only `dist/` and `.warbler/`.
 
+## Starter Versions
+
+`warbler new <name>` gets Warbler dependency versions from
+`src/new/starter-package-versions.generated.ts`. That file is generated from the reviewed
+`starter-compatibility.json` catalog, whose explicit allowlist is: `config`, `crypto`, `database`,
+`email`, `framework`, `frontend`, `http`, `i18n`, `runtime`, and `view`.
+
+Release automation updates `starter-compatibility.json` only after the corresponding package
+versions have been published successfully to npm. Local workspace package versions are validated
+only for package existence and name alignment; they are not the authority for installable starter
+dependencies.
+
+Regenerate after updating the catalog:
+
+```sh
+bun run generate:cli-starter-versions
+```
+
+CI and release automation should verify the committed file before packing the CLI:
+
+```sh
+bun run check:cli-starter-versions
+```
+
+Stable package versions are emitted as caret ranges, for example `0.1.0` becomes `^0.1.0`.
+Prerelease versions are emitted exactly, so `0.1.0-rc.0` does not float to an incompatible
+prerelease. The starter must never emit `workspace:*`.
+
+The installed CLI cannot read sibling workspace manifests because those files do not exist outside
+the monorepo. Runtime starter generation therefore imports only the static generated manifest
+published inside `@warblerjs/cli`; the development generator script is not needed by end users.
+
 ## Graph Generation
 
 `warbler make:graph <name>` is the architecture-aware generation boundary. It generates a
