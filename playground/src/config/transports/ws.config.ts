@@ -1,11 +1,17 @@
+import { envString } from "@warblerjs/config";
 import type { WebSocketConfig } from "@warblerjs/websocket";
-
 export const wsConfig = {
   mode: "dedicated",
   security: {
     origins: {
       required: true,
-      allowed: ["http://192.168.1.100:3000", "http://localhost:3000"],
+      allowed:  envString(
+        "WS_ALLOWED_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+      )
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter((origin) => origin.length > 0),
     },
     authentication: { required: false },
     protocols: { allowed: ["warbler.json.v1"], required: false },

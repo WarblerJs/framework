@@ -41,6 +41,7 @@ const STARTER_PACKAGES = Object.freeze([
   descriptor("i18n"),
   descriptor("runtime"),
   descriptor("view"),
+  descriptor("websocket"),
 ] as const);
 
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9A-Za-z-][0-9A-Za-z-]*))*))?$/u;
@@ -58,7 +59,7 @@ export async function generateStarterPackageVersions(
   if (options.check === true) {
     if (current !== expected) {
       throw new StarterVersionGenerationError(
-        "Starter package version manifest is stale. Run: bun run --cwd packages/cli generate:starter-versions",
+        "Starter package version manifest is stale. Run: bun run generate:cli-starter-versions",
       );
     }
     return Object.freeze({ root, generatedPath, versions, changed: false });

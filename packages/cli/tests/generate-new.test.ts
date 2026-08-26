@@ -20,6 +20,11 @@ import { createTestProject } from "./helpers";
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const task of cleanup.splice(0)) await task(); });
 
+const deterministicSecrets = Object.freeze({
+  cryptoKey: "crypto-key-for-deterministic-tests",
+  hmacKey: "hmac-key-for-deterministic-tests",
+});
+
 describe("new and generate", () => {
   test("creates the complete current starter layout", async () => {
     const parent = await Bun.$`mktemp -d`.text(); const rootParent = parent.trim();
@@ -34,6 +39,11 @@ describe("new and generate", () => {
       "resources/js/app.ts",
       "resources/views/.gitkeep",
       "src/config/transports/http.config.ts",
+      "src/config/transports/mcp.config.ts",
+      "src/config/transports/tcp.config.ts",
+      "src/config/transports/udp.config.ts",
+      "src/config/transports/webrtc.config.ts",
+      "src/config/transports/ws.config.ts",
       "src/config/crypto.config.ts",
       "src/config/database.config.ts",
       "src/config/i18n.config.ts",
@@ -86,6 +96,7 @@ describe("new and generate", () => {
     };
     expect(packageJson.dependencies["@warblerjs/frontend"]).toBeDefined();
     expect(packageJson.dependencies["@warblerjs/view"]).toBeDefined();
+    expect(packageJson.dependencies["@warblerjs/websocket"]).toBeDefined();
     expect(Object.values(packageJson.dependencies).some((version) => version.includes("workspace:"))).toBe(false);
     expect(Object.values(packageJson.devDependencies).some((version) => version.includes("workspace:"))).toBe(false);
   });
@@ -100,8 +111,16 @@ describe("new and generate", () => {
     expect(source).not.toContain("habedev");
     expect(source).not.toContain("192.168.1.100");
     const env = await Bun.file(join(root, ".env")).text();
+    const envExample = await Bun.file(join(root, ".env.example")).text();
     expect(env).toContain("APP_HOST=127.0.0.1");
+    expect(env).toContain("APP_HTTP_PORT=3000");
     expect(env).not.toContain("APP_HOST=0.0.0.0");
+    expect(env).not.toContain("AAAAAAAAAAAAAAAA");
+    expect(envExample).toContain("APP_CRYPTO_KEY=\n");
+    expect(envExample).toContain("APP_HMAC_KEY=\n");
+    expect(envExample).toContain("APP_HTTP_PORT=3000");
+    expect(envExample).toContain("APP_HTTTP_PORT=3000");
+    expect(envExample).toContain("WS_ALLOWED_ORIGINS=");
     await Bun.$`git -C ${root} init --quiet`;
     const ignoredEnv = Bun.spawn(["git", "check-ignore", ".env"], { cwd: root, stdout: "ignore", stderr: "ignore" });
     expect(await ignoredEnv.exited).toBe(0);
@@ -122,8 +141,8 @@ describe("new and generate", () => {
   test("starter template paths are immutable, deterministic, and root-contained", async () => {
     const parent = await Bun.$`mktemp -d`.text(); const rootParent = parent.trim();
     cleanup.push(() => rm(rootParent, { recursive: true, force: true }));
-    const first = createStarterFiles({ name: "sample-app" });
-    const second = createStarterFiles({ name: "sample-app" });
+    const first = createStarterFiles({ name: "sample-app", secrets: deterministicSecrets });
+    const second = createStarterFiles({ name: "sample-app", secrets: deterministicSecrets });
     expect(first).toEqual(second);
     expect(Object.isFrozen(first)).toBe(true);
     expect(first.map((item) => item.path)).toEqual([...first.map((item) => item.path)].sort());
@@ -133,6 +152,35 @@ describe("new and generate", () => {
       expect(item.path).not.toContain("..");
       expect(item.path.startsWith("/")).toBe(false);
     }
+  });
+
+  test("real project generation creates unique 32-byte environment secrets", async () => {
+    const parent = await Bun.$`mktemp -d`.text(); const rootParent = parent.trim();
+    cleanup.push(() => rm(rootParent, { recursive: true, force: true }));
+    const first = await createStarterProject(rootParent, "secret-one");
+    const second = await createStarterProject(rootParent, "secret-two");
+    const firstEnv = parseEnv(await Bun.file(join(first, ".env")).text());
+    const secondEnv = parseEnv(await Bun.file(join(second, ".env")).text());
+    expect(firstEnv.APP_CRYPTO_KEY?.length).toBeGreaterThan(0);
+    expect(firstEnv.APP_HMAC_KEY?.length).toBeGreaterThan(0);
+    expect(base64UrlByteLength(firstEnv.APP_CRYPTO_KEY ?? "")).toBe(32);
+    expect(base64UrlByteLength(firstEnv.APP_HMAC_KEY ?? "")).toBe(32);
+    expect(secondEnv.APP_CRYPTO_KEY).not.toBe(firstEnv.APP_CRYPTO_KEY);
+    expect(secondEnv.APP_HMAC_KEY).not.toBe(firstEnv.APP_HMAC_KEY);
+  });
+
+  test("dry-run generates no secrets and writes nothing", async () => {
+    const parent = await Bun.$`mktemp -d`.text(); const rootParent = parent.trim();
+    cleanup.push(() => rm(rootParent, { recursive: true, force: true }));
+    let secretCalls = 0;
+    const dryRoot = await createStarterProject(rootParent, "dry-secret-app", true, {
+      generateSecrets() {
+        secretCalls++;
+        return deterministicSecrets;
+      },
+    });
+    expect(secretCalls).toBe(0);
+    expect(await Bun.file(dryRoot).exists()).toBe(false);
   });
 
   test("generated project passes doctor, typecheck, tests, and production build", async () => {
@@ -204,10 +252,27 @@ describe("new and generate", () => {
 
 async function allStarterText(root: string): Promise<string> {
   const parts: string[] = [];
-  for (const item of createStarterFiles({ name: "sample-app" })) {
+  for (const item of createStarterFiles({ name: "sample-app", secrets: deterministicSecrets })) {
     parts.push(await Bun.file(join(root, item.path)).text());
   }
   return parts.join("\n");
+}
+
+function parseEnv(source: string): Readonly<Record<string, string>> {
+  const values: Record<string, string> = {};
+  for (const rawLine of source.split(/\n/u)) {
+    const line = rawLine.trim();
+    if (line.length === 0 || line.startsWith("#")) continue;
+    const index = line.indexOf("=");
+    if (index < 1) continue;
+    values[line.slice(0, index)] = line.slice(index + 1);
+  }
+  return Object.freeze(values);
+}
+
+function base64UrlByteLength(value: string): number {
+  const padded = value.replaceAll("-", "+").replaceAll("_", "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  return atob(padded).length;
 }
 
 async function runProjectCommand(root: string, command: readonly string[]): Promise<void> {

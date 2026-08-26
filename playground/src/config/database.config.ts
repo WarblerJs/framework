@@ -15,9 +15,9 @@ export const databaseConfig = {
 
       hostname: envString("DB_HOST", "localhost"),
       port: envNumber("DB_PORT", 5432),
-      database: envString("DB_DATABASE", "warbler_playground"),
+      database: envString("DB_DATABASE", "warbler_development"),
       username: envString("DB_USERNAME", "warbler"),
-      password: envString("DB_PASSWORD", "warbler"),
+      password: envString("DB_PASSWORD", ""),
 
       ssl: envBoolean("DB_SSL", false),
 

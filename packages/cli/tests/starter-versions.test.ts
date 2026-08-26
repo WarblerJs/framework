@@ -100,7 +100,13 @@ describe("starter package version manifest", () => {
   });
 
   test("starter package.json uses every compatibility version and CLI_VERSION", () => {
-    const packageFile = createStarterFiles({ name: "version-sync-test" }).find((item) => item.path === "package.json");
+    const packageFile = createStarterFiles({
+      name: "version-sync-test",
+      secrets: {
+        cryptoKey: "crypto-key-for-version-test",
+        hmacKey: "hmac-key-for-version-test",
+      },
+    }).find((item) => item.path === "package.json");
     expect(packageFile).toBeDefined();
     const manifest = JSON.parse(packageFile!.content) as {
       readonly dependencies: Readonly<Record<string, string>>;
@@ -166,9 +172,10 @@ async function writeCatalog(root: string, overrides: Readonly<Record<string, str
     frontend: "0.1.0",
     http: "0.1.3",
     i18n: "0.1.2",
-    runtime: "0.1.3",
-    view: "0.1.0-rc.0",
-  };
+      runtime: "0.1.3",
+      view: "0.1.0-rc.0",
+      websocket: "0.1.0",
+    };
   for (const [key, value] of Object.entries(overrides)) {
     if (value === undefined) delete catalog[key];
     else catalog[key] = value;
