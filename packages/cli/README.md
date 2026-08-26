@@ -39,7 +39,7 @@ overwriting unless `--force` is explicit. `clean` can remove only `dist/` and `.
 `warbler new <name>` gets Warbler dependency versions from
 `src/new/starter-package-versions.generated.ts`. That file is generated from the reviewed
 `starter-compatibility.json` catalog, whose explicit allowlist is: `config`, `crypto`, `database`,
-`email`, `framework`, `frontend`, `http`, `i18n`, `runtime`, and `view`.
+`email`, `framework`, `frontend`, `http`, `i18n`, `runtime`, `view`, and `websocket`.
 
 Release automation updates `starter-compatibility.json` only after the corresponding package
 versions have been published successfully to npm. Local workspace package versions are validated
@@ -65,6 +65,32 @@ prerelease. The starter must never emit `workspace:*`.
 The installed CLI cannot read sibling workspace manifests because those files do not exist outside
 the monorepo. Runtime starter generation therefore imports only the static generated manifest
 published inside `@warblerjs/cli`; the development generator script is not needed by end users.
+
+## Starter Configs
+
+`warbler new <name>` gets every `src/config/**/*.ts` starter file and its public `.env.example`
+from `src/new/starter-configs.generated.ts`. That file is generated from the reviewed
+`playground/src/config/**` tree and `playground/.env.example`, preserving source text except
+normalized line endings and a final newline. The installed CLI imports only the static generated
+snapshot; it never scans the Playground workspace.
+
+Regenerate after reviewing Playground config changes:
+
+```sh
+bun run generate:cli-starter-configs
+```
+
+Verify the committed snapshot before packing or publishing:
+
+```sh
+bun run check:cli-starter-configs
+```
+
+The config generator also statically checks supported `@warblerjs/config` environment helper calls
+against `playground/.env.example`. Dynamic environment-key expressions are rejected instead of
+being silently skipped. Starter `.env` files are derived from the generated `.env.example` snapshot
+with local host, project database name, and fresh 32-byte base64url development secrets applied at
+project creation time.
 
 ## Graph Generation
 

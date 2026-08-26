@@ -4,8 +4,8 @@ export const mailConfig = {
   default: "smtp",
 
   from: {
-    address: envString("MAIL_FROM_ADDRESS", "habedev@gmail.com"),
-    name: envString("MAIL_FROM_NAME", "Warbler Playground"),
+    address: envString("MAIL_FROM_ADDRESS", "noreply@example.com"),
+    name: envString("MAIL_FROM_NAME", "Warbler"),
   },
 
   transports: {

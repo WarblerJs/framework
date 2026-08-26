@@ -10,6 +10,7 @@ export const STARTER_PACKAGE_VERSIONS = Object.freeze({
   i18n: "0.1.2",
   runtime: "0.1.3",
   view: "0.1.0-rc.0",
+  websocket: "0.1.3",
 } as const);
 
 export type StarterPackageName = keyof typeof STARTER_PACKAGE_VERSIONS;

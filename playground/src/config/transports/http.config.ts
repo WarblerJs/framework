@@ -2,8 +2,11 @@ import { envNumber, envString } from "@warblerjs/config";
 
 export const httpConfig = {
   host: envString('APP_HOST','0.0.0.0'),
-  port: envNumber('APP_HTTTP_PORT',3000), 
-  allowedHosts: ["127.0.0.1","192.168.1.100", "localhost", envString('APP_HOST','0.0.0.0')],
+  port: envNumber(
+    "APP_HTTP_PORT",
+    envNumber("APP_HTTTP_PORT", 3000),
+  ),
+  allowedHosts: ["127.0.0.1", "localhost", envString('APP_HOST','0.0.0.0')],
   request: {
     body: {
       enabled: true,

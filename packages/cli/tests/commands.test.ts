@@ -119,7 +119,17 @@ describe("development", () => {
     process.env.WARBLER_CSRF_SECRET = "abcdefghijklmnopqrstuvwxyz123456";
     const runtimePath = join(project.root, "src/config/runtime.config.ts");
     const source = await Bun.file(runtimePath).text();
-    await Bun.write(runtimePath, source.replace("http: { enabled: true, port: 3000 }", "http: { enabled: false, port: 3000 }"));
+    await Bun.write(runtimePath, source.replace(
+      "http: { enabled: true, port: envNumber('APP_HTTP_PORT', envNumber('APP_HTTTP_PORT',3000)) }",
+      "http: { enabled: false, port: 3000 }",
+    ));
+    await Bun.write(join(project.root, "src/main.ts"), `import { createApp, Transport } from "@warblerjs/framework";
+
+export default createApp({
+  transports: [Transport.WEBSOCKET],
+  graphs: "src/graphs/**/*.graph.ts",
+});
+`);
     try {
       const compiler = await compileProject(project.root);
       const handle = await new GeneratedBindingsRuntimeLauncher().start(project.root, compiler);
@@ -394,7 +404,9 @@ describe("build and start", () => {
     const runtimePath = join(project.root, "src/config/runtime.config.ts");
     const runtimeSource = await Bun.file(runtimePath).text();
     const port = 38_000 + Math.floor(Math.random() * 1_000);
-    await Bun.write(runtimePath, runtimeSource.replace("port: 3000", `port: ${port}`));
+    await Bun.write(runtimePath, runtimeSource
+      .replace("http: { enabled: true, port: envNumber('APP_HTTP_PORT', envNumber('APP_HTTTP_PORT',3000)) }", `http: { enabled: true, port: ${port} }`)
+      .replace('websocket: { enabled: true, mode: "standalone", port: 3001 }', `websocket: { enabled: true, mode: "standalone", port: ${port + 1} }`));
     await Bun.write(join(project.root, "public", "app.txt"), "asset");
     const layout = await validateProject(project.root);
     const result = await buildCommand(layout);

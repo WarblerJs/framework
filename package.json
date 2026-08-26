@@ -14,6 +14,9 @@
     "test:request": "autocannon -c 50 -d 30 http://0.0.0.0:3000/users/45",
     "build": "cd playground && bun run build",
     "release": "bun run scripts/release.ts",
+    "release:cli": "bun run scripts/release-cli.ts",
+    "generate:cli-starter-configs": "bun run packages/cli/scripts/generate-starter-configs.ts",
+    "check:cli-starter-configs": "bun run packages/cli/scripts/generate-starter-configs.ts --check",
     "generate:cli-starter-versions": "bun run packages/cli/scripts/generate-starter-package-versions.ts",
     "check:cli-starter-versions": "bun run packages/cli/scripts/generate-starter-package-versions.ts --check"
   },

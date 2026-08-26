@@ -27,7 +27,7 @@ export {
 } from "./generators/graph";
 export { makeGraphCommand } from "./make/make-graph-command";
 export { createStarterProject } from "./new/new-command";
-export { createStarterFiles, type StarterFile } from "./new/starter-files";
+export { createStarterFiles, generateStarterEnvSecrets, type StarterEnvSecrets, type StarterFile } from "./new/starter-files";
 export { devCommand } from "./dev/dev-command";
 export type {
   DevelopmentEvent,
