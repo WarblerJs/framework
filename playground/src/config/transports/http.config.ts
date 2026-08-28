@@ -6,7 +6,14 @@ export const httpConfig = {
     "APP_HTTP_PORT",
     envNumber("APP_HTTTP_PORT", 3000),
   ),
-  allowedHosts: ["127.0.0.1", "localhost", envString('APP_HOST','0.0.0.0')],
+  // allowedHosts: ["127.0.0.1", "localhost", envString('APP_HOST','0.0.0.0')],
+  allowedHosts: envString(
+    "HTTP_ALLOWED_ORIGINS",
+    "localhost,127.0.0.1",
+  )
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0),
   request: {
     body: {
       enabled: true,
