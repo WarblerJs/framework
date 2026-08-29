@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { createHmac } from "node:crypto";
-import { rm } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import {
   ExitCode,
   ProcessOwner,
@@ -18,7 +18,7 @@ import {
 import { compileProject } from "@warblerjs/compiler";
 import { GeneratedBindingsRuntimeLauncher, loadTransportLaunchers } from "../src/dev/runtime-launcher";
 import { captureOutput, createTestProject } from "./helpers";
-import { CLI_VERSION } from "../src/version";
+import { CLI_VERSION, UNKNOWN_VERSION, resolveProjectFrameworkVersion } from "../src/version";
 
 const cleanup: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const task of cleanup.splice(0)) await task(); });
@@ -81,12 +81,51 @@ describe("development", () => {
     expect(code).toBe(0);
     expect(starts).toBe(1);
     expect(capture.lines.join("\n")).toContain("Runtime is running");
+    expect(capture.lines.join("\n")).toContain("Warbler Framework");
+    expect(capture.lines.join("\n")).toContain("Warbler CLI");
+    expect(capture.lines.join("\n")).not.toContain("Version      ");
     expect(capture.lines.join("\n")).toContain("Executable bindings generated");
     expect(capture.lines.join("\n")).toContain("Filesystem watcher disabled");
     expect(await Bun.file(join(project.root, ".warbler/generated/application.generated.ts")).exists()).toBe(true);
     await session?.stop();
     expect(stops).toBe(1);
   });
+  test("dev banner displays distinct CLI and framework package versions from a generated starter", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    await replaceFrameworkPackage(project.root, "5.6.7");
+    let session: import("../src").DevSession | undefined;
+    const capture = captureOutput();
+    const code = await runCLI(["dev", "--no-color", "--no-watch", "--project", project.root], {
+      output: capture.output,
+      runtimeLauncher: { start() { return { stop() {} }; } },
+      waitForDevSession: false,
+      onDevSession(value) { session = value; },
+    });
+    const rendered = capture.lines.join("\n");
+    expect(code).toBe(0);
+    expect(rendered).toContain("Warbler Framework   5.6.7");
+    expect(rendered).toContain(`Warbler CLI         ${CLI_VERSION}`);
+    expect(rendered).not.toContain("Version");
+    expect(rendered).not.toContain("\u001b");
+    await session?.stop();
+  }, 20_000);
+  test("dev banner never substitutes the CLI version when framework metadata is unavailable", async () => {
+    const project = await createTestProject(); cleanup.push(project.cleanup);
+    await replaceFrameworkPackage(project.root);
+    let session: import("../src").DevSession | undefined;
+    const capture = captureOutput();
+    const code = await runCLI(["dev", "--no-watch", "--project", project.root], {
+      output: capture.output,
+      runtimeLauncher: { start() { return { stop() {} }; } },
+      waitForDevSession: false,
+      onDevSession(value) { session = value; },
+    });
+    const rendered = capture.lines.join("\n");
+    expect(code).toBe(0);
+    expect(rendered).toContain(`Warbler Framework   ${UNKNOWN_VERSION}`);
+    expect(rendered).toContain(`Warbler CLI         ${CLI_VERSION}`);
+    await session?.stop();
+  }, 20_000);
   test("dev JSON progress is structured and contains no ANSI escapes", async () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
     let session: import("../src").DevSession | undefined;
@@ -103,6 +142,9 @@ describe("development", () => {
       return !line.includes("\u001b");
     })).toBe(true);
     expect(capture.lines.some((line) => line.includes('"stage":"compiler"'))).toBe(true);
+    const banner = capture.lines.map((line) => JSON.parse(line) as Readonly<Record<string, unknown>>).find((line) => line.type === "banner");
+    expect(banner).toMatchObject({ frameworkVersion: "0.1.0", cliVersion: CLI_VERSION });
+    expect(banner).not.toHaveProperty("version");
     await session?.stop();
   });
   test("watch path filtering ignores generated and dependency paths", () => {
@@ -393,6 +435,18 @@ function signCsrfToken(token: string, secret: string): string {
   const signature = createHmac("sha256", new TextEncoder().encode(secret)).update(token).digest();
   return `${token}.${new Uint8Array(signature).toBase64({ alphabet: "base64url", omitPadding: true })}`;
 }
+async function replaceFrameworkPackage(projectRoot: string, version?: string): Promise<void> {
+  const packageRoot = join(projectRoot, "node_modules/@warblerjs/framework");
+  await rm(packageRoot, { recursive: true, force: true });
+  await mkdir(packageRoot, { recursive: true });
+  await writeFile(join(packageRoot, "package.json"), `${JSON.stringify({
+    name: "@warblerjs/framework",
+    ...(version === undefined ? {} : { version }),
+    type: "module",
+    exports: { ".": "./src/index.ts" },
+  }, null, 2)}\n`, "utf8");
+  await symlink(resolve(import.meta.dir, "../../framework/src"), join(packageRoot, "src"));
+}
 function restoreEnv(key: string, prior: string | undefined): void {
   if (prior === undefined) delete process.env[key];
   else process.env[key] = prior;
@@ -414,6 +468,7 @@ describe("build and start", () => {
     expect(await Bun.file(join(result.outDirectory, "public/app.txt")).text()).toBe("asset");
     const manifest = JSON.parse(await Bun.file(result.manifest).text());
     expect(manifest.entry).toBe("server.js");
+    expect(manifest.frameworkVersion).toBe(await resolveProjectFrameworkVersion(project.root));
     expect(manifest.generatedAt).toBe("deterministic");
     expect(manifest.applicationFingerprint).toBeTypeOf("string");
     const productionEntry = await Bun.file(join(project.root, ".warbler/generated/production-entry.ts")).text();

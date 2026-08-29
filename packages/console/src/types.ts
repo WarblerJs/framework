@@ -52,7 +52,8 @@ export interface SocketLogInput {
 export interface BannerInput {
   readonly title?: string;
   readonly subtitle?: string;
-  readonly version: string;
+  readonly frameworkVersion: string;
+  readonly cliVersion: string;
   readonly bunVersion?: string;
   readonly project: string;
   readonly build?: number;

@@ -145,18 +145,20 @@ export class WarblerConsole {
     const bird = this.#capabilities.unicode ? "🐦 " : "";
     const rule = (this.#capabilities.unicode ? "═" : "=").repeat(62);
     const entries: Array<readonly [string, string | number | undefined]> = [
-      ["Version", input.version], ["Bun", input.bunVersion ?? Bun.version], ["Project", input.project],
+      ["Warbler Framework", input.frameworkVersion], ["Warbler CLI", input.cliVersion],
+      ["Bun", input.bunVersion ?? Bun.version], ["Project", input.project],
       ["Build", input.build === undefined ? undefined : `#${input.build}`],
       ["Compiler", duration(input.compilerMs)], ["Runtime", duration(input.runtimeMs)],
       ["HTTP", input.http], ["WebSocket", input.websocket],
     ];
+    const labelWidth = 19;
     const lines = [
       rule,
       "",
       center(`${bird}${input.title ?? "Warbler"}`, 62),
       center(input.subtitle ?? "Development Runtime", 62),
       "",
-      ...entries.filter((entry) => entry[1] !== undefined).map(([key, value]) => ` ${key.padEnd(12)} ${String(value)}`),
+      ...entries.filter((entry) => entry[1] !== undefined).map(([key, value]) => ` ${key.padEnd(labelWidth)} ${String(value)}`),
       ...(input.network === undefined || input.network.length === 0 ? [] : ["", " Network", ...input.network.map((url) => ` ${this.#mark("success")} ${url}`)]),
       ...(input.watching === undefined ? [] : ["", " Watching", ...input.watching.map((path) => ` ${this.#mark("success")} ${path}`)]),
       "",

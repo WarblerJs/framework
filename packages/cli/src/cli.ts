@@ -1,5 +1,5 @@
 import type { DevelopmentRuntimeLauncher } from "./dev/dev-session";
-import { CLI_VERSION } from "./version";
+import { CLI_VERSION, resolveProjectFrameworkVersion } from "./version";
 import { Console } from "@warblerjs/console";
 import { isDatabaseError } from "@warblerjs/database";
 import type { DevSession } from "./dev/dev-session";
@@ -132,6 +132,7 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
   switch (context.command) {
     case "dev": {
       assertArgs(context, 0);
+      const frameworkVersion = await resolveProjectFrameworkVersion(root);
       const report: DevelopmentReporter = (event) => writeDevelopmentEvent(output, context.format, context.verbose, event);
       report(Object.freeze({
         stage: "project",
@@ -152,7 +153,8 @@ async function execute(context: CLIContext, output: CLIOutput, services: CLIServ
       );
       services.onDevSession?.(session);
       Console.banner({
-        version: CLI_VERSION,
+        frameworkVersion,
+        cliVersion: CLI_VERSION,
         project: basename(root),
         build: session.buildNumber,
         ...(session.network === undefined ? {} : { network: session.network }),
