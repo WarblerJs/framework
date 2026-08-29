@@ -80,7 +80,7 @@ describe("professional renderers", () => {
   test("renders banner, table, diagnostics, and lifecycle states", () => {
     const output = capture({ unicode: true });
     output.console.banner({
-      version: "0.1.0", project: "playground", build: 15, compilerMs: 44,
+      frameworkVersion: "7.8.9", cliVersion: "1.2.3", project: "playground", build: 15, compilerMs: 44,
       runtimeMs: 18, http: "http://127.0.0.1:3000", websocket: "ws://127.0.0.1:3001/chat",
       network: ["http://localhost:3000", "http://192.168.1.3:3000"],
       watching: ["src", "resources", "public"],
@@ -93,6 +93,9 @@ describe("professional renderers", () => {
     output.console.runtime("ready");
     const rendered = `${output.lines.join("")}${output.errors.join("")}`;
     expect(rendered).toContain("Warbler");
+    expect(rendered).toContain("Warbler Framework");
+    expect(rendered).toContain("Warbler CLI");
+    expect(rendered).not.toContain("Version      ");
     expect(rendered).toContain("playground");
     expect(rendered).toContain("┌");
     expect(rendered).toContain("Network");

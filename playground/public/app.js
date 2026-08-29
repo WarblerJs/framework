@@ -1,1 +1,198 @@
-function g(e){if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",e,{once:!0});else e()}var y="All regions",p="All countries";function b(e){let n=e.region===y||e.region===e.recordRegion,o=e.country===p||e.country===e.recordCountry;return n&&o}function L(e){for(let n=0,o=e.length;n<o;n+=1){let r=e[n];if(r.required&&r.value.trim().length===0)return{valid:!1,missingField:r.name};if(r.required&&r.type==="email"&&!r.value.includes("@"))return{valid:!1,missingField:r.name}}return{valid:!0,missingField:""}}function m(e){let n=document.querySelectorAll("[data-desktop-toggle]");for(let o=0,r=n.length;o<r;o+=1){let t=n[o],i=t?.closest("[data-desktop-disclosure]");if(i===null||i===e)continue;let l=i?.querySelector("[data-desktop-panel]");if(t?.setAttribute("aria-expanded","false"),l!==null)l.hidden=!0}}function f(e,n){let o=document.querySelector("[data-mobile-menu-button]"),r=document.querySelector("[data-mobile-menu]");if(o===null||r===null)return;if(o.setAttribute("aria-expanded",String(e)),r.hidden=!e,document.body.dataset.navOpen=e?"true":"false",!e&&n)o.focus()}function E(e){let n=document.querySelector("[data-mobile-menu-button]");if(n!==null)n.addEventListener("click",()=>{let t=n.getAttribute("aria-expanded")!=="true";f(t,!1)},{signal:e});let o=document.querySelectorAll("[data-desktop-toggle]");for(let t=0,i=o.length;t<i;t+=1){let l=o[t];l?.addEventListener("click",()=>{let d=l.closest("[data-desktop-disclosure]");if(d===null)return;let u=d.querySelector("[data-desktop-panel]");if(u===null)return;let a=l.getAttribute("aria-expanded")!=="true";m(d),l.setAttribute("aria-expanded",String(a)),u.hidden=!a},{signal:e})}let r=document.querySelectorAll("[data-mobile-submenu-button]");for(let t=0,i=r.length;t<i;t+=1){let l=r[t];l?.addEventListener("click",()=>{let d=l.getAttribute("aria-controls");if(d===null)return;let u=document.getElementById(d);if(u===null)return;let a=l.getAttribute("aria-expanded")!=="true";l.setAttribute("aria-expanded",String(a)),u.hidden=!a},{signal:e})}document.addEventListener("click",(t)=>{let i=t.target;if(!(i instanceof Element))return;if(i.closest("[data-site-header]")!==null)return;m()},{signal:e}),document.addEventListener("keydown",(t)=>{if(t.key!=="Escape")return;m(),f(!1,!0)},{signal:e})}function h(e){let n=document.querySelector("[data-distributor-directory]");if(n===null)return;let o=n.querySelector("[data-distributor-region]"),r=n.querySelector("[data-distributor-country]"),t=n.querySelector("[data-distributor-count]"),i=document.querySelectorAll("[data-distributor-card]");if(o===null||r===null)return;let l=()=>{let d=0;for(let u=0,a=i.length;u<a;u+=1){let s=i[u],c=b({region:o.value,country:r.value,recordRegion:s.dataset.region??"",recordCountry:s.dataset.country??""});if(s.hidden=!c,c)d+=1}if(t!==null)t.textContent=`Showing ${d} fictional distributor record${d===1?"":"s"}.`};o.addEventListener("change",l,{signal:e}),r.addEventListener("change",l,{signal:e}),l()}function v(e){let n=e.querySelectorAll("input, select, textarea"),o=[];for(let r=0,t=n.length;r<t;r+=1){let i=n[r];o.push({name:i.name||i.id||"field",value:i.value,required:i.required,type:i instanceof HTMLInputElement?i.type:""})}return o}function S(e){let n=document.querySelectorAll("[data-demo-form]");for(let o=0,r=n.length;o<r;o+=1){let t=n[o];t?.addEventListener("submit",(i)=>{i.preventDefault();let l=t.querySelector("[data-form-status]"),d=t.querySelectorAll("input, select, textarea");for(let a=0,s=d.length;a<s;a+=1)d[a]?.setAttribute("aria-invalid","false");let u=L(v(t));if(!u.valid){for(let a=0,s=d.length;a<s;a+=1){let c=d[a];if(c?.name===u.missingField||c?.id===u.missingField){c.setAttribute("aria-invalid","true"),c.focus();break}}if(l!==null)l.dataset.state="error",l.textContent="Complete the required fields to show the demo state.";return}if(l!==null)l.dataset.state="success",l.textContent=t.dataset.successMessage??"Demo state shown locally. Nothing was sent."},{signal:e})}}if(typeof document<"u"&&typeof window<"u")g(()=>{document.documentElement.dataset.warbler="ready";let e=new AbortController;E(e.signal),h(e.signal),S(e.signal),window.addEventListener("pagehide",()=>e.abort(),{once:!0})});
+// ../packages/frontend/src/dom/ready.ts
+function ready(callback) {
+  if (document.readyState === "loading")
+    document.addEventListener("DOMContentLoaded", callback, { once: true });
+  else
+    callback();
+}
+
+// resources/js/app.ts
+var ALL_REGIONS = "All regions";
+var ALL_COUNTRIES = "All countries";
+function matchesDistributorFilter(input) {
+  const regionMatch = input.region === ALL_REGIONS || input.region === input.recordRegion;
+  const countryMatch = input.country === ALL_COUNTRIES || input.country === input.recordCountry;
+  return regionMatch && countryMatch;
+}
+function validateDemoFields(fields) {
+  for (let index = 0, length = fields.length;index < length; index += 1) {
+    const field = fields[index];
+    if (field.required && field.value.trim().length === 0) {
+      return { valid: false, missingField: field.name };
+    }
+    if (field.required && field.type === "email" && !field.value.includes("@")) {
+      return { valid: false, missingField: field.name };
+    }
+  }
+  return { valid: true, missingField: "" };
+}
+function closeDesktopMenus(except) {
+  const toggles = document.querySelectorAll("[data-desktop-toggle]");
+  for (let index = 0, length = toggles.length;index < length; index += 1) {
+    const toggle = toggles[index];
+    const group = toggle?.closest("[data-desktop-disclosure]");
+    if (group === null || group === except)
+      continue;
+    const panel = group?.querySelector("[data-desktop-panel]");
+    toggle?.setAttribute("aria-expanded", "false");
+    if (panel !== null)
+      panel.hidden = true;
+  }
+}
+function setMobileMenu(open, returnFocus) {
+  const button = document.querySelector("[data-mobile-menu-button]");
+  const menu = document.querySelector("[data-mobile-menu]");
+  if (button === null || menu === null)
+    return;
+  button.setAttribute("aria-expanded", String(open));
+  menu.hidden = !open;
+  document.body.dataset.navOpen = open ? "true" : "false";
+  if (!open && returnFocus)
+    button.focus();
+}
+function initNavigation(signal) {
+  const mobileButton = document.querySelector("[data-mobile-menu-button]");
+  if (mobileButton !== null) {
+    mobileButton.addEventListener("click", () => {
+      const open = mobileButton.getAttribute("aria-expanded") !== "true";
+      setMobileMenu(open, false);
+    }, { signal });
+  }
+  const desktopToggles = document.querySelectorAll("[data-desktop-toggle]");
+  for (let index = 0, length = desktopToggles.length;index < length; index += 1) {
+    const toggle = desktopToggles[index];
+    toggle?.addEventListener("click", () => {
+      const group = toggle.closest("[data-desktop-disclosure]");
+      if (group === null)
+        return;
+      const panel = group.querySelector("[data-desktop-panel]");
+      if (panel === null)
+        return;
+      const open = toggle.getAttribute("aria-expanded") !== "true";
+      closeDesktopMenus(group);
+      toggle.setAttribute("aria-expanded", String(open));
+      panel.hidden = !open;
+    }, { signal });
+  }
+  const mobileSubmenuButtons = document.querySelectorAll("[data-mobile-submenu-button]");
+  for (let index = 0, length = mobileSubmenuButtons.length;index < length; index += 1) {
+    const toggle = mobileSubmenuButtons[index];
+    toggle?.addEventListener("click", () => {
+      const id = toggle.getAttribute("aria-controls");
+      if (id === null)
+        return;
+      const panel = document.getElementById(id);
+      if (panel === null)
+        return;
+      const open = toggle.getAttribute("aria-expanded") !== "true";
+      toggle.setAttribute("aria-expanded", String(open));
+      panel.hidden = !open;
+    }, { signal });
+  }
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element))
+      return;
+    if (target.closest("[data-site-header]") !== null)
+      return;
+    closeDesktopMenus();
+  }, { signal });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape")
+      return;
+    closeDesktopMenus();
+    setMobileMenu(false, true);
+  }, { signal });
+}
+function initDistributorDirectory(signal) {
+  const root = document.querySelector("[data-distributor-directory]");
+  if (root === null)
+    return;
+  const regionSelect = root.querySelector("[data-distributor-region]");
+  const countrySelect = root.querySelector("[data-distributor-country]");
+  const count = root.querySelector("[data-distributor-count]");
+  const cards = document.querySelectorAll("[data-distributor-card]");
+  if (regionSelect === null || countrySelect === null)
+    return;
+  const apply = () => {
+    let visible = 0;
+    for (let index = 0, length = cards.length;index < length; index += 1) {
+      const card = cards[index];
+      const shown = matchesDistributorFilter({
+        region: regionSelect.value,
+        country: countrySelect.value,
+        recordRegion: card.dataset.region ?? "",
+        recordCountry: card.dataset.country ?? ""
+      });
+      card.hidden = !shown;
+      if (shown)
+        visible += 1;
+    }
+    if (count !== null) {
+      count.textContent = `Showing ${visible} fictional distributor record${visible === 1 ? "" : "s"}.`;
+    }
+  };
+  regionSelect.addEventListener("change", apply, { signal });
+  countrySelect.addEventListener("change", apply, { signal });
+  apply();
+}
+function collectDemoFields(form) {
+  const controls = form.querySelectorAll("input, select, textarea");
+  const fields = [];
+  for (let index = 0, length = controls.length;index < length; index += 1) {
+    const control = controls[index];
+    fields.push({
+      name: control.name || control.id || "field",
+      value: control.value,
+      required: control.required,
+      type: control instanceof HTMLInputElement ? control.type : ""
+    });
+  }
+  return fields;
+}
+function initDemoForms(signal) {
+  const forms = document.querySelectorAll("[data-demo-form]");
+  for (let index = 0, length = forms.length;index < length; index += 1) {
+    const form = forms[index];
+    form?.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const status = form.querySelector("[data-form-status]");
+      const controls = form.querySelectorAll("input, select, textarea");
+      for (let controlIndex = 0, controlLength = controls.length;controlIndex < controlLength; controlIndex += 1) {
+        controls[controlIndex]?.setAttribute("aria-invalid", "false");
+      }
+      const result = validateDemoFields(collectDemoFields(form));
+      if (!result.valid) {
+        for (let controlIndex = 0, controlLength = controls.length;controlIndex < controlLength; controlIndex += 1) {
+          const control = controls[controlIndex];
+          if (control?.name === result.missingField || control?.id === result.missingField) {
+            control.setAttribute("aria-invalid", "true");
+            control.focus();
+            break;
+          }
+        }
+        if (status !== null) {
+          status.dataset.state = "error";
+          status.textContent = "Complete the required fields to show the demo state.";
+        }
+        return;
+      }
+      if (status !== null) {
+        status.dataset.state = "success";
+        status.textContent = form.dataset.successMessage ?? "Demo state shown locally. Nothing was sent.";
+      }
+    }, { signal });
+  }
+}
+if (typeof document !== "undefined" && typeof window !== "undefined") {
+  ready(() => {
+    document.documentElement.dataset.warbler = "ready";
+    const controller = new AbortController;
+    initNavigation(controller.signal);
+    initDistributorDirectory(controller.signal);
+    initDemoForms(controller.signal);
+    window.addEventListener("pagehide", () => controller.abort(), { once: true });
+  });
+}
+
+//# debugId=91D026C9F7B3ED5164756E2164756E21

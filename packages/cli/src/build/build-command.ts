@@ -6,6 +6,7 @@ import { CLIError } from "../errors";
 import { atomicWrite, copyTree, removeGeneratedDirectory, resolveInside } from "../filesystem";
 import type { ProjectLayout } from "../project";
 import { ExitCode } from "../types";
+import { resolveProjectFrameworkVersion } from "../version";
 import type { TransportName } from "@warblerjs/config";
 import { compileViewProject, type ViewProjectConfig } from "@warblerjs/view";
 import { pathToFileURL } from "node:url";
@@ -22,6 +23,7 @@ export async function buildCommand(layout: ProjectLayout, options: Readonly<{ ou
   const buildId = createCorrelationId("build");
   Console.build({ build: 1, buildId, status: "started" });
   const compiler = await compileProject(layout.root);
+  const frameworkVersion = await resolveProjectFrameworkVersion(layout.root);
   const errors = compiler.diagnostics.filter((diagnostic) => diagnostic.category === "error");
   if (errors.length > 0) throw new CLIError("CLI2201", `Compilation failed with ${errors.length} error(s).`, ExitCode.FAILURE);
   const runtime = applyApplicationTransports(await loadCLIConfig(layout.root), compiler.applicationWIR?.transports);
@@ -64,7 +66,7 @@ export async function buildCommand(layout: ProjectLayout, options: Readonly<{ ou
   await copyTree(layout.root, "public", outDirectory, "public");
   const manifestValue = Object.freeze({
     version: 1,
-    frameworkVersion: "0.1.0",
+    frameworkVersion,
     createdAt: "deterministic",
     entry: "server.js",
     transports: enabledTransports,
