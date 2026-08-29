@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="260" viewBox="0 0 420 260" role="img" aria-labelledby="title desc">
+  <title id="title">Soft geometric barn window with youngstock care symbols</title>
+  <desc id="desc">A barn-like geometry with soft care symbols and warm agricultural colors.</desc>
+  <rect width="420" height="260" fill="#fbf7ed"/>
+  <path d="M84 102l126-72l126 72v118H84z" fill="#164233"/>
+  <path d="M126 220v-86h168v86z" fill="#f3ead8"/>
+  <path d="M152 158h42v62h-42zM226 158h42v62h-42z" fill="#235b45"/>
+  <circle cx="210" cy="92" r="28" fill="#d6a43a"/>
+  <path d="M0 222c80-34 144-42 230-22c72 18 128 14 190-18v78H0z" fill="#8aa63f"/>
+  <path d="M118 78l92-52l92 52" stroke="#a46343" stroke-width="12" stroke-linecap="round" fill="none"/>
+</svg>

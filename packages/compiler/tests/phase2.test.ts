@@ -99,6 +99,39 @@ describe("Phase 2 optimization", () => {
     expect(optimized.providerDependencies).toEqual([loggerId]);
   }, 15_000);
 
+  test("marks declarative handlers that call view helpers as needing view context", async () => {
+    const root = await phase2Project();
+    await Bun.write(join(root, "src", "application.ts"), `
+      import { csrf, defineHttpGraph, view } from "@warblerjs/http";
+      import * as handlers from "./handlers";
+
+      export const inline = defineHttpGraph({
+        prefix: "/api",
+        routes: {
+          "GET /": { name: "home", handler: handlers.getHome },
+          "GET /csrf": { handler: handlers.getCsrf },
+          "GET /inline": { run: () => view("inline") },
+          "GET /json": handlers.getJson,
+        },
+      });
+    `);
+    await Bun.write(join(root, "src", "handlers.ts"), `
+      import { defineHandler } from "@warblerjs/core";
+      import { JsonRes, csrf, view } from "@warblerjs/http";
+
+      export const getHome = defineHandler({ run: () => view("index") });
+      export const getCsrf = defineHandler({ run: () => JsonRes({ token: csrf().token }) });
+      export const getJson = defineHandler({ run: () => JsonRes({ ok: true }) });
+    `);
+
+    const optimized = (await compileProject(root)).generatedApplication!.optimized;
+    const route = (path: string) => optimized.routes.find((candidate) => optimized.strings[candidate.pathId] === (path === "/" ? "/api" : `/api${path}`))!;
+    expect(route("/").flags & RouteFlag.VIEW_CONTEXT).not.toBe(0);
+    expect(route("/csrf").flags & RouteFlag.VIEW_CONTEXT).not.toBe(0);
+    expect(route("/inline").flags & RouteFlag.VIEW_CONTEXT).not.toBe(0);
+    expect(route("/json").flags & RouteFlag.VIEW_CONTEXT).toBe(0);
+  }, 15_000);
+
   test("flattens HTTP middleware scopes once in effective route order", async () => {
     const root = await phase2Project();
     const sourcePath = join(root, "src", "application.ts");

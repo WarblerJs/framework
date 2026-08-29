@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="260" viewBox="0 0 420 260" role="img" aria-labelledby="title desc">
+  <title id="title">Abstract green mineral layers beside a feed trough silhouette</title>
+  <desc id="desc">Layered mineral forms and a simple feeding shape in forest and amber colors.</desc>
+  <rect width="420" height="260" fill="#fbf7ed"/>
+  <path d="M0 178c70-38 128-38 202 0s142 42 218-8v90H0z" fill="#164233"/>
+  <path d="M0 124c78-34 144-34 220 4c72 36 124 28 200-14v66c-76 50-144 48-218 10C130 154 70 152 0 188z" fill="#8aa63f"/>
+  <rect x="90" y="68" width="238" height="54" rx="2" fill="#09231a"/>
+  <path d="M116 122h186l-24 42H140z" fill="#235b45"/>
+  <circle cx="92" cy="54" r="16" fill="#d6a43a"/>
+  <circle cx="144" cy="46" r="10" fill="#d6a43a"/>
+  <circle cx="196" cy="58" r="13" fill="#d6a43a"/>
+</svg>

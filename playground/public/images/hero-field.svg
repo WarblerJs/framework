@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="620" viewBox="0 0 760 620" role="img" aria-labelledby="title desc">
+  <title id="title">Abstract Nordic field at sunrise with laboratory crop rows</title>
+  <desc id="desc">Layered fields, forest shapes, and bright rows in a restrained agricultural-science style.</desc>
+  <rect width="760" height="620" fill="#f3ead8"/>
+  <path d="M0 430C130 380 218 384 346 420C492 462 610 430 760 350V620H0Z" fill="#0d3024"/>
+  <path d="M0 355C104 320 206 315 310 344C444 382 548 358 760 255V407C598 480 454 500 302 456C176 419 94 425 0 462Z" fill="#235b45"/>
+  <path d="M0 292C128 242 274 238 390 285C522 338 642 296 760 220V284C626 364 510 392 374 338C246 288 132 298 0 344Z" fill="#8aa63f"/>
+  <circle cx="610" cy="114" r="56" fill="#d6a43a"/>
+  <path d="M82 521L286 410M164 564L402 402M268 594L520 394M410 616L657 373" stroke="#f3ead8" stroke-width="6" stroke-linecap="round" opacity=".72"/>
+  <path d="M110 230h130v96H110z" fill="#fbf7ed" opacity=".88"/>
+  <path d="M135 326v-62h80v62" fill="#164233"/>
+  <path d="M120 210h110l38 20H88z" fill="#a46343"/>
+  <path d="M506 172h136v38H506zM540 210h68v62h-68z" fill="#09231a" opacity=".85"/>
+</svg>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="520" viewBox="0 0 640 520" role="img" aria-labelledby="title desc">
+  <title id="title">Abstract Nordic farm buildings, forest, and low sunlight</title>
+  <desc id="desc">A quiet farmyard with trees, low sun, and structured field bands.</desc>
+  <rect width="640" height="520" fill="#f3ead8"/>
+  <circle cx="516" cy="116" r="48" fill="#d6a43a"/>
+  <path d="M0 184h640v92H0z" fill="#09231a"/>
+  <path d="M68 232l70-58l70 58v116H68z" fill="#fbf7ed"/>
+  <path d="M104 348v-72h68v72" fill="#164233"/>
+  <path d="M260 214h170v134H260z" fill="#235b45"/>
+  <path d="M250 214l96-62l96 62z" fill="#a46343"/>
+  <path d="M0 390c108-50 226-56 352-18c108 32 204 26 288-18v166H0z" fill="#8aa63f"/>
+  <path d="M0 452c126-28 244-18 350 30c104 48 198 52 290 10v28H0z" fill="#0d3024"/>
+</svg>

@@ -1,4 +1,4 @@
-import { defineHandler } from "@warblerjs/framework";
+import { defineHandler,view } from "@warblerjs/framework";
 import {
   JsonRes,
   type AppRequest,
@@ -30,10 +30,8 @@ export const getTest = defineHandler({
 
 export const postTest = defineHandler({
   validator: testValidator,
-
   guards: [],
   middlewares: [],
-
   run: (ctx: AppRequest) => {
     return JsonRes({
       q: ctx.query,
@@ -41,5 +39,11 @@ export const postTest = defineHandler({
       h: ctx.headers,
       body: ctx.body,
     });
+  },
+});
+
+export const getHome = defineHandler({
+  run: (ctx: AppRequest) => {
+    return view('index');
   },
 });

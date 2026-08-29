@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="520" viewBox="0 0 640 520" role="img" aria-labelledby="title desc">
+  <title id="title">Abstract research plots beside a forest edge</title>
+  <desc id="desc">Measured crop plots with sample markers and a dark forest horizon.</desc>
+  <rect width="640" height="520" fill="#fbf7ed"/>
+  <rect y="0" width="640" height="168" fill="#164233"/>
+  <path d="M0 160h640v64H0z" fill="#8aa63f"/>
+  <path d="M58 260h120v188H58zM208 236h120v212H208zM358 270h120v178H358z" fill="#f3ead8" stroke="#d9cfbd" stroke-width="4"/>
+  <path d="M86 438l72-168M236 438l72-188M386 438l70-150" stroke="#235b45" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="506" cy="262" r="36" fill="#d6a43a"/>
+  <path d="M520 274l50 86" stroke="#09231a" stroke-width="10" stroke-linecap="round"/>
+  <rect x="74" y="228" width="72" height="22" fill="#a46343"/>
+  <rect x="224" y="204" width="72" height="22" fill="#a46343"/>
+  <rect x="374" y="238" width="72" height="22" fill="#a46343"/>
+</svg>

@@ -54,11 +54,13 @@ interface HandlerOptions {
   readonly middleware: readonly string[];
   readonly guards: readonly string[];
   readonly useCases: readonly HandlerUseCaseWIR[];
+  readonly viewContext: boolean;
 }
 const EMPTY_HANDLER_OPTIONS: HandlerOptions = Object.freeze({
   middleware: Object.freeze([]),
   guards: Object.freeze([]),
   useCases: Object.freeze([]),
+  viewContext: false,
 });
 /** Framework-owned provider imported by application code and registered by generated bindings. */
 export interface FrameworkProviderReference extends SourceLocationWIR {
@@ -137,6 +139,7 @@ function collectHandlerDefinitions(
         middleware: Object.freeze(objectReferenceArray(object, "middlewares")),
         guards: Object.freeze(objectReferenceArray(object, "guards")),
         useCases: Object.freeze(objectReferenceMap(object, "useCase")),
+        viewContext: usesHttpViewContext(object, aliases),
       }));
     }
   }
@@ -280,7 +283,7 @@ function declarativeHttpRoutes(
       guards: inlineOptions !== undefined ? objectReferenceArray(inlineOptions, "guards") : inherited.guards,
       useCases: inlineOptions !== undefined ? Object.freeze(objectReferenceMap(inlineOptions, "useCase")) : inherited.useCases,
       csrf: validator === undefined ? false : csrfValidators.has(lastReferenceSegment(validator)),
-      viewContext: false,
+      viewContext: inlineOptions !== undefined ? usesHttpViewContext(inlineOptions, aliases) : inherited.viewContext,
     }));
   }
   return Object.freeze(routes);

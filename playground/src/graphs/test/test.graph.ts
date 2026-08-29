@@ -13,6 +13,10 @@ export default defineHttpGraph({
     Provider({provide: FindUserRepositoryPort ,useExisting: WlbPgFindUserRepository })
   ],
   routes: {
+    "GET /": {
+      name: 'test.home',
+      handler: handlers.getHome
+    },
     "GET /test": {
       name: 'test.index',
       handler: handlers.getTest
