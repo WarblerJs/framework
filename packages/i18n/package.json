@@ -1,14 +1,27 @@
 {
   "name": "@warblerjs/i18n",
-  "version": "0.1.1",
+  "version": "0.5.0",
   "type": "module",
   "private": false,
   "files": [
     "src",
     "README.md"
   ],
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
-  "dependencies": { "@warblerjs/console": "0.1.0" },
-  "devDependencies": { "@types/bun": "latest", "typescript": "^5.9.2" }
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@warblerjs/console": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

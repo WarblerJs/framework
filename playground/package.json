@@ -16,25 +16,25 @@
     "clean": "warbler clean"
   },
   "dependencies": {
-    "@warblerjs/crypto": "workspace:*",
+    "@warblerjs/config": "workspace:*",
     "@warblerjs/core": "workspace:*",
+    "@warblerjs/crypto": "workspace:*",
     "@warblerjs/database": "workspace:*",
     "@warblerjs/email": "workspace:*",
     "@warblerjs/events": "workspace:*",
     "@warblerjs/framework": "workspace:*",
+    "@warblerjs/frontend": "workspace:*",
     "@warblerjs/http": "workspace:*",
     "@warblerjs/runtime": "workspace:*",
     "@warblerjs/validators": "workspace:*",
     "@warblerjs/view": "workspace:*",
-    "@warblerjs/config": "workspace:*",
-    "@warblerjs/websocket": "workspace:*",
-    "@warblerjs/frontend": "workspace:*"
+    "@warblerjs/websocket": "workspace:*"
   },
   "devDependencies": {
+    "@types/bun": "latest",
     "@warblerjs/cli": "workspace:*",
     "@warblerjs/compiler": "workspace:*",
     "@warblerjs/transport": "workspace:*",
-    "@types/bun": "latest",
     "typescript": "^5.9.2"
   },
   "engines": {

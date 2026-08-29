@@ -7,7 +7,23 @@ interface ParsedSemver {
   readonly prerelease?: string;
 }
 
-const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/u;
+const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9A-Za-z-][0-9A-Za-z-]*))*))?$/u;
+
+export function assertSemver(version: string): void {
+  parseSemver(version);
+}
+
+export function compareSemver(left: string, right: string): number {
+  const a = parseSemver(left);
+  const b = parseSemver(right);
+  if (a.major !== b.major) return a.major - b.major;
+  if (a.minor !== b.minor) return a.minor - b.minor;
+  if (a.patch !== b.patch) return a.patch - b.patch;
+  if (a.prerelease === b.prerelease) return 0;
+  if (a.prerelease === undefined) return 1;
+  if (b.prerelease === undefined) return -1;
+  return comparePrerelease(a.prerelease, b.prerelease);
+}
 
 export function npmTag(version: string): string {
   const parsed = parseSemver(version);
@@ -63,4 +79,24 @@ function parseSemver(version: string): ParsedSemver {
     patch: Number(match[3]),
     ...(match[4] === undefined ? {} : { prerelease: match[4] }),
   });
+}
+
+function comparePrerelease(left: string, right: string): number {
+  const a = left.split(".");
+  const b = right.split(".");
+  const length = Math.max(a.length, b.length);
+  for (let index = 0; index < length; index++) {
+    const leftPart = a[index];
+    const rightPart = b[index];
+    if (leftPart === undefined) return -1;
+    if (rightPart === undefined) return 1;
+    if (leftPart === rightPart) continue;
+    const leftNumber = /^\d+$/u.test(leftPart);
+    const rightNumber = /^\d+$/u.test(rightPart);
+    if (leftNumber && rightNumber) return Number(leftPart) - Number(rightPart);
+    if (leftNumber) return -1;
+    if (rightNumber) return 1;
+    return leftPart < rightPart ? -1 : 1;
+  }
+  return 0;
 }

@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: warbler_development
+          POSTGRES_USER: warbler
+          POSTGRES_PASSWORD: ci_pg_password_2026
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U warbler -d warbler_development"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://warbler:ci_pg_password_2026@127.0.0.1:5432/warbler_development
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_DATABASE: warbler_development
+      DB_USERNAME: warbler
+      DB_PASSWORD: ci_pg_password_2026
+      DB_SSL: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Lockstep Version Check
+        run: bun run check:versions
+
+      - name: Starter Version Check
+        run: bun run check:cli-starter-versions
+
+      - name: Starter Config Check
+        run: bun run check:cli-starter-configs
+
+      - name: Run Playground PostgreSQL Migrations
+        run: bun run packages/cli/src/bin.ts db:pg migration --project playground --no-color
+
+      - name: Generate Playground PostgreSQL Client
+        run: bun run packages/cli/src/bin.ts db:pg generate --project playground --no-color
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun test
