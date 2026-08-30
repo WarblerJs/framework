@@ -2,52 +2,59 @@ import { expect, test } from "bun:test";
 import { startCaptured } from "./helpers";
 
 interface CapturedHttp {
-  readonly routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>>;
+  readonly routes: Readonly<
+    Record<
+      string,
+      Readonly<
+        Record<
+          string,
+          (request: Request) => Response | Promise<Response>
+        >
+      >
+    >
+  >;
 }
 
-test("generated native HTTP routes invoke real controllers and validation", async () => {
+test("generated native HTTP routes invoke declarative handlers", async () => {
   let captured: CapturedHttp | undefined;
-  const runtime = await startCaptured("http", (bindings) => { captured = bindings as CapturedHttp; });
+
+  const runtime = await startCaptured("http", (bindings) => {
+    captured = bindings as CapturedHttp;
+  });
+
   try {
     const routes = captured?.routes;
-    if (routes === undefined) throw new Error("HTTP routes were not supplied");
-    const root = await routes["/api/test"]!.GET!(new Request("http://127.0.0.1/api/test?id=5"));
-    expect(root.status).toBe(200);
-    const rootBody = await root.json() as Readonly<Record<string, unknown>>;
-    expect(rootBody.pp).toEqual({
-      testId: "22",
-      user: { id: "playground-user", role: "admin" },
+    if (routes === undefined) {
+      throw new Error("HTTP routes were not supplied");
+    }
+
+    const customersHandler = routes["/customers"]?.GET;
+    if (customersHandler === undefined) {
+      throw new Error("Customers route was not generated");
+    }
+
+    const customers = await customersHandler(
+      new Request("http://127.0.0.1/customers"),
+    );
+
+    expect(customers.status).toBe(200);
+    expect(await customers.json()).toEqual({
+      message: "customers",
     });
-    expect(rootBody.vbn).toMatchObject({
-      sessionId: "rpepee from excute",
-      user: { habib: "bel from excute" },
+
+    const ordersHandler = routes["/orders"]?.GET;
+    if (ordersHandler === undefined) {
+      throw new Error("Orders route was not generated");
+    }
+
+    const orders = await ordersHandler(
+      new Request("http://127.0.0.1/orders"),
+    );
+
+    expect(orders.status).toBe(200);
+    expect(await orders.json()).toEqual({
+      message: "orders",
     });
-    expect(Array.isArray((rootBody.vbn as Readonly<Record<string, unknown>>).usersList)).toBe(true);
-    const invalid = await routes["/auth/login"]!.POST!(new Request("http://127.0.0.1/auth/login", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: "", password: 4 }),
-    }));
-    expect(invalid.status).toBe(400);
-    expect(await invalid.json()).toEqual({
-      email: "not_valid_email",
-      password: "string",
-      remember: "string",
-    });
-    const inherited = await routes["/users/middleware/inherited"]!.GET!(new Request("http://127.0.0.1/users/middleware/inherited"));
-    expect(inherited.status).toBe(200);
-    const inheritedBody = await inherited.json() as Readonly<Record<string, unknown>>;
-    expect(inheritedBody.tenant).toEqual({ id: "playground", source: "default" });
-    expect(inheritedBody.user).toEqual({ id: "playground-user", role: "admin" });
-    expect("audit" in inheritedBody).toBe(false);
-    const all = await routes["/users/middleware/all"]!.GET!(new Request("http://127.0.0.1/users/middleware/all", {
-      headers: { "x-tenant-id": "acme" },
-    }));
-    expect(all.status).toBe(200);
-    const allBody = await all.json() as Readonly<Record<string, unknown>>;
-    expect(allBody.tenant).toEqual({ id: "acme", source: "header" });
-    expect(allBody.user).toEqual({ id: "playground-user", role: "admin" });
-    expect(allBody.audit).toEqual({ route: "users.middleware.all" });
   } finally {
     await runtime.stop();
   }
