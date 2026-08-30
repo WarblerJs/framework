@@ -1,6 +1,6 @@
 {
   "name": "@warblerjs/http",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "type": "module",
   "private": false,
   "files": [
@@ -23,16 +23,19 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@warblerjs/console": "workspace:*",
     "@warblerjs/config": "workspace:*",
+    "@warblerjs/console": "workspace:*",
     "@warblerjs/core": "workspace:*",
     "@warblerjs/i18n": "workspace:*",
-    "@warblerjs/validators": "workspace:*",
     "@warblerjs/transport": "workspace:*",
+    "@warblerjs/validators": "workspace:*",
     "@warblerjs/view": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.9.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

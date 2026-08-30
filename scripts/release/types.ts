@@ -2,8 +2,32 @@ export const WARBLER_SCOPE = "@warblerjs/" as const;
 export const NPM_REGISTRY = "https://registry.npmjs.org/" as const;
 export const staleWarblerScopes = Object.freeze(["@warbler/", "@wawarblerjsbler/", "@warblerjsjs/"] as const);
 
-export type DependencyField = "dependencies" | "optionalDependencies" | "peerDependencies";
-export const dependencyFields = Object.freeze(["dependencies", "optionalDependencies", "peerDependencies"] as const);
+export type DependencyField = "dependencies" | "optionalDependencies" | "peerDependencies" | "devDependencies";
+export const dependencyFields = Object.freeze(["dependencies", "optionalDependencies", "peerDependencies", "devDependencies"] as const);
+export type ReleaseOrderDependencyField = "dependencies" | "optionalDependencies" | "peerDependencies";
+export const releaseOrderDependencyFields = Object.freeze(["dependencies", "optionalDependencies", "peerDependencies"] as const);
+export type ReleaseProgressPhase =
+  | "Testing workspace"
+  | "Typechecking packages"
+  | "Packing packages"
+  | "Validating packed manifests"
+  | "Smoke-testing packed imports";
+
+export interface ReleaseCommandOptions {
+  readonly cwd: string;
+}
+
+export interface ReleaseCommandResult {
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+
+export type ReleaseCommandRunner = (
+  command: string,
+  args: readonly string[],
+  options: ReleaseCommandOptions,
+) => Promise<ReleaseCommandResult>;
 
 export interface PackageManifest {
   readonly name?: string;
@@ -28,15 +52,13 @@ export interface WorkspacePackage {
   readonly manifestPath: string;
   readonly manifest: PackageManifest;
   readonly currentVersion: string;
+  readonly private: boolean;
 }
 
 export type PublishStatus = "publish" | "skip";
 
 export type ReleaseReason =
-  | "not-published"
-  | "metadata-repair"
-  | "explicit-patch"
-  | "dependency-propagation";
+  | "lockstep-release";
 
 export type SkipReason = "already-published";
 
@@ -46,9 +68,7 @@ export interface ExplicitReleaseRequest {
 }
 
 export interface ReleasePlannerOptions {
-  readonly packageName?: string;
-  readonly fromPackage?: string;
-  readonly explicitReleases?: readonly ExplicitReleaseRequest[];
+  readonly targetVersion: string;
 }
 
 export interface ReleasePackage {
@@ -68,6 +88,7 @@ export interface ReleasePlan {
 }
 
 export interface ReleaseResult {
+  readonly planned: readonly string[];
   readonly published: readonly string[];
   readonly skipped: readonly string[];
   readonly failed?: string;
@@ -98,14 +119,15 @@ export interface NpmClient {
 export interface ReleaseOptions {
   readonly root: string;
   readonly dryRun?: boolean;
-  readonly packageName?: string;
-  readonly fromPackage?: string;
-  readonly explicitReleases?: readonly ExplicitReleaseRequest[];
   readonly noTests?: boolean;
   readonly json?: boolean;
   readonly registry?: string;
   readonly allowDirty?: boolean;
+  readonly targetVersion: string;
   readonly npm?: NpmClient;
+  readonly runCommand?: ReleaseCommandRunner;
+  readonly progress?: (phase: ReleaseProgressPhase) => void | Promise<void>;
+  readonly onPlan?: (plan: ReleasePlan) => void | Promise<void>;
 }
 
 export interface PackedPackage {

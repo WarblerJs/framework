@@ -1,6 +1,6 @@
 {
   "name": "@warblerjs/cli",
-  "version": "0.2.1",
+  "version": "0.5.0",
   "private": false,
   "type": "module",
   "bin": {
@@ -18,17 +18,20 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@warblerjs/console": "0.1.0",
-    "@warblerjs/compiler": "0.1.3",
-    "@warblerjs/config": "0.1.0",
-    "@warblerjs/core": "0.1.0",
-    "@warblerjs/database": "0.1.0",
-    "@warblerjs/framework": "0.1.3",
-    "@warblerjs/runtime": "0.1.3",
-    "@warblerjs/view": "0.1.0-rc.0"
+    "@warblerjs/compiler": "workspace:*",
+    "@warblerjs/config": "workspace:*",
+    "@warblerjs/console": "workspace:*",
+    "@warblerjs/core": "workspace:*",
+    "@warblerjs/database": "workspace:*",
+    "@warblerjs/framework": "workspace:*",
+    "@warblerjs/runtime": "workspace:*",
+    "@warblerjs/view": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "typescript": "^5.9.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

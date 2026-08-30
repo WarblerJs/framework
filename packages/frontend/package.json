@@ -1,9 +1,9 @@
 {
   "name": "@warblerjs/frontend",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "description": "Lightweight browser utilities for Warbler applications, built on native Web APIs.",
   "type": "module",
-  "private" : false,
+  "private": false,
   "files": [
     "src",
     "README.md"
@@ -27,5 +27,8 @@
   "devDependencies": {
     "typescript": "^5.9.0"
   },
-  "peerDependencies": {}
+  "peerDependencies": {},
+  "publishConfig": {
+    "access": "public"
+  }
 }

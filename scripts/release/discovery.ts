@@ -3,32 +3,35 @@ import { join, resolve } from "node:path";
 import { packageJsonPath, readManifest } from "./manifest";
 import { ReleaseError, staleWarblerScopes, WARBLER_SCOPE, type StaleReference, type WorkspacePackage } from "./types";
 
-export async function discoverPublishablePackages(root: string): Promise<readonly WorkspacePackage[]> {
-  const packagesRoot = join(root, "packages");
-  const entries = await readdir(packagesRoot, { withFileTypes: true });
+export async function discoverWorkspacePackages(root: string): Promise<readonly WorkspacePackage[]> {
+  const rootManifest = await readManifest(packageJsonPath(root));
+  const workspaces = rootManifest.workspaces;
+  if (!Array.isArray(workspaces)) throw new ReleaseError("Root package manifest requires a workspaces array.");
   const packages: WorkspacePackage[] = [];
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const directory = join(packagesRoot, entry.name);
-    const manifestPath = packageJsonPath(directory);
-    if (!await exists(manifestPath)) continue;
-    const manifest = await readManifest(manifestPath);
+  for (const workspace of workspaces) {
+    if (typeof workspace !== "string" || workspace.length === 0) throw new ReleaseError("Root workspaces must be non-empty strings.");
+    await collectWorkspacePackages(root, workspace, packages);
+  }
+  packages.sort((left, right) => left.name.localeCompare(right.name));
+  return Object.freeze(packages);
+}
+
+export async function discoverPublishablePackages(root: string): Promise<readonly WorkspacePackage[]> {
+  const workspaces = await discoverWorkspacePackages(root);
+  const packages: WorkspacePackage[] = [];
+  for (const item of workspaces) {
+    const manifest = item.manifest;
     if (manifest.private === true) continue;
     if (typeof manifest.name !== "string" || typeof manifest.version !== "string") {
-      throw new ReleaseError(`Publishable package requires name and version: ${manifestPath}`);
+      throw new ReleaseError(`Publishable package requires name and version: ${item.manifestPath}`);
     }
     if (!manifest.name.startsWith(WARBLER_SCOPE)) {
       throw new ReleaseError(`Publishable package uses unsupported scope: ${manifest.name}`);
     }
-    packages.push(Object.freeze({
-      name: manifest.name,
-      directory,
-      manifestPath,
-      manifest,
-      currentVersion: manifest.version,
-    }));
+    if (manifest.publishConfig?.access !== "public") throw new ReleaseError(`Publishable package requires publishConfig.access public: ${manifest.name}`);
+    packages.push(item);
   }
-  return Object.freeze(packages.sort((left, right) => left.name.localeCompare(right.name)));
+  return Object.freeze(packages);
 }
 
 export async function scanStaleWarblerReferences(root: string): Promise<readonly StaleReference[]> {
@@ -67,6 +70,40 @@ async function collectFiles(path: string, output: string[]): Promise<void> {
     if (entry.name === "node_modules" || entry.name === ".warbler" || entry.name === "dist" || entry.name === "generated" || entry.name.startsWith(".cli-test-")) continue;
     await collectFiles(join(path, entry.name), output);
   }
+}
+
+async function collectWorkspacePackages(root: string, workspace: string, output: WorkspacePackage[]): Promise<void> {
+  if (workspace.includes("..") || workspace.startsWith("/") || workspace.includes("\\")) {
+    throw new ReleaseError(`Unsupported workspace path outside repository boundary: ${workspace}`);
+  }
+  if (workspace.endsWith("/*")) {
+    const base = resolve(root, workspace.slice(0, -2));
+    if (!base.startsWith(resolve(root))) throw new ReleaseError(`Workspace path escapes repository: ${workspace}`);
+    const entries = await readdir(base, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      await appendWorkspacePackage(join(base, entry.name), output);
+    }
+    return;
+  }
+  await appendWorkspacePackage(resolve(root, workspace), output);
+}
+
+async function appendWorkspacePackage(directory: string, output: WorkspacePackage[]): Promise<void> {
+  const manifestPath = packageJsonPath(directory);
+  if (!await exists(manifestPath)) return;
+  const manifest = await readManifest(manifestPath);
+  if (typeof manifest.name !== "string" || typeof manifest.version !== "string") {
+    throw new ReleaseError(`Workspace package requires name and version: ${manifestPath}`);
+  }
+  output.push(Object.freeze({
+    name: manifest.name,
+    directory,
+    manifestPath,
+    manifest,
+    currentVersion: manifest.version,
+    private: manifest.private === true,
+  }));
 }
 
 function isTextPath(path: string): boolean {

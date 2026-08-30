@@ -2,7 +2,7 @@ import { cp, mkdtemp, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { assertPublishableManifest, releaseManifest, writeManifest } from "./manifest";
-import { ReleaseError, type PackedPackage, type PackageManifest, type ReleasePackage, type WorkspacePackage } from "./types";
+import { ReleaseError, type PackedPackage, type PackageManifest, type ReleaseCommandResult, type ReleaseCommandRunner, type ReleasePackage, type WorkspacePackage } from "./types";
 
 export async function packReleasePackage(
   workspacePackage: WorkspacePackage,
@@ -24,16 +24,11 @@ export async function packReleasePackage(
   });
 }
 
-export async function runPackageTypecheck(item: WorkspacePackage): Promise<void> {
+export async function runPackageTypecheck(item: WorkspacePackage, runCommand = runReleaseCommand): Promise<void> {
   const script = item.manifest.scripts?.typecheck;
   if (script === undefined) return;
-  const proc = Bun.spawn(["bun", "run", "typecheck"], {
-    cwd: item.directory,
-    stdout: "inherit",
-    stderr: "inherit",
-  });
-  const code = await proc.exited;
-  if (code !== 0) throw new ReleaseError(`Typecheck failed for ${item.name}`);
+  const result = await runCommand("bun", ["run", "typecheck"], { cwd: item.directory });
+  if (result.exitCode !== 0) throw new ReleaseError(`Typecheck failed for ${item.name}: ${result.stderr.trim() || result.stdout.trim()}`);
 }
 
 async function stagePackage(source: string, stage: string, files: readonly string[] | undefined): Promise<void> {
@@ -81,4 +76,18 @@ async function packedPackageJson(tarball: string): Promise<PackageManifest> {
   const value: unknown = JSON.parse(stdout);
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new ReleaseError("Packed manifest is not an object.");
   return value as PackageManifest;
+}
+
+async function runReleaseCommand(command: string, args: readonly string[], options: { readonly cwd: string }): Promise<ReleaseCommandResult> {
+  const proc = Bun.spawn([command, ...args], {
+    cwd: options.cwd,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  return Object.freeze({ exitCode, stdout, stderr });
 }

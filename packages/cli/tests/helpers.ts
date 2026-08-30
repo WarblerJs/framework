@@ -44,6 +44,7 @@ export async function createTestProject(): Promise<{ readonly root: string; clea
         "@warblerjs/crypto": ["node_modules/@warblerjs/crypto/src/index.ts"],
         "@warblerjs/database": ["node_modules/@warblerjs/database/src/index.ts"],
         "@warblerjs/email": ["node_modules/@warblerjs/email/src/index.ts"],
+        "@warblerjs/events": ["node_modules/@warblerjs/events/src/index.ts"],
         "@warblerjs/framework": ["node_modules/@warblerjs/framework/src/index.ts"],
         "@warblerjs/frontend": ["node_modules/@warblerjs/frontend/src/index.ts"],
         "@warblerjs/frontend/*": ["node_modules/@warblerjs/frontend/src/*"],

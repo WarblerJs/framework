@@ -1,11 +1,18 @@
 {
   "name": "@warblerjs/compiler",
-  "version": "0.1.2",
+  "version": "0.5.0",
   "type": "module",
   "private": false,
-  "files": ["src"],
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "test": "bun test", "typecheck": "tsc --noEmit" },
+  "files": [
+    "src"
+  ],
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
   "dependencies": {
     "@warblerjs/console": "workspace:*",
     "@warblerjs/core": "workspace:*",
@@ -13,5 +20,10 @@
     "@warblerjs/validators": "workspace:*",
     "typescript": "^5.9.2"
   },
-  "devDependencies": { "@types/bun": "latest"  }
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

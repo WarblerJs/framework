@@ -1,6 +1,6 @@
 {
   "name": "warbler",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "workspaces": [
     "packages/*",
@@ -15,6 +15,9 @@
     "build": "cd playground && bun run build",
     "release": "bun run scripts/release.ts",
     "release:cli": "bun run scripts/release-cli.ts",
+    "sync:versions": "bun run scripts/sync-version.ts",
+    "check:versions": "bun run scripts/sync-version.ts --check",
+    "smoke:packages": "bun run scripts/smoke-packed-packages.ts",
     "generate:cli-starter-configs": "bun run packages/cli/scripts/generate-starter-configs.ts",
     "check:cli-starter-configs": "bun run packages/cli/scripts/generate-starter-configs.ts --check",
     "generate:cli-starter-versions": "bun run packages/cli/scripts/generate-starter-package-versions.ts",

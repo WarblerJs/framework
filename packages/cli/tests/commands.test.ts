@@ -143,7 +143,7 @@ describe("development", () => {
     })).toBe(true);
     expect(capture.lines.some((line) => line.includes('"stage":"compiler"'))).toBe(true);
     const banner = capture.lines.map((line) => JSON.parse(line) as Readonly<Record<string, unknown>>).find((line) => line.type === "banner");
-    expect(banner).toMatchObject({ frameworkVersion: "0.1.0", cliVersion: CLI_VERSION });
+    expect(banner).toMatchObject({ frameworkVersion: await resolveProjectFrameworkVersion(project.root), cliVersion: CLI_VERSION });
     expect(banner).not.toHaveProperty("version");
     await session?.stop();
   });
@@ -625,7 +625,10 @@ describe("database", () => {
     const project = await createTestProject(); cleanup.push(project.cleanup);
     await writeDatabaseConfig(project.root);
     const capture = captureOutput();
-    const code = await runCLI(["db:pg", "migrate:fresh", "--seed", "--project", project.root], { output: capture.output });
+    const code = await runCLI(["db:pg", "migrate:fresh", "--seed", "--project", project.root], {   
+      output: capture.output,
+      confirm: () => false, 
+    });
     expect(code).toBe(0);
     expect(capture.lines.join("\n")).toContain("PostgreSQL migrate:fresh cancelled.");
   });

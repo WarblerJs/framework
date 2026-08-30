@@ -4,6 +4,12 @@ All notable repository-level release changes are recorded here.
 
 This project follows Semantic Versioning as defined in [docs/VERSIONING.md](./docs/VERSIONING.md).
 
+## 0.5.0
+
+### Changed
+
+- Warbler begins lockstep versioning: the root release version, Git tag, GitHub release, and every publishable `@warblerjs/*` package now share one release-train version.
+
 ## 1.0.0
 
 Status: Draft, blocked
