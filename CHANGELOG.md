@@ -4,6 +4,13 @@ All notable repository-level release changes are recorded here.
 
 This project follows Semantic Versioning as defined in [docs/VERSIONING.md](./docs/VERSIONING.md).
 
+## 0.5.1
+
+### Fixed
+
+- The globally installed Warbler CLI now delegates project commands to the project-local CLI, preventing duplicated runtime package registries and ensuring compiled views use the application's local dependency graph.
+- Explicit `--project` paths are normalized and delegated commands run from the resolved project root.
+
 ## 0.5.0
 
 ### Changed
