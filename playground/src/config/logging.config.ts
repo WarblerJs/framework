@@ -19,7 +19,7 @@ export const loggingConfig = {
    * path avoids request-log formatting, request-log objects, logging-only timing,
    * and stdout writes for successful requests.
    */
-  requests: envBoolean("LOG_REQUESTS", envString("APP_ENV", "development") !== "production"),
+  requests: envString("APP_ENV", "development") === "production" ? false : envBoolean("LOG_REQUESTS", false),
 
   /*
    * Runtime lifecycle informational logs.
@@ -27,7 +27,7 @@ export const loggingConfig = {
    * Covers framework-owned runtime stop/status messages. Disable in production
    * to keep process output quiet outside exceptional conditions.
    */
-  runtime: envBoolean("LOG_RUNTIME", envString("APP_ENV", "development") !== "production"),
+  runtime: envString("APP_ENV", "development") === "production" ? false : envBoolean("LOG_RUNTIME", false),
 
   /*
    * Transport informational logs.
@@ -35,7 +35,7 @@ export const loggingConfig = {
    * Used by framework-owned transport startup/stop notices. This does not disable
    * transports or change routing, validation, security, or application behavior.
    */
-  transports: envBoolean("LOG_TRANSPORTS", envString("APP_ENV", "development") !== "production"),
+  transports: envString("APP_ENV", "development") === "production" ? false : envBoolean("LOG_TRANSPORTS", false ),
 
   /*
    * WebSocket infrastructure logs.
@@ -52,7 +52,7 @@ export const loggingConfig = {
    * Enabled by default in every environment. Error logs never include request
    * bodies, credentials, passwords, tokens, or secrets.
    */
-  errors: envBoolean("LOG_ERRORS", true),
+  errors: envString("APP_ENV", "development") === "production" ? false : envBoolean("LOG_ERRORS", true),
 
   /*
    * Fatal process logging.
@@ -60,7 +60,7 @@ export const loggingConfig = {
    * Enabled by default in every environment. This is only for process-level
    * uncaught exceptions/unhandled rejections that escape normal boundaries.
    */
-  fatal: envBoolean("LOG_FATAL", true),
+  fatal: envString("APP_ENV", "development") === "production" ? false : envBoolean("LOG_FATAL", true),
 
   /*
    * Startup output and debug logs.
@@ -68,12 +68,12 @@ export const loggingConfig = {
    * Kept separate from request logging because startup is outside the request hot
    * path. Production defaults keep it quiet unless explicitly enabled.
    */
-  startup: envBoolean("LOG_STARTUP", envString("APP_ENV", "development") !== "production"),
-  debug: envBoolean("LOG_DEBUG", envString("APP_ENV", "development") !== "production"),
+  startup: envString("APP_ENV", "development") === "production" ? false : envBoolean("LOG_STARTUP", false),
+  debug: envString("APP_ENV", "development") === "production" ? false : envBoolean("LOG_DEBUG", false),
 
   channels: {
     console: {
-      enabled: envBoolean("LOG_CONSOLE", true),
+      enabled: envString("APP_ENV", "development") === "production" ? false : envBoolean("LOG_CONSOLE", true),
     },
     file: {
       enabled: envBoolean("LOG_FILE", true),
