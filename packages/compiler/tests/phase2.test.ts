@@ -234,7 +234,7 @@ describe("executable bindings", () => {
     const root = await phase2Project();
     await Bun.write(join(root, "src", "application.ts"), `
       import { createApp } from "@warblerjs/core";
-      import { defineHttpGraph, defineHttpRoute, JsonRes } from "@warblerjs/http";
+      import { defineHttpGraph, defineHttpRoute, TextRes } from "@warblerjs/http";
       import { defineValidator, v } from "@warblerjs/validators";
 
       export const ValidateUser = defineValidator({
@@ -245,9 +245,10 @@ describe("executable bindings", () => {
       export const http = defineHttpGraph({
         routes: {
           "GET /users/:id": defineHttpRoute({
+            response: "text",
             validator: ValidateUser,
             run(ctx) {
-              return JsonRes({ id: ctx.params.id, page: ctx.query.page });
+              return TextRes(ctx.params.id' + : +'ctx.query.page);
             },
           }),
         },
@@ -261,12 +262,17 @@ describe("executable bindings", () => {
     const directory = join(root, ".warbler", "generated");
     const handlers = await Bun.file(join(directory, "handlers.generated.ts")).text();
     const validators = await Bun.file(join(directory, "validators.generated.ts")).text();
+    const http = await Bun.file(
+      join(directory, "http.generated.ts"),
+    ).text();
+
     expect(handlers).toContain("const Handler0 =");
     expect(handlers).toContain("defineHttpRoute");
     expect(handlers).toContain("ValidateUser");
     expect(handlers).toContain("Handler0.run(...input)");
     expect(validators).toContain("compileValidator");
     expect(validators).toContain("ValidateUser");
+    expect(http).toContain('"flags":131201');
   }, 15_000);
 
   test("emits exported values, direct handlers, scopes, and one Runtime manifest", async () => {

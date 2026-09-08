@@ -269,6 +269,10 @@ function declarativeHttpRoutes(
     }
     const inherited = handlerOptionsFor(handlerOptions, handler);
     const validator = inlineOptions === undefined ? inherited.validator : objectReference(inlineOptions, "validator");
+    const routeOptions = inlineOptions ?? options;
+    const response = routeOptions === undefined
+      ? undefined
+      : objectEnum(routeOptions, "response", ["static", "view", "json", "html", "text"]);
     routes.push(Object.freeze({
       ...location(property, source),
       method: parsed.method,
@@ -276,6 +280,7 @@ function declarativeHttpRoutes(
       handler,
       ...(inlineOptions === undefined ? {} : { handlerExpression: captureExpression(helperCall ?? inlineOptions, aliases, source) }),
       ...(validator === undefined ? {} : { validator }),
+      ...(response === undefined ? {} : { response }),
       ...(inlineOptions !== undefined
         ? objectStringOrUndefined(inlineOptions, "name") === undefined ? {} : { name: objectStringOrUndefined(inlineOptions, "name")! }
         : options === undefined ? {} : objectStringOrUndefined(options, "name") === undefined ? {} : { name: objectStringOrUndefined(options, "name")! }),

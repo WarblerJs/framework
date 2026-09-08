@@ -13,6 +13,7 @@ import {
     routes: {
       "GET /plain": {
         name: "benchmark.plain",
+        response: "text",
         handler: handlers.plain,
       },
   

@@ -7,6 +7,12 @@ import type { AnyRequestValidator, AppRequest } from "./request";
 
 export type HttpMethod = HttpMethodValue;
 export type HttpRouteKey = `${HttpMethod} /${string}`;
+export type HttpRouteResponseKind =
+  | "static"
+  | "view"
+  | "json"
+  | "html"
+  | "text";
 type EmptyRequestSection = Readonly<Record<never, never>>;
 type RoutePath<TKey extends string> = TKey extends `${HttpMethodValue} ${infer TPath}` ? TPath : never;
 type PathParamName<TSegment extends string> = TSegment extends `:${infer TName}` ? TName extends "" ? never : TName : never;
@@ -82,6 +88,7 @@ export type HttpGraphRoute<THandler = unknown, TRouteKey extends HttpRouteKey = 
   | Readonly<{
     readonly handler: THandler;
     readonly name?: string;
+    readonly response?: HttpRouteResponseKind;
     readonly middlewares?: readonly unknown[];
   }>;
 
@@ -95,6 +102,7 @@ export type HttpInlineGraphRoute<
   readonly validator?: TValidator;
   readonly guards?: readonly unknown[];
   readonly middlewares?: readonly unknown[];
+  readonly response?: HttpRouteResponseKind;
   readonly useCase?: TUseCase;
   readonly run: InlineRouteRun<TRouteKey, TValidator, TUseCase, TResult>;
 }>;
@@ -109,6 +117,7 @@ export type DefinedHttpInlineGraphRoute<
   readonly guards?: readonly unknown[];
   readonly middlewares?: readonly unknown[];
   readonly useCase?: TUseCase;
+  readonly response?: HttpRouteResponseKind;
   readonly run: ValidatorOnlyRun<TValidator, TUseCase, TResult>;
   readonly __warblerRouteValidator?: () => TValidator;
 }>;

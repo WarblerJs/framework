@@ -84,6 +84,7 @@ export type {
   RedirectStatus,
   RouteParameter,
   WarblerRequestContext,
+  HttpRouteResponseKind,
 } from "@warblerjs/http";
 
 export {

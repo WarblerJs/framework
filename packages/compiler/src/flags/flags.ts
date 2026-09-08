@@ -17,6 +17,7 @@ export const RouteFlag = Object.freeze({
   JSON: 1 << 14,
   HTML: 1 << 15,
   VIEW_CONTEXT: 1 << 16,
+  TEXT: 1 << 17,
 } as const);
 
 /** Compact WebSocket event policy flags. */
