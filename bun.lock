@@ -10,7 +10,7 @@
     },
     "packages/cli": {
       "name": "@warblerjs/cli",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "bin": {
         "warbler": "./src/bin.ts",
       },
@@ -31,7 +31,7 @@
     },
     "packages/compiler": {
       "name": "@warblerjs/compiler",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@warblerjs/console": "workspace:*",
         "@warblerjs/core": "workspace:*",
@@ -45,7 +45,7 @@
     },
     "packages/config": {
       "name": "@warblerjs/config",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "devDependencies": {
         "@types/bun": "latest",
         "typescript": "^5.9.2",
@@ -53,7 +53,7 @@
     },
     "packages/console": {
       "name": "@warblerjs/console",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "devDependencies": {
         "@types/bun": "latest",
         "typescript": "^5.9.2",
@@ -61,7 +61,7 @@
     },
     "packages/core": {
       "name": "@warblerjs/core",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "devDependencies": {
         "@types/bun": "latest",
         "typescript": "^5.9.2",
@@ -69,7 +69,7 @@
     },
     "packages/crypto": {
       "name": "@warblerjs/crypto",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@warblerjs/config": "workspace:*",
       },
@@ -80,7 +80,7 @@
     },
     "packages/database": {
       "name": "@warblerjs/database",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "devDependencies": {
         "@types/bun": "latest",
         "typescript": "^5.9.2",
@@ -88,7 +88,7 @@
     },
     "packages/email": {
       "name": "@warblerjs/email",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@warblerjs/config": "workspace:*",
         "@warblerjs/crypto": "workspace:*",
@@ -101,7 +101,7 @@
     },
     "packages/events": {
       "name": "@warblerjs/events",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@warblerjs/console": "workspace:*",
         "@warblerjs/core": "workspace:*",
@@ -113,7 +113,7 @@
     },
     "packages/framework": {
       "name": "@warblerjs/framework",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@warblerjs/core": "workspace:*",
         "@warblerjs/http": "workspace:*",
@@ -127,14 +127,14 @@
     },
     "packages/frontend": {
       "name": "@warblerjs/frontend",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "devDependencies": {
         "typescript": "^5.9.0",
       },
     },
     "packages/http": {
       "name": "@warblerjs/http",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@warblerjs/config": "workspace:*",
         "@warblerjs/console": "workspace:*",
@@ -151,7 +151,7 @@
     },
     "packages/i18n": {
       "name": "@warblerjs/i18n",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@warblerjs/console": "workspace:*",
       },
@@ -162,7 +162,7 @@
     },
     "packages/runtime": {
       "name": "@warblerjs/runtime",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@warblerjs/config": "workspace:*",
         "@warblerjs/console": "workspace:*",
@@ -177,7 +177,7 @@
     },
     "packages/transport": {
       "name": "@warblerjs/transport",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "devDependencies": {
         "@types/bun": "latest",
         "typescript": "^5.9.2",
@@ -185,7 +185,7 @@
     },
     "packages/validators": {
       "name": "@warblerjs/validators",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@warblerjs/core": "workspace:*",
         "@warblerjs/i18n": "workspace:*",
@@ -197,7 +197,7 @@
     },
     "packages/view": {
       "name": "@warblerjs/view",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@tailwindcss/cli": "^4.0.0",
         "@tailwindcss/forms": "^0.5.11",
@@ -210,7 +210,7 @@
     },
     "packages/websocket": {
       "name": "@warblerjs/websocket",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@warblerjs/config": "workspace:*",
         "@warblerjs/console": "workspace:*",

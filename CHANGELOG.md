@@ -4,6 +4,17 @@ All notable repository-level release changes are recorded here.
 
 This project follows Semantic Versioning as defined in [docs/VERSIONING.md](./docs/VERSIONING.md).
 
+## 0.6.0
+
+### Added
+
+- Added compile-time HTTP response-kind metadata, including the portable `response: "text"` route option.
+
+### Changed
+
+- Specialized security-header profiles by response kind to reduce request hot-path overhead for API and text responses.
+
+
 ## 0.5.1
 
 ### Fixed
