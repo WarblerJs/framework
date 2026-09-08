@@ -24,7 +24,7 @@ export interface RouteWIR extends SourceLocationWIR {
   readonly csrf: boolean;
   readonly viewContext: boolean;
   readonly stream?: "sse" | "html";
-  readonly response?: "static" | "view" | "json" | "html";
+  readonly response?: "static" | "view" | "json" | "html" | "text";
 }
 /** Socket subscription or lifecycle metadata. */
 export interface SocketEventWIR extends SourceLocationWIR {

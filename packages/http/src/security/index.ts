@@ -6,6 +6,7 @@ export {
   applySecurityHeaders,
   createSecurityHeaderApplicator,
   createSecurityHeaderTemplate,
+  createApiSecurityHeaderTemplate,
   type SecurityHeaderApplicator,
   type SecurityHeaderPolicy,
 } from "./security-headers";

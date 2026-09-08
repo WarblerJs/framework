@@ -9,6 +9,7 @@ export {
   type HttpGraphRoute,
   type HttpMethod as HttpMethodType,
   type HttpRouteKey,
+  type HttpRouteResponseKind,
   type HttpRouteTable,
 } from "./graph";
 export { Delete, Get, Head, Options, Patch, Post, Put, Sse } from "./route";

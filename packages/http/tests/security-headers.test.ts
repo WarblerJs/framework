@@ -6,6 +6,7 @@ import {
   getForwardedClientIp,
   guardRequestSmuggling,
   validateRequestHost,
+  createApiSecurityHeaderTemplate,
 } from "../src/security";
 import { FileRes, HtmlRes, HtmlStreamRes, JsonRes, RedirectRes, SseRes } from "../src/response";
 
@@ -41,6 +42,25 @@ function expectSecurityHeaders(response: Response): void {
 }
 
 describe("HTTP security", () => {
+
+  test("creates a reduced security profile for API responses", () => {
+    const template = createApiSecurityHeaderTemplate(POLICY);
+    const response = applySecurityHeaders(
+      new Response("ok"),
+      template,
+    );
+
+    expect(Object.isFrozen(template)).toBe(true);
+    expect(response.headers.get("strict-transport-security"))
+      .toBe(POLICY.strictTransportSecurity);
+    expect(response.headers.get("x-content-type-options"))
+      .toBe(POLICY.contentTypeOptions);
+    expect(response.headers.has("content-security-policy"))
+      .toBe(false);
+    expect(response.headers.has("x-frame-options"))
+      .toBe(false);
+  });
+
   test("precomputes and applies security headers", () => {
     const template = createSecurityHeaderTemplate(POLICY);
     const original = new Response("ok");

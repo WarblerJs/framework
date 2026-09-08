@@ -3,7 +3,7 @@ import { createBunRouteHandler, type BunRouteTable, type HttpHotPathRecorder } f
 import { normalizeHttpConfig } from "../config";
 import { RouteFlag } from "../compiled";
 import { CsrfVerifier } from "../csrf";
-import { createSecurityHeaderTemplate } from "../security";
+import { createApiSecurityHeaderTemplate, createSecurityHeaderTemplate } from "../security";
 import { createStaticRouteTable } from "../static";
 import { createHttpServerOwner } from "./create-http-server-owner";
 import type { HttpServer } from "./http-server.types";
@@ -25,7 +25,9 @@ interface TransportProfilingConfig {
 }
 const COMPILER_ROUTE_CSRF = 1 << 10;
 const COMPILER_ROUTE_STREAMING = 1 << 11;
+const COMPILER_ROUTE_JSON = 1 << 14;
 const COMPILER_ROUTE_VIEW_CONTEXT = 1 << 16;
+const COMPILER_ROUTE_TEXT = 1 << 17;
 
 /** Generated HTTP bindings supplied by Runtime after one-time pipeline compilation. */
 export interface HttpRuntimeBindings {
@@ -53,7 +55,8 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
         verifier: await CsrfVerifier.create(process.env.WARBLER_CSRF_SECRET ?? crypto.randomUUID().replaceAll("-", "").repeat(2)),
         policy: config.csrf,
       });
-      const securityHeaders = createSecurityHeaderTemplate(config.security);
+      const documentSecurityHeaders = createSecurityHeaderTemplate(config.security);
+      const apiSecurityHeaders = createApiSecurityHeaderTemplate(config.security);
       const strings = input.bindings.strings ?? [];
       const routeNameTable = buildNamedRouteTable(decodeNamedRouteRows(input.bindings.routeRecords ?? [], strings));
       const resolveRoute = createRouteResolver(routeNameTable);
@@ -73,20 +76,23 @@ export function createHttpRuntimeLauncher(): RuntimeTransportLauncher<HttpRuntim
             wrapped[method] = handler;
             continue;
           }
-          const flags = routeFlags(input.bindings, path, method);
+          const compilerFlags = compilerRouteFlags(input.bindings, path, method);
+          const flags = routeFlags(compilerFlags);
           wrapped[method] = createBunRouteHandler({
             handler,
             flags,
             allowedHosts: config.allowedHosts,
             forwarded: config.forwarded,
             headers: config.limits.headers,
-            securityHeaders,
+            securityHeaders: usesApiSecurityHeaders(compilerFlags)
+              ? apiSecurityHeaders
+              : documentSecurityHeaders,
             csrf,
             builtins,
             development: config.development,
             logging,
             profiler: profiling.http,
-            viewScope: routeNeedsViewScope(input.bindings, path, method),
+            viewScope: routeNeedsViewScope(compilerFlags),
           });
         }
         routes[path] = Object.freeze(wrapped);
@@ -128,33 +134,33 @@ function transportLogging(config: unknown): TransportLoggingConfig {
     ...(typeof record.errors === "boolean" ? { errors: record.errors } : {}),
   });
 }
-function routeFlags(bindings: HttpRuntimeBindings, path: string, method: string): number {
+function compilerRouteFlags(bindings: HttpRuntimeBindings, path: string, method: string): number | undefined {
   const records = bindings.routeRecords;
   const strings = bindings.strings;
-  if (records === undefined || strings === undefined) return 0;
+  if (records === undefined || strings === undefined) return undefined;
   for (const record of records) {
     const pathId = record.pathId;
     const methodId = record.methodId;
     if (typeof pathId === "number" && typeof methodId === "number" && strings[pathId] === path && strings[methodId] === method) {
-      if (typeof record.flags !== "number") return 0;
-      const compilerFlags = record.flags;
-      return (compilerFlags & COMPILER_ROUTE_CSRF ? RouteFlag.CSRF_ENABLED : 0)
-        | (compilerFlags & COMPILER_ROUTE_STREAMING ? RouteFlag.SSE : 0)
-        | (compilerFlags & COMPILER_ROUTE_VIEW_CONTEXT ? RouteFlag.VIEW_CONTEXT : 0);
+      return typeof record.flags === "number" ? record.flags : undefined;
     }
   }
-  return 0;
+  return undefined;
 }
-function routeNeedsViewScope(bindings: HttpRuntimeBindings, path: string, method: string): boolean {
-  const records = bindings.routeRecords;
-  const strings = bindings.strings;
-  if (records === undefined || strings === undefined) return true;
-  for (const record of records) {
-    const pathId = record.pathId;
-    const methodId = record.methodId;
-    if (typeof pathId === "number" && typeof methodId === "number" && strings[pathId] === path && strings[methodId] === method) {
-      return typeof record.flags !== "number" || (record.flags & (COMPILER_ROUTE_CSRF | COMPILER_ROUTE_STREAMING | COMPILER_ROUTE_VIEW_CONTEXT)) !== 0;
-    }
-  }
-  return true;
+
+function routeFlags(compilerFlags: number | undefined): number {
+  if (compilerFlags === undefined) return 0;
+  return (compilerFlags & COMPILER_ROUTE_CSRF ? RouteFlag.CSRF_ENABLED : 0)
+    | (compilerFlags & COMPILER_ROUTE_STREAMING ? RouteFlag.SSE : 0)
+    | (compilerFlags & COMPILER_ROUTE_VIEW_CONTEXT ? RouteFlag.VIEW_CONTEXT : 0);
+}
+
+function routeNeedsViewScope(compilerFlags: number | undefined): boolean {
+  return compilerFlags === undefined
+    || (compilerFlags & (COMPILER_ROUTE_CSRF | COMPILER_ROUTE_STREAMING | COMPILER_ROUTE_VIEW_CONTEXT)) !== 0;
+}
+
+function usesApiSecurityHeaders(compilerFlags: number | undefined): boolean {
+  return compilerFlags !== undefined
+    && (compilerFlags & (COMPILER_ROUTE_JSON | COMPILER_ROUTE_TEXT)) !== 0;
 }

@@ -150,6 +150,7 @@ function routeFlags(route: RouteWIR, middlewareCount: number): number {
     (route.response === "view" ? RouteFlag.VIEW : 0) |
     (route.response === "json" ? RouteFlag.JSON : 0) |
     (route.response === "html" ? RouteFlag.HTML : 0) |
+    (route.response === "text" ? RouteFlag.TEXT : 0) |
     (route.viewContext ? RouteFlag.VIEW_CONTEXT : 0);
 }
 function socketFlags(event: SocketEventWIR): number {

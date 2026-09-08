@@ -39,6 +39,19 @@ export function createSecurityHeaderTemplate(policy: SecurityHeaderPolicy): Read
   ]);
   return compiledTemplate(entries);
 }
+/** Creates the security headers shared by non-document HTTP responses. */
+export function createApiSecurityHeaderTemplate(
+  policy: SecurityHeaderPolicy,
+): Readonly<Record<string, string>> {
+  if (!policy.enabled) return compiledTemplate(Object.freeze([]));
+
+  return compiledTemplate(Object.freeze([
+    "strict-transport-security",
+    policy.strictTransportSecurity,
+    "x-content-type-options",
+    policy.contentTypeOptions,
+  ]));
+}
 
 /** Binds a security-header template once for route-handler startup paths. */
 export function createSecurityHeaderApplicator(template: Readonly<Record<string, string>>): SecurityHeaderApplicator {
