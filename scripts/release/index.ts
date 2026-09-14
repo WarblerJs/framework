@@ -80,7 +80,7 @@ export async function runRelease(options: ReleaseOptions): Promise<ReleaseResult
     const workspacePackage = byName.get(item.name);
     if (workspacePackage === undefined) throw new ReleaseError(`Package missing from workspace map: ${item.name}`);
     if (!item.shouldPublish) continue;
-    const packed = await packReleasePackage(workspacePackage, item, targetVersions);
+    const packed = await packReleasePackage(options.root, workspacePackage, item, targetVersions);
     packedPackages.push(packed);
   }
 

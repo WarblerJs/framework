@@ -186,12 +186,32 @@ describe("lockstep release metadata", () => {
     const http = packages.find((item) => item.name === "@warblerjs/http")!;
     const release = plan.packages.find((item) => item.name === "@warblerjs/http")!;
     const before = await readFile(http.manifestPath, "utf8");
-    const packed = await packReleasePackage(http, release, targetVersionMap(plan));
+    const packed = await packReleasePackage(root, http, release, targetVersionMap(plan));
     expect(packed.manifest.dependencies?.["@warblerjs/core"]).toBe("0.5.0");
     expect(packed.manifest.peerDependencies?.["@warblerjs/core"]).toBe("^0.5.0");
     expect(packed.manifest.devDependencies).toBeUndefined();
+    const license = await readPackedLicense(packed.tarball);
+    expect(license).toBe(await readFile(join(root, "LICENSE"), "utf8"));
     expect(await readFile(http.manifestPath, "utf8")).toBe(before);
     expect((await readJson(http.manifestPath)).devDependencies["@warblerjs/core"]).toBe("workspace:*");
+  });
+
+  test("package staging requires the root license before packing", async () => {
+    const root = await fixture({
+      core: manifest("@warblerjs/core"),
+    });
+    await rm(join(root, "LICENSE"), { force: true });
+    const packages = await discoverPublishablePackages(root);
+    const plan = await createReleasePlan(root, packages, new FakeNpm(), { targetVersion: "0.5.0" });
+    const core = packages.find((item) => item.name === "@warblerjs/core")!;
+    const release = plan.packages.find((item) => item.name === "@warblerjs/core")!;
+    try {
+      await packReleasePackage(root, core, release, targetVersionMap(plan));
+      throw new Error("Expected packReleasePackage to reject.");
+    } catch (cause) {
+      expect(cause).toBeInstanceOf(ReleaseError);
+      expect((cause as Error).message).toBe("Root LICENSE is required to pack release packages.");
+    }
   });
 });
 
@@ -352,6 +372,7 @@ async function fixture(packages: Readonly<Record<string, PackageManifest>>, root
   const root = await mkdtemp(join(tmpdir(), "warbler-release-test-"));
   cleanup.push(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, "packages"), { recursive: true });
+  await writeFile(join(root, "LICENSE"), "Apache License\nVersion 2.0, January 2004\n", "utf8");
   await writeJson(join(root, "package.json"), { name: "warbler", version: rootVersion, private: true, workspaces: ["packages/*"] });
   await mkdir(join(root, "packages/cli/src/new"), { recursive: true });
   await writeJson(join(root, "packages/cli/starter-compatibility.json"), starterCompatibility(rootVersion));
@@ -480,4 +501,18 @@ async function writeJson(path: string, value: unknown): Promise<void> {
 
 async function readJson(path: string): Promise<Record<string, any>> {
   return JSON.parse(await readFile(path, "utf8"));
+}
+
+async function readPackedLicense(tarball: string): Promise<string> {
+  const proc = Bun.spawn(["tar", "-xOzf", tarball, "package/LICENSE"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  if (code !== 0) throw new ReleaseError(`Unable to inspect packed license: ${stderr.trim()}`);
+  return stdout;
 }
