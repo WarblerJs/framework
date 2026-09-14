@@ -6,16 +6,33 @@ WarblerJS treats security as an architecture boundary, not a post-release add-on
 
 | Version | Support status |
 | --- | --- |
-| `0.1.0-rc.x` | Release Candidate security review |
-| Stable current major | Security fixes according to [docs/LTS_POLICY.md](./docs/LTS_POLICY.md) |
+| `0.6.x` | Supported |
+| `< 0.6` | Unsupported |
+
+Warbler is currently in the pre-1.0 release series. Security fixes are provided
+for the latest published minor release.
 
 ## Reporting Vulnerabilities
 
-Use GitHub private vulnerability reporting for this repository when it is enabled by the project owner.
+Do not report security vulnerabilities through public GitHub issues,
+discussions, or pull requests.
 
-If private vulnerability reporting is not enabled, public publication remains blocked until the project owner provides an approved private disclosure channel.
+Report vulnerabilities through GitHub Private Vulnerability Reporting in the
+repository's **Security** tab.
 
-Do not include secrets, credentials, private keys, production data, or exploit payloads beyond the minimum reproduction required for triage.
+Private Vulnerability Reporting must be enabled before this repository is made
+public. Until it is enabled, public publication remains blocked.
+
+Include:
+
+- The affected Warbler version and package.
+- A clear description of the vulnerability.
+- Minimal reproduction steps.
+- The security impact.
+- Any known mitigation.
+
+Do not include unrelated secrets, credentials, private keys, customer data, or
+production data.
 
 ## Triage Workflow
 
@@ -24,7 +41,7 @@ Do not include secrets, credentials, private keys, production data, or exploit p
 3. Reproduce without retaining secrets or production data.
 4. Prepare the smallest compatible fix.
 5. Add permanent regression coverage.
-6. Run `bun run verify` and affected security suites.
+6. Run the affected test suites and release checks that exist for the change.
 7. Prepare advisory, changelog, and release notes.
 8. Publish the patch according to the supported release line.
 
@@ -32,21 +49,16 @@ Do not include secrets, credentials, private keys, production data, or exploit p
 
 Security review covers:
 
-- Core package boundaries and immutable public contracts.
-- Compiler non-execution guarantees.
-- Runtime conformance, cancellation, and artifact immutability.
-- HTTP header, cookie, redirect, upload, limits, timeout, diagnostics, and error-response hardening.
-- Playground public API boundaries.
+- Compiler analysis and generated bindings.
+- Runtime lifecycle and dependency-injection scopes.
+- HTTP parsing, limits, security headers, CSRF, cookies, redirects, static
+  assets, streaming, and error responses.
+- Database query safety, transactions, migrations, row locking, and soft
+  deletes.
+- WebSocket validation and lifecycle.
+- Package publication and supply-chain boundaries.
+- Public Web Standard API portability.
 
 ## Verification
 
-Run:
-
-```sh
-bun run verify
-bun run test:security
-```
-
 Security fixes must include permanent regression coverage.
-
-Security policy maintenance follows [docs/MAINTENANCE.md](./docs/MAINTENANCE.md).
