@@ -8,14 +8,21 @@ WarblerJS is an architecture-first TypeScript framework. Contributions must pres
 2. Confirm the package owns the responsibility being changed.
 3. Prefer the existing implementation style.
 4. Keep changes scoped to the smallest package boundary that can own them.
-5. Check whether the change requires an RFC under [docs/RFC_PROCESS.md](./docs/RFC_PROCESS.md).
+5. Ask for release-owner review before changing public APIs, compiler artifact
+   schemas, runtime behavior, package dependency direction, security
+   architecture, or release policy.
 
 ## Verification
 
 Run the repository gate before submitting release-bound changes:
 
 ```sh
-bun run verify
+bun run typecheck
+bun run test
+bun run check:versions
+bun run check:cli-starter-versions
+bun run check:cli-starter-configs
+bun run smoke:packages
 ```
 
 Package-local commands remain supported:
@@ -41,20 +48,10 @@ bun run --cwd packages/http test
 - Add tests for every public behavior change.
 - Update documentation when release behavior, public API, or package boundaries change.
 
-## RFCs
+## Public API Changes
 
-Open an RFC before implementing changes that affect stable public APIs,
-compiler artifact schemas, runtime behavior, package dependency direction,
-stable plugin hooks, security architecture, or release policy.
-
-See [docs/RFC_PROCESS.md](./docs/RFC_PROCESS.md).
-
-## Deprecations
-
-Deprecations must follow [docs/DEPRECATION_POLICY.md](./docs/DEPRECATION_POLICY.md).
-Do not remove stable APIs without the approved removal release, migration
-notes, changelog entry, public API test updates, and compatibility matrix
-updates.
+Do not remove stable APIs without release-owner approval, migration notes,
+changelog updates, public API test updates, and compatibility review.
 
 ## Pull Requests
 
@@ -71,6 +68,5 @@ Every pull request should include:
 
 ## Release Changes
 
-Release-candidate changes must also satisfy [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md).
-
-Long-term maintenance expectations are defined in [docs/MAINTENANCE.md](./docs/MAINTENANCE.md).
+Release-bound changes should follow [docs/RELEASE.md](./docs/RELEASE.md) and
+[docs/VERSIONING.md](./docs/VERSIONING.md).
