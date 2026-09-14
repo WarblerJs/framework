@@ -1,6 +1,7 @@
 {
   "name": "@warblerjs/frontend",
   "version": "0.6.0",
+  "license": "Apache-2.0",
   "description": "Lightweight browser utilities for Warbler applications, built on native Web APIs.",
   "type": "module",
   "private": false,

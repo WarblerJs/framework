@@ -17,7 +17,7 @@ objects such as `Request`, `Response`, `Headers`, `URL`, streams, `AbortSignal`,
 - Runtime: Bun `>=1.3.0`
 - TypeScript: `^5.9.2` in generated projects
 - PostgreSQL: required only for `warbler db:pg ...` commands and the generated PostgreSQL client
-- License: not declared in this repository; no root `LICENSE` file is present
+- License: Apache License 2.0
 
 ## Why Warbler?
 
@@ -756,3 +756,7 @@ overhead for API and text responses.
 
 Warbler uses lockstep versioning: the root release version, Git tag, GitHub release, and every
 publishable `@warblerjs/*` package use the same version.
+
+## License
+
+Warbler is licensed under the [Apache License 2.0](./LICENSE).

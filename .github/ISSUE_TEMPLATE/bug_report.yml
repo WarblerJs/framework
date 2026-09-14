@@ -1,0 +1,95 @@
+name: Bug report
+description: Report a reproducible Warbler bug.
+title: "bug: "
+labels:
+  - bug
+  - triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Warbler.
+
+        Do not include secrets, credentials, private keys, customer data, or production data.
+        Security vulnerabilities must be reported privately through SECURITY.md, not public issues.
+  - type: input
+    id: warbler-version
+    attributes:
+      label: Warbler version
+      description: Enter the exact affected version, for example 0.6.0.
+      placeholder: "0.6.0"
+    validations:
+      required: true
+  - type: input
+    id: affected-package
+    attributes:
+      label: Affected package
+      placeholder: "@warblerjs/framework"
+    validations:
+      required: true
+  - type: input
+    id: bun-version
+    attributes:
+      label: Bun version
+      placeholder: "bun --version"
+    validations:
+      required: true
+  - type: input
+    id: operating-system
+    attributes:
+      label: Operating system
+      placeholder: "macOS 15, Ubuntu 24.04, Windows 11 with WSL"
+    validations:
+      required: true
+  - type: dropdown
+    id: installation-method
+    attributes:
+      label: Installation method
+      options:
+        - "warbler new"
+        - "bun add"
+        - "workspace source checkout"
+        - "other"
+    validations:
+      required: true
+  - type: textarea
+    id: minimal-reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide the smallest project, commands, or code needed to reproduce the issue.
+      render: ts
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste only relevant output. Remove secrets and private paths when possible.
+      render: shell
+    validations:
+      required: true
+  - type: checkboxes
+    id: verification
+    attributes:
+      label: Verification checklist
+      options:
+        - label: I tested this on the latest supported release line.
+          required: true
+        - label: I provided a minimal reproduction.
+          required: true
+        - label: I removed secrets, credentials, private keys, and private data.
+          required: true
+        - label: This is not a security vulnerability report.
+          required: true

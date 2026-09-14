@@ -1,0 +1,73 @@
+name: Feature request
+description: Propose a Warbler feature or behavior change.
+title: "feat: "
+labels:
+  - enhancement
+  - triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Warbler is compile-first and architecture-first. Public APIs should use Web Standards; runtime-specific APIs should remain behind internal adapters.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem being solved
+      description: What user or maintainer problem does this address?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-behavior
+    attributes:
+      label: Proposed behavior
+      description: Describe the behavior, API, CLI command, compiler output, or runtime change.
+    validations:
+      required: true
+  - type: textarea
+    id: affected-packages
+    attributes:
+      label: Affected packages
+      placeholder: "@warblerjs/framework, @warblerjs/http"
+    validations:
+      required: true
+  - type: textarea
+    id: public-api-impact
+    attributes:
+      label: Public API impact
+      description: Note new, changed, or removed public contracts.
+    validations:
+      required: true
+  - type: textarea
+    id: portability-impact
+    attributes:
+      label: Portability impact
+      description: Explain how the feature preserves Web Standard public APIs.
+    validations:
+      required: true
+  - type: textarea
+    id: security-impact
+    attributes:
+      label: Security impact
+      description: Describe new trust boundaries, parsing, validation, auth, file, network, or package risks.
+    validations:
+      required: true
+  - type: textarea
+    id: performance-impact
+    attributes:
+      label: Performance or request hot-path impact
+      description: Describe compile-time versus request-time work and any hot-path cost.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Architecture confirmation
+      options:
+        - label: This request does not expose Bun-only or Node.js-only APIs through Warbler's public contracts.
+          required: true

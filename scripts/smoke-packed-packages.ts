@@ -17,7 +17,7 @@ try {
   for (const item of plan.packages) {
     const workspace = packages.find((candidate) => candidate.name === item.name);
     if (workspace === undefined) throw new ReleaseError(`Release package is missing from workspace: ${item.name}`);
-    const tarball = await packReleasePackage(workspace, item, targets);
+    const tarball = await packReleasePackage(root, workspace, item, targets);
     packed.push(tarball);
     console.log(`packed ${item.name}@${tarball.version}`);
   }
