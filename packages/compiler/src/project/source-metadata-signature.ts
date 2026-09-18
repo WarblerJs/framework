@@ -45,7 +45,9 @@ function declarationSignature(node: ts.ClassDeclaration | ts.FunctionDeclaration
   if (ts.isVariableStatement(node)) {
     return JSON.stringify({
       modifiers: modifierSignature(node),
-      declarations: node.declarationList.declarations.map((declaration) => ts.isIdentifier(declaration.name) ? declaration.name.text : declaration.name.getText()),
+      declarations: node.declarationList.declarations.map((declaration) => ts.isIdentifier(declaration.name)
+        ? `${declaration.name.text}:${handlerInitializerSignature(declaration.initializer)}`
+        : declaration.name.getText()),
     });
   }
   return JSON.stringify({
@@ -89,7 +91,6 @@ function compilerRelevantCallFact(node: ts.CallExpression): string | undefined {
     name === "createApp" ||
     name === "defineHttpGraph" ||
     name === "defineWebSocketGraph" ||
-    name === "defineHandler" ||
     name === "defineValidator" ||
     name === "event" ||
     name === "listen" ||
@@ -100,6 +101,13 @@ function compilerRelevantCallFact(node: ts.CallExpression): string | undefined {
   if (name === "context.set" || name.endsWith(".set")) return `context-set:${argumentText(node, 0)}:${argumentText(node, 1)}`;
   if (name.endsWith(".dispatch") || name.endsWith(".dispatchAndWait")) return `event-dispatch:${argumentText(node, 0)}`;
   return undefined;
+}
+
+function handlerInitializerSignature(node: ts.Expression | undefined): string {
+  if (node === undefined) return "";
+  if (ts.isArrowFunction(node) || ts.isFunctionExpression(node)) return `function:${node.parameters.length}:${compactText(node)}`;
+  if (ts.isObjectLiteralExpression(node) && node.properties.some((property) => propertyName(property.name) === "run")) return `object:${compactText(node)}`;
+  return "";
 }
 
 function callName(node: ts.Expression): string {
@@ -126,4 +134,10 @@ function modifierSignature(node: ts.Node): readonly string[] {
 
 function compactText(node: ts.Node): string {
   return node.getText().replace(/\s+/gu, " ");
+}
+
+function propertyName(node: ts.PropertyName | undefined): string | undefined {
+  if (node === undefined) return undefined;
+  if (ts.isIdentifier(node) || ts.isStringLiteralLike(node) || ts.isNumericLiteral(node)) return node.text;
+  return undefined;
 }

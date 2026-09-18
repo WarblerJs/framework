@@ -1,10 +1,7 @@
-import { defineHandler } from "@warblerjs/core";
 import { defineValidator, v } from "@warblerjs/validators";
-import { defineHttpGraph, defineHttpRoute, type HttpGraphRoute, type HttpRouteKey, type HttpRouteTable } from "../src";
+import { defineHttpGraph, defineHttpRoute, type AppRequest, type HttpGraphRoute, type HttpRouteKey, type HttpRouteTable } from "../src";
 
-const handler = defineHandler({
-  run: (_ctx: unknown) => undefined,
-});
+const handler = () => new Response("ok");
 
 const acceptedRouteKey: HttpRouteKey = "GET /test";
 
@@ -12,6 +9,43 @@ defineHttpGraph({
   routes: {
     "GET /test": handler,
     "POST /test": { handler, name: "test.create" },
+  },
+});
+
+const zeroArgumentHandler = () => new Response("ok");
+const asynchronousHandler = async () => new Response("ok");
+const objectHandler = {
+  run() {
+    return new Response("ok");
+  },
+};
+const asynchronousObjectHandler = {
+  async run() {
+    return new Response("ok");
+  },
+};
+const stringHandler = () => "not a response";
+const plainObjectHandler = () => ({ ok: true });
+const voidHandler = () => undefined;
+const missingRun = {};
+const nonCallableRun = { run: "not callable" };
+
+defineHttpGraph({
+  routes: {
+    "GET /zero": zeroArgumentHandler,
+    "GET /async": asynchronousHandler,
+    "GET /object": objectHandler,
+    "GET /object-async": asynchronousObjectHandler,
+    // @ts-expect-error direct functions must return Response or Promise<Response>
+    "GET /string": stringHandler,
+    // @ts-expect-error plain objects are not valid handler results
+    "GET /plain-object": plainObjectHandler,
+    // @ts-expect-error void is not a valid handler result
+    "GET /void": voidHandler,
+    // @ts-expect-error object handlers must expose run
+    "GET /missing-run": missingRun,
+    // @ts-expect-error run must be callable
+    "GET /bad-run": nonCallableRun,
   },
 });
 
@@ -55,6 +89,15 @@ const inlineRouteValidator = defineValidator({
   },
 });
 
+const incompatibleRequest = (request: AppRequest<typeof inlineRouteValidator>) => new Response(request.body.name);
+
+defineHttpGraph({
+  routes: {
+    // @ts-expect-error handler request must be compatible with the route request
+    "GET /bad-request": incompatibleRequest,
+  },
+});
+
 defineHttpGraph({
   routes: {
     "POST /test/:id": defineHttpRoute({
@@ -76,8 +119,29 @@ defineHttpGraph({
         // @ts-expect-error declared numeric query output is not a raw string
         const rawPage: string = ctx.query.page;
         void id; void include; void page; void name; void age; void active; void tags; void tenant; void session; void rawPage;
+        return new Response("ok");
       },
     }),
+  },
+});
+
+const validatedObjectHandler = {
+  validator: inlineRouteValidator,
+  run(ctx: AppRequest<typeof inlineRouteValidator>) {
+    const id: string = ctx.params.id;
+    const include: "profile" | "sessions" | undefined = ctx.query.include;
+    const page: number = ctx.query.page;
+    const name: string = ctx.body.name;
+    const tenant: string = ctx.headers["x-tenant"];
+    const session: string | null = ctx.cookies.session;
+    void id; void include; void page; void name; void tenant; void session;
+    return new Response("ok");
+  },
+};
+
+defineHttpGraph({
+  routes: {
+    "POST /object/:id": { handler: validatedObjectHandler },
   },
 });
 
@@ -89,12 +153,12 @@ defineHttpGraph({
     // @ts-expect-error validator params must cover every path parameter
     "GET /missing/:id": defineHttpRoute({
       validator: missingPathParamValidator,
-      run(ctx) { return ctx.params; },
+      run(_ctx) { return new Response("ok"); },
     }),
     // @ts-expect-error validator params must not include params absent from the path
     "GET /extra/:id": defineHttpRoute({
       validator: extraPathParamValidator,
-      run(ctx) { return ctx.params.id; },
+      run(_ctx) { return new Response("ok"); },
     }),
   },
 });

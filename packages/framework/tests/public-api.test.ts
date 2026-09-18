@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  defineHandler,
   defineHttpGraph,
   defineValidator,
   JsonRes,
@@ -9,6 +8,7 @@ import {
   v,
   type AppRequest,
   type Guard,
+  type HandlerObject,
   type Middleware,
 } from "../src";
 
@@ -25,7 +25,7 @@ describe("@warblerjs/framework public facade", () => {
     }
     const guard: Guard<AppRequest<typeof validator>> = (request) => request.query.id > 0;
     const middleware: Middleware<AppRequest<typeof validator>> = (_request, _context, next) => next();
-    const handler = defineHandler({
+    const handler = {
       useCase: {
         getUser: GetUserUseCase,
       },
@@ -36,19 +36,19 @@ describe("@warblerjs/framework public facade", () => {
         const id: number = request.query.id;
         return JsonRes({ id: getUser.execute(id) });
       },
-    });
+    } satisfies HandlerObject<AppRequest<typeof validator>, { readonly getUser: typeof GetUserUseCase }>;
     const graph = defineHttpGraph({
       providers: [
         Provider({ provide: GetUserUseCase, useClass: GetUserUseCase }),
       ],
       routes: {
-        "GET /users/:id": {
+        "GET /users": {
           name: "users.show",
           handler,
         },
       },
     });
-    expect(graph.routes["GET /users/:id"]?.name).toBe("users.show");
+    expect(graph.routes["GET /users"]?.name).toBe("users.show");
     expect((await JsonRes({ ok: true }).json())).toEqual({ ok: true });
   });
 });

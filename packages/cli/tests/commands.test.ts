@@ -232,7 +232,7 @@ export const testValidator = defineValidator({
   bodyRules: { message: v.string("validators.invalidMessage").min(1, "validators.invalidMessage") },
 });
 `);
-    await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), `import { defineHandler, Service } from "@warblerjs/core";
+    await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), `import { Service, type HandlerObject } from "@warblerjs/core";
 import { JsonRes, type AppRequest } from "@warblerjs/http";
 import { testValidator } from "./test.validator";
 @Service()
@@ -241,19 +241,17 @@ export class CounterUseCase {
   readonly instance = ++CounterUseCase.constructed;
   execute() { return this.instance; }
 }
-export const getTest = defineHandler({
-  run: (ctx: AppRequest) => JsonRes({ success: true, method: "GET" }),
-});
-export const getCount = defineHandler({
+export const getTest = () => JsonRes({ success: true, method: "GET" });
+export const getCount = {
   useCase: { counter: CounterUseCase },
-  run: (ctx: AppRequest, { counter }) => JsonRes({ count: counter.execute() }),
-});
-export const postTest = defineHandler({
+  run: (_ctx: unknown, { counter }) => JsonRes({ count: counter.execute() }),
+} satisfies HandlerObject<unknown, { readonly counter: typeof CounterUseCase }>;
+export const postTest = {
   validator: testValidator,
   guards: [],
   middlewares: [],
-  run: (ctx: AppRequest) => JsonRes({ success: true, method: "POST", body: ctx.body }),
-});
+  run: (ctx: AppRequest<typeof testValidator>) => JsonRes({ success: true, method: "POST", body: ctx.body }),
+};
 `);
     await Bun.write(join(project.root, "src/graphs/test/test.graph.ts"), `import { defineHttpGraph } from "@warblerjs/http";
 import * as handlers from "./test.handlers";
@@ -352,16 +350,13 @@ export const testValidator = defineValidator({
   bodyRules: { message: v.string("validators.invalidMessage").min(1, "validators.invalidMessage") },
 });
 `);
-    await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), `import { defineHandler } from "@warblerjs/core";
-import { JsonRes, type AppRequest } from "@warblerjs/http";
+    await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), `import { JsonRes, type AppRequest } from "@warblerjs/http";
 import { testValidator } from "./test.validator";
-export const getTest = defineHandler({
-  run: (_ctx: AppRequest) => JsonRes({ version: 1 }),
-});
-export const postTest = defineHandler({
+export const getTest = () => JsonRes({ version: 1 });
+export const postTest = {
   validator: testValidator,
   run: (ctx: AppRequest) => JsonRes({ body: ctx.body }),
-});
+};
 `);
     const graphPath = join(project.root, "src/graphs/test/test.graph.ts");
     await Bun.write(graphPath, `import { defineHttpGraph } from "@warblerjs/http";
@@ -402,16 +397,13 @@ export default defineHttpGraph({
     await (session as unknown as { notifyChanges(paths: readonly string[]): Promise<void> }).notifyChanges(["src/graphs/test/test.graph.ts"]);
     expect(snapshots.at(-1)?.routePaths).toContain("/api/changed");
 
-    await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), `import { defineHandler } from "@warblerjs/core";
-import { JsonRes, type AppRequest } from "@warblerjs/http";
+    await Bun.write(join(project.root, "src/graphs/test/test.handlers.ts"), `import { JsonRes, type AppRequest } from "@warblerjs/http";
 import { testValidator } from "./test.validator";
-export const getTest = defineHandler({
-  run: (_ctx: AppRequest) => JsonRes({ version: 2 }),
-});
-export const postTest = defineHandler({
+export const getTest = () => JsonRes({ version: 2 });
+export const postTest = {
   validator: testValidator,
   run: (ctx: AppRequest) => JsonRes({ body: ctx.body }),
-});
+};
 `);
     await (session as unknown as { notifyChanges(paths: readonly string[]): Promise<void> }).notifyChanges(["src/graphs/test/test.handlers.ts"]);
     expect(new Set(snapshots.map((snapshot) => snapshot.fingerprint)).size).toBeGreaterThanOrEqual(3);

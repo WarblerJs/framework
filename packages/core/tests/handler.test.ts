@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { defineHandler } from "../src";
+import type { HandlerFunction, HandlerObject, ResolvedUseCases } from "../src";
 
 class GetUserUseCase {
   execute(): "typed-user" {
@@ -7,20 +7,23 @@ class GetUserUseCase {
   }
 }
 
-describe("defineHandler", () => {
-  test("contextually types declared use-case dependencies", () => {
-    const handler = defineHandler({
+describe("handler types", () => {
+  test("contextually type declared use-case dependencies", () => {
+    const handler = {
       useCase: { getUser: GetUserUseCase },
-      run: (_ctx: { readonly requestId: string }, { getUser }) => {
+      run: (_ctx: { readonly requestId: string }, { getUser }: ResolvedUseCases<{ readonly getUser: typeof GetUserUseCase }>) => {
         const user: "typed-user" = getUser.execute();
 
         // @ts-expect-error use-case dependencies must not collapse to any.
         getUser.missingMethod();
 
-        return user;
+        return new Response(user);
       },
-    });
+    } satisfies HandlerObject<{ readonly requestId: string }, { readonly getUser: typeof GetUserUseCase }>;
 
-    expect(Object.isFrozen(handler)).toBe(true);
+    const simple = (() => new Response("ok")) satisfies HandlerFunction;
+
+    expect(handler.useCase.getUser).toBe(GetUserUseCase);
+    expect(simple()).toBeInstanceOf(Response);
   });
 });

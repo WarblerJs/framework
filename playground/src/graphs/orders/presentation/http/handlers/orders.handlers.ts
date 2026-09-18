@@ -1,9 +1,7 @@
-import { defineHandler, JsonRes } from "@warblerjs/framework";
+import { JsonRes } from "@warblerjs/framework";
 
 const message = "orders";
 
-export const index = defineHandler({
-  run: () => JsonRes({
-    message,
-  }),
+export const index = () => JsonRes({
+  message,
 });

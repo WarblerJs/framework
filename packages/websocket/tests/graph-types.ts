@@ -1,9 +1,8 @@
-import { defineHandler } from "@warblerjs/core";
 import { defineWebSocketGraph, type WebSocketEventKey, type WebSocketEventTable, type WebSocketGraphEvent } from "../src";
 
-const handler = defineHandler({
+const handler = {
   run: (_ctx: unknown) => undefined,
-});
+};
 
 const acceptedOpen: WebSocketEventKey = "OPEN";
 const acceptedMessage: WebSocketEventKey = "MSG room.join";

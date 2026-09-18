@@ -55,14 +55,12 @@ export default defineHttpGraph({
     }),
     Object.freeze({
       path: `${plan.rootDirectory}/presentation/http/handlers/${plan.directoryName}.handlers.ts`,
-      content: `import { defineHandler, JsonRes } from "@warblerjs/framework";
+      content: `import { JsonRes } from "@warblerjs/framework";
 
 const message = ${JSON.stringify(plan.routeNamePrefix)};
 
-export const index = defineHandler({
-  run: () => JsonRes({
-    message,
-  }),
+export const index = () => JsonRes({
+  message,
 });
 `,
     }),
@@ -96,11 +94,9 @@ export default defineWebSocketGraph({
     }),
     Object.freeze({
       path: `${plan.rootDirectory}/presentation/socket/handlers/${plan.directoryName}.socket.handlers.ts`,
-      content: `import { defineHandler } from "@warblerjs/framework";
-
-export const open = defineHandler({
+      content: `export const open = {
   run: () => undefined,
-});
+};
 `,
     }),
   ]);

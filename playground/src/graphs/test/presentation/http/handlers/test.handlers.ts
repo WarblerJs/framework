@@ -1,7 +1,8 @@
-import { defineHandler,view } from "@warblerjs/framework";
+import { view } from "@warblerjs/framework";
 import {
   JsonRes,
   type AppRequest,
+  type HandlerObject,
 } from "@warblerjs/framework";
 
 import { testValidator } from "../../../test.validator";
@@ -10,7 +11,7 @@ import { guestGuardTest } from "../../guards/is-admin.guard";
 import { authMiddleware } from "src/shared/middlewares/scope.middleware";
 import { GetUserUseCase } from "../../../application/use-case/user.use-case";
 
-export const getTest = defineHandler({
+export const getTest = {
   useCase: { getUser: GetUserUseCase},
   validator: validateRequest,
   guards: [ guestGuardTest ],
@@ -26,13 +27,13 @@ export const getTest = defineHandler({
 
 
   },
-});
+} satisfies HandlerObject<AppRequest<typeof validateRequest>, { readonly getUser: typeof GetUserUseCase }>;
 
-export const postTest = defineHandler({
+export const postTest = {
   validator: testValidator,
   guards: [],
   middlewares: [],
-  run: (ctx: AppRequest) => {
+  run: (ctx: AppRequest<typeof testValidator>) => {
     return JsonRes({
       q: ctx.query,
       p: ctx.params,
@@ -40,10 +41,6 @@ export const postTest = defineHandler({
       body: ctx.body,
     });
   },
-});
+};
 
-export const getHome = defineHandler({
-  run: (ctx: AppRequest) => {
-    return view('index');
-  },
-});
+export const getHome = () => view('index');

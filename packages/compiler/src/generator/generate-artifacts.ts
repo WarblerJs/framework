@@ -354,7 +354,7 @@ function handlersSource(bindings: ExecutableBindingPlan): string {
   ...input: Parameters<InstanceType<typeof ${binding.controller.local}>[${JSON.stringify(binding.method)}]>
 ): ReturnType<InstanceType<typeof ${binding.controller.local}>[${JSON.stringify(binding.method)}]> =>
   controller.${binding.method}(...input);
-` : `const Handler${binding.id} = ${binding.expression.text};
+` : `const Handler${binding.id} = ${binding.handlerKind === "function" ? `Object.freeze({ run: ${binding.expression.text} })` : binding.expression.text};
 const invokeHandler${binding.id} = (
   _controller: undefined,
   ...input: Parameters<typeof Handler${binding.id}.run>

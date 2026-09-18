@@ -1,4 +1,4 @@
-import type { MaybePromise, ResolvedUseCases, UseCaseMap } from "@warblerjs/core";
+import type { HandlerResult, ResolvedUseCases, UseCaseMap } from "@warblerjs/core";
 import type {
   InferValidatorPath,
 } from "@warblerjs/validators";
@@ -43,14 +43,14 @@ type RouteRequestFor<TKey extends string, TValidator> =
 type RouteUseCases<TEntry> = TEntry extends { readonly useCase: infer TUseCase }
   ? TUseCase extends UseCaseMap ? TUseCase : undefined
   : undefined;
-type InlineRouteRun<TKey extends string, TValidator, TUseCase extends UseCaseMap | undefined, TResult = unknown> =
+type InlineRouteRun<TKey extends string, TValidator, TUseCase extends UseCaseMap | undefined> =
   TUseCase extends UseCaseMap
-    ? (context: RouteRequestFor<TKey, TValidator>, useCases: ResolvedUseCases<TUseCase>) => MaybePromise<TResult>
-    : (context: RouteRequestFor<TKey, TValidator>) => MaybePromise<TResult>;
-type ValidatorOnlyRun<TValidator, TUseCase extends UseCaseMap | undefined, TResult = unknown> =
+    ? (context: RouteRequestFor<TKey, TValidator>, useCases: ResolvedUseCases<TUseCase>) => HandlerResult
+    : (context: RouteRequestFor<TKey, TValidator>) => HandlerResult;
+type ValidatorOnlyRun<TValidator, TUseCase extends UseCaseMap | undefined> =
   TUseCase extends UseCaseMap
-    ? (context: TValidator extends AnyRequestValidator ? AppRequest<TValidator> : AppRequest<EmptyRequestSection, EmptyRequestSection, EmptyRequestSection>, useCases: ResolvedUseCases<TUseCase>) => MaybePromise<TResult>
-    : (context: TValidator extends AnyRequestValidator ? AppRequest<TValidator> : AppRequest<EmptyRequestSection, EmptyRequestSection, EmptyRequestSection>) => MaybePromise<TResult>;
+    ? (context: TValidator extends AnyRequestValidator ? AppRequest<TValidator> : AppRequest<EmptyRequestSection, EmptyRequestSection, EmptyRequestSection>, useCases: ResolvedUseCases<TUseCase>) => HandlerResult
+    : (context: TValidator extends AnyRequestValidator ? AppRequest<TValidator> : AppRequest<EmptyRequestSection, EmptyRequestSection, EmptyRequestSection>) => HandlerResult;
 type ParamKeyMismatchMessage<TKey extends string, TExpected extends string, TActual extends string> =
   Exclude<TExpected, TActual> extends infer TMissing extends string
     ? Exclude<TActual, TExpected> extends infer TExtra extends string
@@ -96,7 +96,6 @@ export type HttpInlineGraphRoute<
   TRouteKey extends HttpRouteKey,
   TValidator extends undefined = undefined,
   TUseCase extends UseCaseMap | undefined = undefined,
-  TResult = unknown,
 > = Readonly<{
   readonly name?: string;
   readonly validator?: TValidator;
@@ -104,13 +103,12 @@ export type HttpInlineGraphRoute<
   readonly middlewares?: readonly unknown[];
   readonly response?: HttpRouteResponseKind;
   readonly useCase?: TUseCase;
-  readonly run: InlineRouteRun<TRouteKey, TValidator, TUseCase, TResult>;
+  readonly run: InlineRouteRun<TRouteKey, TValidator, TUseCase>;
 }>;
 
 export type DefinedHttpInlineGraphRoute<
   TValidator extends AnyRequestValidator | undefined = AnyRequestValidator | undefined,
   TUseCase extends UseCaseMap | undefined = UseCaseMap | undefined,
-  TResult = unknown,
 > = Readonly<{
   readonly name?: string;
   readonly validator?: TValidator;
@@ -118,22 +116,47 @@ export type DefinedHttpInlineGraphRoute<
   readonly middlewares?: readonly unknown[];
   readonly useCase?: TUseCase;
   readonly response?: HttpRouteResponseKind;
-  readonly run: ValidatorOnlyRun<TValidator, TUseCase, TResult>;
+  readonly run: ValidatorOnlyRun<TValidator, TUseCase>;
   readonly __warblerRouteValidator?: () => TValidator;
 }>;
-type DefineHttpRouteWithoutUseCase<TValidator extends AnyRequestValidator | undefined, TResult> = Readonly<Omit<DefinedHttpInlineGraphRoute<TValidator, undefined, TResult>, "useCase" | "run"> & {
+type DefineHttpRouteWithoutUseCase<TValidator extends AnyRequestValidator | undefined> = Readonly<Omit<DefinedHttpInlineGraphRoute<TValidator, undefined>, "useCase" | "run"> & {
   readonly useCase?: undefined;
-  readonly run: ValidatorOnlyRun<TValidator, undefined, TResult>;
+  readonly run: ValidatorOnlyRun<TValidator, undefined>;
 }>;
-type DefineHttpRouteWithUseCase<TValidator extends AnyRequestValidator | undefined, TUseCase extends UseCaseMap, TResult> = Readonly<Omit<DefinedHttpInlineGraphRoute<TValidator, TUseCase, TResult>, "useCase" | "run"> & {
+type DefineHttpRouteWithUseCase<TValidator extends AnyRequestValidator | undefined, TUseCase extends UseCaseMap> = Readonly<Omit<DefinedHttpInlineGraphRoute<TValidator, TUseCase>, "useCase" | "run"> & {
   readonly useCase: TUseCase;
-  readonly run: ValidatorOnlyRun<TValidator, TUseCase, TResult>;
+  readonly run: ValidatorOnlyRun<TValidator, TUseCase>;
 }>;
+type HandlerValidator<THandler> = THandler extends { readonly validator: infer TValidator } ? TValidator : undefined;
+type HandlerUseCases<THandler> = THandler extends { readonly useCase: infer TUseCase } ? TUseCase extends UseCaseMap ? TUseCase : never : undefined;
+type HandlerError<TMessage extends string> = { readonly __warblerHandlerError: TMessage };
+type HandlerRun<THandler> = THandler extends { readonly run: infer TRun } ? TRun : never;
+type IsCallable<TValue> = TValue extends (...args: infer _TArgs) => infer _TReturn ? true : false;
+type ValidateHandlerObject<TKey extends string, THandler> =
+  IsCallable<HandlerRun<THandler>> extends true
+    ? HandlerUseCases<THandler> extends never
+      ? HandlerError<"Handler object useCase must be a map of constructors.">
+      : HandlerRun<THandler> extends InlineRouteRun<TKey, HandlerValidator<THandler>, HandlerUseCases<THandler>>
+        ? ValidateRouteParams<TKey, HandlerValidator<THandler>>
+        : HandlerError<"Handler object run must accept the route request type and return Response or Promise<Response>.">
+    : HandlerError<"Handler object must contain a callable run property.">;
+type ValidateHandlerFunction<TKey extends string, THandler> =
+  THandler extends InlineRouteRun<TKey, undefined, undefined>
+    ? unknown
+    : HandlerError<"Handler function must accept the route request type and return Response or Promise<Response>.">;
+type ValidateGraphHandler<TKey extends string, THandler> =
+  IsCallable<THandler> extends true
+    ? ValidateHandlerFunction<TKey, THandler>
+    : THandler extends { readonly run: unknown }
+      ? ValidateHandlerObject<TKey, THandler>
+      : HandlerError<"Route handler must be a function or an object with a callable run property.">;
 
 type TypedHttpGraphRoute<TKey extends HttpRouteKey, TEntry> =
-  TEntry extends DefinedHttpInlineGraphRoute<infer TValidator, infer _TUseCase, infer _TResult>
+  TEntry extends DefinedHttpInlineGraphRoute<infer TValidator, infer _TUseCase>
     ? TEntry & ValidateRouteParams<TKey, TValidator>
-    : TEntry;
+    : TEntry extends { readonly handler: infer THandler }
+      ? TEntry & ValidateGraphHandler<TKey, THandler>
+      : TEntry & ValidateGraphHandler<TKey, TEntry>;
 
 export interface HttpGraphDefinition<
   TRoutes extends HttpRouteTable<HttpGraphRoute> = HttpRouteTable<HttpGraphRoute>,
@@ -168,20 +191,18 @@ export function defineHttpGraph<
  */
 export function defineHttpRoute<
   const TValidator extends AnyRequestValidator,
-  TResult,
 >(
-  route: DefineHttpRouteWithoutUseCase<TValidator, TResult>,
-): Readonly<DefinedHttpInlineGraphRoute<TValidator, undefined, TResult>>;
+  route: DefineHttpRouteWithoutUseCase<TValidator>,
+): Readonly<DefinedHttpInlineGraphRoute<TValidator, undefined>>;
 export function defineHttpRoute<
   const TValidator extends AnyRequestValidator,
   const TUseCase extends UseCaseMap,
-  TResult,
 >(
-  route: DefineHttpRouteWithUseCase<TValidator, TUseCase, TResult>,
-): Readonly<DefinedHttpInlineGraphRoute<TValidator, TUseCase, TResult>>;
-export function defineHttpRoute<TResult>(
-  route: DefineHttpRouteWithoutUseCase<undefined, TResult>,
-): Readonly<DefinedHttpInlineGraphRoute<undefined, undefined, TResult>>;
+  route: DefineHttpRouteWithUseCase<TValidator, TUseCase>,
+): Readonly<DefinedHttpInlineGraphRoute<TValidator, TUseCase>>;
+export function defineHttpRoute(
+  route: DefineHttpRouteWithoutUseCase<undefined>,
+): Readonly<DefinedHttpInlineGraphRoute<undefined, undefined>>;
 export function defineHttpRoute(
   route: DefinedHttpInlineGraphRoute,
 ): Readonly<DefinedHttpInlineGraphRoute> {

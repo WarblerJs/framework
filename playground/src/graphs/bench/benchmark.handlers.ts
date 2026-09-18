@@ -1,5 +1,4 @@
 import {
-    defineHandler,
     defineValidator,
     JsonRes,
     v,
@@ -24,25 +23,21 @@ import { benchVal, queryValidator } from "./bench.validator";
     },
   });
   
-  export const plain = defineHandler({
-    run: () => new Response("OK"),
+  export const plain = () => new Response("OK");
+  
+  export const json = () => JsonRes({
+    message: "Warbler",
+    success: true,
   });
   
-  export const json = defineHandler({
-    run: () => JsonRes({
-      message: "Warbler",
-      success: true,
-    }),
-  });
-  
-  export const params = defineHandler({
+  export const params = {
     validator: benchVal,
     run: (request: AppRequest<typeof benchVal>) => JsonRes({
       id: request.params.id,
     }),
-  });
+  };
   
-  export const query = defineHandler({
+  export const query = {
     validator: queryValidator,
   
     run: (
@@ -50,9 +45,9 @@ import { benchVal, queryValidator } from "./bench.validator";
     ) => JsonRes({
       id: request.query.id,
     }),
-  });
+  };
   
-  export const body = defineHandler({
+  export const body = {
     validator: bodyValidator,
   
     run: (
@@ -61,31 +56,25 @@ import { benchVal, queryValidator } from "./bench.validator";
       email: request.body.email,
       age: request.body.age,
     }),
-  });
+  };
   
-  export const asynchronous = defineHandler({
-    run: async () => {
-      await Promise.resolve();
+  export const asynchronous = async () => {
+    await Promise.resolve();
   
-      return JsonRes({
-        message: "async",
-      });
-    },
-  });
+    return JsonRes({
+      message: "async",
+    });
+  };
   
-  export const large = defineHandler({
-    run: () => new Response(
-      largePayload,
-      {
-        headers: {
-          "content-type": "application/json; charset=utf-8",
-        },
+  export const large = () => new Response(
+    largePayload,
+    {
+      headers: {
+        "content-type": "application/json; charset=utf-8",
       },
-    ),
-  });
+    },
+  );
   
-  export const renderedView = defineHandler({
-    run: () => view("benchmark.index", {
-      title: "Warbler Benchmark",
-    }),
+  export const renderedView = () => view("benchmark.index", {
+    title: "Warbler Benchmark",
   });

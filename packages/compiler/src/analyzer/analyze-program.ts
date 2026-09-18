@@ -56,6 +56,10 @@ interface HandlerOptions {
   readonly useCases: readonly HandlerUseCaseWIR[];
   readonly viewContext: boolean;
 }
+interface HandlerDescriptor extends HandlerOptions {
+  readonly kind: "function" | "object";
+  readonly parameterCount: number;
+}
 const EMPTY_HANDLER_OPTIONS: HandlerOptions = Object.freeze({
   middleware: Object.freeze([]),
   guards: Object.freeze([]),
@@ -87,7 +91,6 @@ export function analyzeProgram(context: CompilerContext): AnalysisResult {
   for (const sourceFile of context.sourceFiles) {
     const aliases = collectAliases(sourceFile);
     sourceAliases.set(sourceFile, aliases);
-    collectHandlerDefinitions(sourceFile, aliases, handlerOptions, context.diagnostics);
     collectValidatorDefinitions(sourceFile, aliases, csrfValidators);
   }
 
@@ -97,7 +100,7 @@ export function analyzeProgram(context: CompilerContext): AnalysisResult {
     middleware.push(...collectApplicationMiddleware(sourceFile, aliases, context.diagnostics));
     for (const reference of collectFrameworkProviders(sourceFile)) frameworkProviders.set(reference.local, reference);
     collectEventDeclarations(sourceFile, aliases, context.typeChecker, events, eventListeners, eventInterceptors, context.diagnostics);
-    analyzeDeclarativeGraphs(sourceFile, aliases, graphs, controllers, providers, handlerOptions, csrfValidators, context.diagnostics);
+    analyzeDeclarativeGraphs(sourceFile, aliases, graphs, controllers, providers, handlerOptions, csrfValidators, context.typeChecker, context.diagnostics);
     const visit = (node: ts.Node): void => {
       if (ts.isClassDeclaration(node) && node.name !== undefined) {
         analyzeClass(node, sourceFile, aliases, graphs, controllers, providers, context.diagnostics);
@@ -120,31 +123,6 @@ export function analyzeProgram(context: CompilerContext): AnalysisResult {
   });
 }
 
-function collectHandlerDefinitions(
-  source: ts.SourceFile,
-  aliases: ReadonlyMap<string, string>,
-  output: Map<string, HandlerOptions>,
-  diagnostics: CompilerDiagnostic[],
-): void {
-  for (const statement of source.statements) {
-    if (!ts.isVariableStatement(statement)) continue;
-    for (const declaration of statement.declarationList.declarations) {
-      if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined || !ts.isCallExpression(declaration.initializer)) continue;
-      if (callName(declaration.initializer.expression, aliases) !== "defineHandler") continue;
-      const object = objectArgument(declaration.initializer, 0);
-      if (object === undefined) continue;
-      rejectSingularMiddleware(object, declaration, source, diagnostics);
-      output.set(declaration.name.text, Object.freeze({
-        ...(objectReference(object, "validator") === undefined ? {} : { validator: objectReference(object, "validator")! }),
-        middleware: Object.freeze(objectReferenceArray(object, "middlewares")),
-        guards: Object.freeze(objectReferenceArray(object, "guards")),
-        useCases: Object.freeze(objectReferenceMap(object, "useCase")),
-        viewContext: usesHttpViewContext(object, aliases),
-      }));
-    }
-  }
-}
-
 function collectValidatorDefinitions(source: ts.SourceFile, aliases: ReadonlyMap<string, string>, output: Set<string>): void {
   for (const statement of source.statements) {
     if (!ts.isVariableStatement(statement)) continue;
@@ -164,18 +142,19 @@ function analyzeDeclarativeGraphs(
   providers: Map<string, ProviderWIR>,
   handlerOptions: ReadonlyMap<string, HandlerOptions>,
   csrfValidators: ReadonlySet<string>,
+  checker: ts.TypeChecker,
   diagnostics: CompilerDiagnostic[],
 ): void {
   for (const statement of source.statements) {
     if (ts.isVariableStatement(statement)) {
       for (const declaration of statement.declarationList.declarations) {
         if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined || !ts.isCallExpression(declaration.initializer)) continue;
-        analyzeDeclarativeGraphCall(declaration.name.text, declaration.initializer, declaration, source, aliases, graphs, controllers, providers, handlerOptions, csrfValidators, diagnostics);
+        analyzeDeclarativeGraphCall(declaration.name.text, declaration.initializer, declaration, source, aliases, graphs, controllers, providers, handlerOptions, csrfValidators, checker, diagnostics);
       }
       continue;
     }
     if (ts.isExportAssignment(statement) && ts.isCallExpression(statement.expression)) {
-      analyzeDeclarativeGraphCall(defaultGraphName(source), statement.expression, statement, source, aliases, graphs, controllers, providers, handlerOptions, csrfValidators, diagnostics);
+      analyzeDeclarativeGraphCall(defaultGraphName(source), statement.expression, statement, source, aliases, graphs, controllers, providers, handlerOptions, csrfValidators, checker, diagnostics);
     }
   }
 }
@@ -191,6 +170,7 @@ function analyzeDeclarativeGraphCall(
   providers: Map<string, ProviderWIR>,
   handlerOptions: ReadonlyMap<string, HandlerOptions>,
   csrfValidators: ReadonlySet<string>,
+  checker: ts.TypeChecker,
   diagnostics: CompilerDiagnostic[],
 ): void {
   const callee = callName(call.expression, aliases);
@@ -203,8 +183,8 @@ function analyzeDeclarativeGraphCall(
   rejectSingularMiddleware(object, node, source, diagnostics);
   const transport = callee === "defineHttpGraph" ? "http" : "websocket";
   const controllerName = `${graphName}${transport === "http" ? "$http" : "$websocket"}`;
-  const routes = transport === "http" ? declarativeHttpRoutes(object, source, aliases, handlerOptions, csrfValidators, diagnostics) : [];
-  const socketEvents = transport === "websocket" ? declarativeSocketEvents(object, source, handlerOptions, diagnostics) : [];
+  const routes = transport === "http" ? declarativeHttpRoutes(object, source, aliases, handlerOptions, csrfValidators, checker, diagnostics) : [];
+  const socketEvents = transport === "websocket" ? declarativeSocketEvents(object, source, aliases, handlerOptions, checker, diagnostics) : [];
   graphs.push(Object.freeze({
     ...location(node, source),
     name: graphName,
@@ -241,6 +221,7 @@ function declarativeHttpRoutes(
   aliases: ReadonlyMap<string, string>,
   handlerOptions: ReadonlyMap<string, HandlerOptions>,
   csrfValidators: ReadonlySet<string>,
+  checker: ts.TypeChecker,
   diagnostics: CompilerDiagnostic[],
 ): readonly RouteWIR[] {
   const routesObject = objectChildObject(object, "routes");
@@ -262,12 +243,19 @@ function declarativeHttpRoutes(
       rejectForbiddenDeclarativeOptions(options, ["validator", "guards", "useCase", "providers"], property, source, diagnostics);
     }
     if (inlineOptions !== undefined) rejectSingularMiddleware(inlineOptions, property, source, diagnostics);
-    const handler = inlineOptions !== undefined ? `__warbler_inline_http_${routes.length}` : options === undefined ? expressionReference(property.initializer) : objectReference(options, "handler");
+    const handlerNode = inlineOptions !== undefined ? undefined : options === undefined ? property.initializer : objectInitializer(options, "handler");
+    const handler = inlineOptions !== undefined ? `__warbler_inline_http_${routes.length}` : handlerNode === undefined ? undefined : expressionReference(handlerNode);
     if (handler === undefined) {
       diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `HTTP route "${key}" is missing a handler.`, property, source, [key]);
       continue;
     }
-    const inherited = handlerOptionsFor(handlerOptions, handler);
+    const descriptor = inlineOptions === undefined && handlerNode !== undefined ? describeHandler(handlerNode, source, aliases, checker) : inlineHandlerDescriptor(inlineOptions, aliases);
+    if (descriptor === undefined) {
+      diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `HTTP route "${key}" handler "${handler}" is invalid. Use either a direct function or an object with a callable run property.`, property, source, [handler]);
+      continue;
+    }
+    const legacyOptions = handlerOptionsFor(handlerOptions, handler);
+    const inherited = inlineOptions === undefined ? mergeHandlerOptions(legacyOptions, descriptor) : descriptor;
     const validator = inlineOptions === undefined ? inherited.validator : objectReference(inlineOptions, "validator");
     const routeOptions = inlineOptions ?? options;
     const response = routeOptions === undefined
@@ -278,6 +266,8 @@ function declarativeHttpRoutes(
       method: parsed.method,
       path: parsed.path,
       handler,
+      handlerKind: inherited.kind,
+      parameterCount: inherited.parameterCount,
       ...(inlineOptions === undefined ? {} : { handlerExpression: captureExpression(helperCall ?? inlineOptions, aliases, source) }),
       ...(validator === undefined ? {} : { validator }),
       ...(response === undefined ? {} : { response }),
@@ -297,7 +287,9 @@ function declarativeHttpRoutes(
 function declarativeSocketEvents(
   object: ts.ObjectLiteralExpression,
   source: ts.SourceFile,
+  aliases: ReadonlyMap<string, string>,
   handlerOptions: ReadonlyMap<string, HandlerOptions>,
+  checker: ts.TypeChecker,
   diagnostics: CompilerDiagnostic[],
 ): readonly SocketEventWIR[] {
   const eventsObject = objectChildObject(object, "events");
@@ -316,17 +308,25 @@ function declarativeSocketEvents(
       rejectSingularMiddleware(options, property, source, diagnostics);
       rejectForbiddenDeclarativeOptions(options, ["validator", "guards", "useCase", "providers"], property, source, diagnostics);
     }
-    const handler = options === undefined ? expressionReference(property.initializer) : objectReference(options, "handler");
-    if (handler === undefined) {
+    const handlerNode = options === undefined ? property.initializer : objectInitializer(options, "handler");
+    const handler = handlerNode === undefined ? undefined : expressionReference(handlerNode);
+    if (handler === undefined || handlerNode === undefined) {
       diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `WebSocket event "${key}" is missing a handler.`, property, source, [key]);
       continue;
     }
-    const inherited = handlerOptionsFor(handlerOptions, handler);
+    const descriptor = describeHandler(handlerNode, source, aliases, checker);
+    if (descriptor === undefined) {
+      diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `WebSocket event "${key}" handler "${handler}" is invalid. Use either a direct function or an object with a callable run property.`, property, source, [handler]);
+      continue;
+    }
+    const inherited = mergeHandlerOptions(handlerOptionsFor(handlerOptions, handler), descriptor);
     events.push(Object.freeze({
       ...location(property, source),
       kind: parsed.kind,
       event: parsed.event,
       handler,
+      handlerKind: inherited.kind,
+      parameterCount: inherited.parameterCount,
       ...(inherited.validator === undefined ? {} : { validator: inherited.validator }),
       middleware: Object.freeze(options === undefined ? inherited.middleware : [...objectReferenceArray(options, "middlewares"), ...inherited.middleware]),
       guards: inherited.guards,
@@ -838,9 +838,16 @@ function objectChildObject(object: ts.ObjectLiteralExpression | undefined, key: 
   const property = object === undefined ? undefined : findProperty(object, key);
   return property !== undefined && ts.isPropertyAssignment(property) && ts.isObjectLiteralExpression(property.initializer) ? property.initializer : undefined;
 }
+function objectInitializer(object: ts.ObjectLiteralExpression | undefined, key: string): ts.Expression | undefined {
+  const property = object === undefined ? undefined : findProperty(object, key);
+  return property !== undefined && ts.isPropertyAssignment(property) ? property.initializer : undefined;
+}
 function objectReference(object: ts.ObjectLiteralExpression | undefined, key: string): string | undefined {
   const property = object === undefined ? undefined : findProperty(object, key);
-  return property !== undefined && ts.isPropertyAssignment(property) ? expressionReference(property.initializer) : undefined;
+  if (property === undefined) return undefined;
+  if (ts.isPropertyAssignment(property)) return expressionReference(property.initializer);
+  if (ts.isShorthandPropertyAssignment(property)) return property.name.text;
+  return undefined;
 }
 function objectReferenceArray(object: ts.ObjectLiteralExpression | undefined, key: string): string[] {
   const property = object === undefined ? undefined : findProperty(object, key);
@@ -888,7 +895,7 @@ function rejectForbiddenDeclarativeOptions(
   diagnostics: CompilerDiagnostic[],
 ): void {
   for (const key of keys) {
-    if (findProperty(object, key) !== undefined) diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Declarative route/event option "${key}" is not allowed here. Put it on defineHandler() or the graph as appropriate.`, node, source, [key]);
+    if (findProperty(object, key) !== undefined) diagnostic(diagnostics, DiagnosticCode.INVALID_DECORATOR, `Declarative route/event option "${key}" is not allowed here. Put metadata on the handler object or the graph as appropriate.`, node, source, [key]);
   }
 }
 function stringArgument(call: ts.CallExpression | undefined, index: number, fallback: string): string {
@@ -920,6 +927,149 @@ function parseSocketEventKey(key: string): { readonly kind: "event" | "lifecycle
 }
 function handlerOptionsFor(options: ReadonlyMap<string, HandlerOptions>, handler: string): HandlerOptions {
   return options.get(handler) ?? options.get(lastReferenceSegment(handler)) ?? EMPTY_HANDLER_OPTIONS;
+}
+function mergeHandlerOptions(legacy: HandlerOptions, descriptor: HandlerDescriptor): HandlerDescriptor {
+  return Object.freeze({
+    kind: descriptor.kind,
+    parameterCount: descriptor.parameterCount,
+    ...(descriptor.validator === undefined && legacy.validator === undefined ? {} : { validator: descriptor.validator ?? legacy.validator }),
+    middleware: descriptor.middleware.length > 0 ? descriptor.middleware : legacy.middleware,
+    guards: descriptor.guards.length > 0 ? descriptor.guards : legacy.guards,
+    useCases: descriptor.useCases.length > 0 ? descriptor.useCases : legacy.useCases,
+    viewContext: descriptor.viewContext || legacy.viewContext,
+  });
+}
+function inlineHandlerDescriptor(object: ts.ObjectLiteralExpression | undefined, aliases: ReadonlyMap<string, string>): HandlerDescriptor | undefined {
+  if (object === undefined) return undefined;
+  const run = findProperty(object, "run");
+  const parameterCount = runParameterCount(run);
+  if (parameterCount === undefined) return undefined;
+  return Object.freeze({
+    kind: "object",
+    parameterCount,
+    ...(objectReference(object, "validator") === undefined ? {} : { validator: objectReference(object, "validator")! }),
+    middleware: Object.freeze(objectReferenceArray(object, "middlewares")),
+    guards: Object.freeze(objectReferenceArray(object, "guards")),
+    useCases: Object.freeze(objectReferenceMap(object, "useCase")),
+    viewContext: usesHttpViewContext(object, aliases),
+  });
+}
+function describeHandler(
+  node: ts.Node,
+  source: ts.SourceFile,
+  aliases: ReadonlyMap<string, string>,
+  checker: ts.TypeChecker,
+): HandlerDescriptor | undefined {
+  node = unwrapExpression(node);
+  if (ts.isObjectLiteralExpression(node)) return inlineHandlerDescriptor(node, aliases);
+  const declarations = handlerDeclarations(node, checker);
+  for (const declaration of declarations) {
+    const descriptor = describeHandlerDeclaration(declaration, source, aliases, checker);
+    if (descriptor !== undefined) return descriptor;
+  }
+  return describeHandlerType(node, checker);
+}
+function describeHandlerDeclaration(
+  declaration: ts.Declaration,
+  source: ts.SourceFile,
+  aliases: ReadonlyMap<string, string>,
+  checker: ts.TypeChecker,
+): HandlerDescriptor | undefined {
+  if (ts.isFunctionDeclaration(declaration)) {
+    return Object.freeze({
+      kind: "function",
+      parameterCount: declaration.parameters.length,
+      ...EMPTY_HANDLER_OPTIONS,
+      viewContext: usesHttpViewContext(declaration, aliases),
+    });
+  }
+  if (ts.isVariableDeclaration(declaration)) {
+    const initializer = declaration.initializer === undefined ? undefined : unwrapExpression(declaration.initializer);
+    if (initializer !== undefined) {
+      if (ts.isArrowFunction(initializer) || ts.isFunctionExpression(initializer)) {
+        return Object.freeze({
+          kind: "function",
+          parameterCount: initializer.parameters.length,
+          ...EMPTY_HANDLER_OPTIONS,
+          viewContext: usesHttpViewContext(initializer, aliases),
+        });
+      }
+      if (ts.isObjectLiteralExpression(initializer)) return inlineHandlerDescriptor(initializer, aliasesForSource(initializer.getSourceFile(), aliases));
+      if (ts.isIdentifier(initializer) || ts.isPropertyAccessExpression(initializer)) {
+        const nested = describeHandler(initializer, source, aliases, checker);
+        if (nested !== undefined) return nested;
+      }
+    }
+    return describeHandlerType(declaration.name, checker);
+  }
+  return describeHandlerType(declaration, checker);
+}
+function unwrapExpression<TNode extends ts.Node>(node: TNode): ts.Node {
+  let current: ts.Node = node;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isSatisfiesExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+function describeHandlerType(node: ts.Node, checker: ts.TypeChecker): HandlerDescriptor | undefined {
+  const type = checker.getTypeAtLocation(node);
+  const hasMetadata = ["validator", "guards", "middlewares", "useCase", "run"].some((name) => type.getProperty(name) !== undefined);
+  const signatures = type.getCallSignatures();
+  if (signatures.length > 0) {
+    if (hasMetadata) return undefined;
+    return Object.freeze({ kind: "function", parameterCount: signatures[0]?.parameters.length ?? 0, ...EMPTY_HANDLER_OPTIONS });
+  }
+  const run = type.getProperty("run");
+  if (run === undefined) return undefined;
+  const declaration = run.valueDeclaration ?? run.declarations?.[0];
+  const runType = declaration === undefined ? checker.getTypeOfSymbol(run) : checker.getTypeOfSymbolAtLocation(run, declaration);
+  const runSignatures = runType.getCallSignatures();
+  if (runSignatures.length === 0) return undefined;
+  return Object.freeze({ kind: "object", parameterCount: runSignatures[0]?.parameters.length ?? 0, ...EMPTY_HANDLER_OPTIONS });
+}
+function handlerDeclarations(node: ts.Node, checker: ts.TypeChecker): readonly ts.Declaration[] {
+  const namespaceDeclaration = namespacePropertyDeclarations(node, checker);
+  if (namespaceDeclaration.length > 0) return namespaceDeclaration;
+  const target = ts.isPropertyAccessExpression(node) ? node.name : node;
+  if (!ts.isIdentifier(target)) return [];
+  const symbol = (ts.isPropertyAccessExpression(node) ? checker.getSymbolAtLocation(node) : undefined) ?? checker.getSymbolAtLocation(target);
+  const resolved = symbol !== undefined && (symbol.flags & ts.SymbolFlags.Alias) !== 0 ? checker.getAliasedSymbol(symbol) : symbol;
+  return resolved?.getDeclarations() ?? [];
+}
+function namespacePropertyDeclarations(node: ts.Node, checker: ts.TypeChecker): readonly ts.Declaration[] {
+  if (!ts.isPropertyAccessExpression(node) || !ts.isIdentifier(node.expression)) return [];
+  const namespaceSymbol = checker.getSymbolAtLocation(node.expression);
+  const namespaceDeclaration = namespaceSymbol?.declarations?.find(ts.isNamespaceImport);
+  if (namespaceDeclaration === undefined) return [];
+  const importDeclaration: ts.Node = namespaceDeclaration.parent.parent.parent;
+  if (!ts.isImportDeclaration(importDeclaration) || !ts.isStringLiteralLike(importDeclaration.moduleSpecifier)) return [];
+  const moduleSymbol = checker.getSymbolAtLocation(importDeclaration.moduleSpecifier);
+  const moduleSource = moduleSymbol?.declarations?.find(ts.isSourceFile);
+  if (moduleSource === undefined) return [];
+  const name = node.name.text;
+  const declarations: ts.Declaration[] = [];
+  for (const statement of moduleSource.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name?.text === name) declarations.push(statement);
+    if (!ts.isVariableStatement(statement)) continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (ts.isIdentifier(declaration.name) && declaration.name.text === name) declarations.push(declaration);
+    }
+  }
+  return declarations;
+}
+function aliasesForSource(source: ts.SourceFile, fallback: ReadonlyMap<string, string>): ReadonlyMap<string, string> {
+  return source === undefined ? fallback : collectAliases(source);
+}
+function runParameterCount(property: ts.ObjectLiteralElementLike | undefined): number | undefined {
+  if (property === undefined) return undefined;
+  if (ts.isMethodDeclaration(property)) return property.parameters.length;
+  if (ts.isPropertyAssignment(property) && (ts.isArrowFunction(property.initializer) || ts.isFunctionExpression(property.initializer))) return property.initializer.parameters.length;
+  return undefined;
 }
 function lastReferenceSegment(value: string): string {
   const dot = value.lastIndexOf(".");

@@ -39,7 +39,7 @@ export interface ControllerBindingPlan {
 }
 export type HandlerBindingPlan =
   | { readonly kind: "method"; readonly id: number; readonly controllerId: number; readonly method: string; readonly controller: BindingImport; readonly parameterCount: number }
-  | { readonly kind: "function"; readonly id: number; readonly graphId: number; readonly expression: CapturedBindingExpression; readonly parameterCount: number; readonly useCaseKeys: readonly string[]; readonly useCaseProviderIds: readonly number[] };
+  | { readonly kind: "function"; readonly id: number; readonly graphId: number; readonly handlerKind: "function" | "object"; readonly expression: CapturedBindingExpression; readonly parameterCount: number; readonly useCaseKeys: readonly string[]; readonly useCaseProviderIds: readonly number[] };
 export interface ExecutableBindingPlan {
   readonly providers: readonly ProviderBindingPlan[];
   readonly controllers: readonly ControllerBindingPlan[];
@@ -68,10 +68,21 @@ export function analyzeExecutableBindings(
   }
   const controllerOwners = new Map<string, { readonly graph: string; readonly controller: ControllerWIR }>();
   for (const graph of wir.graphs) for (const controller of graph.controllers) controllerOwners.set(`${graph.name}:${controller.name}`, { graph: graph.name, controller });
-  const handlerOwners = new Map<string, { readonly graph: string; readonly controller: ControllerWIR; readonly file: string; readonly handler: string; readonly expression?: CapturedExpressionWIR; readonly useCases: readonly HandlerUseCaseWIR[] }>();
+  const handlerOwners = new Map<string, { readonly graph: string; readonly controller: ControllerWIR; readonly file: string; readonly handler: string; readonly handlerKind?: "function" | "object"; readonly parameterCount?: number; readonly expression?: CapturedExpressionWIR; readonly useCases: readonly HandlerUseCaseWIR[] }>();
   for (const graph of wir.graphs) for (const controller of graph.controllers) {
-    for (const route of controller.routes) handlerOwners.set(`${graph.name}:${controller.name}.${route.handler}`, { graph: graph.name, controller, file: route.file, handler: route.handler, ...(route.handlerExpression === undefined ? {} : { expression: route.handlerExpression }), useCases: route.useCases });
-    for (const event of controller.socketEvents) handlerOwners.set(`${graph.name}:${controller.name}.${event.handler}`, { graph: graph.name, controller, file: event.file, handler: event.handler, useCases: event.useCases });
+    for (const route of controller.routes) handlerOwners.set(`${graph.name}:${controller.name}.${route.handler}`, {
+      graph: graph.name, controller, file: route.file, handler: route.handler,
+      ...(route.handlerKind === undefined ? {} : { handlerKind: route.handlerKind }),
+      ...(route.parameterCount === undefined ? {} : { parameterCount: route.parameterCount }),
+      ...(route.handlerExpression === undefined ? {} : { expression: route.handlerExpression }),
+      useCases: route.useCases,
+    });
+    for (const event of controller.socketEvents) handlerOwners.set(`${graph.name}:${controller.name}.${event.handler}`, {
+      graph: graph.name, controller, file: event.file, handler: event.handler,
+      ...(event.handlerKind === undefined ? {} : { handlerKind: event.handlerKind }),
+      ...(event.parameterCount === undefined ? {} : { parameterCount: event.parameterCount }),
+      useCases: event.useCases,
+    });
   }
 
   const imports = new Map<string, BindingImport>();
@@ -193,8 +204,9 @@ export function analyzeExecutableBindings(
         kind: "function",
         id: row.id,
         graphId,
+        handlerKind: handlerOwner.handlerKind ?? "object",
         expression,
-        parameterCount: handlerOwner.useCases.length === 0 ? 1 : 2,
+        parameterCount: handlerOwner.parameterCount ?? (handlerOwner.useCases.length === 0 ? 1 : 2),
         useCaseKeys: Object.freeze(handlerOwner.useCases.map((item) => item.key)),
         useCaseProviderIds: Object.freeze(useCaseProviderIds),
       }));
