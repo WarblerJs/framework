@@ -24,14 +24,12 @@ export async function generateSource(
 
 function createPlan(kind: GeneratorKind, name: string, base: string): GeneratedFilePlan {
   switch (kind) {
-    case "graph": return Object.freeze({ path: `src/graphs/${base}/${base}.graph.ts`, content: `import { defineHandler, defineHttpGraph, JsonRes } from "@warblerjs/framework";
+    case "graph": return Object.freeze({ path: `src/graphs/${base}/${base}.graph.ts`, content: `import { defineHttpGraph, JsonRes } from "@warblerjs/framework";
 
 const message = "${base}";
 
-const index = defineHandler({
-  run: () => JsonRes({
-    message,
-  }),
+const index = () => JsonRes({
+  message,
 });
 
 export default defineHttpGraph({

@@ -268,16 +268,16 @@ export default defineHttpGraph({
 });
 `);
     const handler = join(project.root, "src/graphs/home/presentation/http/handlers/home.handlers.ts");
-    const source = `import { defineHandler, defineValidator, JsonRes, v, type AppRequest } from "@warblerjs/framework";
+    const source = `import { defineValidator, JsonRes, v, type AppRequest } from "@warblerjs/framework";
 
 export const PayloadValidator = defineValidator({
   rules: { value: v.string("invalid_string").max(3, "too_long") },
 });
 
-export const index = defineHandler({
+export const index = {
   validator: PayloadValidator,
   run: (request: AppRequest<typeof PayloadValidator>) => JsonRes({ value: request.body.value }),
-});
+};
 `;
     await Bun.write(handler, source);
     let routes: Readonly<Record<string, Readonly<Record<string, (request: Request) => Response | Promise<Response>>>>> = Object.freeze({});
@@ -349,11 +349,8 @@ export const index = defineHandler({
 });
 
 function declarativeHandlerSource(version: number): string {
-  return `import { defineHandler } from "@warblerjs/core";
-import { JsonRes, type AppRequest } from "@warblerjs/http";
-export const getTest = defineHandler({
-  run: (_ctx: AppRequest) => JsonRes({ version: ${version} }),
-});
+  return `import { JsonRes } from "@warblerjs/http";
+export const getTest = () => JsonRes({ version: ${version} });
 `;
 }
 function forceGc(): void {

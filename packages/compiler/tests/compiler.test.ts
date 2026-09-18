@@ -137,11 +137,11 @@ describe("compiler foundation", () => {
 describe("validation diagnostics", () => {
   test("reports declarative graph key and placement errors with source coordinates", async () => {
     const root = await project(`
-      import { defineHandler, createApp } from "@warblerjs/core";
+      import { createApp } from "@warblerjs/core";
       import { defineHttpGraph } from "@warblerjs/http";
       import { defineWebSocketGraph } from "@warblerjs/websocket";
       const validator = {};
-      const handler = defineHandler({ run: (_ctx: unknown) => undefined });
+      const handler = { run: (_ctx: unknown) => new Response("ok") };
       export const http = defineHttpGraph({
         routes: {
           "GETW /test": handler,

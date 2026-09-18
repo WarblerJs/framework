@@ -158,11 +158,9 @@ The default architecture is `minimal`; the default transport is `http`.
 Prefer declarative Graphs over decorators for new code:
 
 ```ts
-import { defineHandler, defineHttpGraph, JsonRes } from "@warblerjs/framework";
+import { defineHttpGraph, JsonRes } from "@warblerjs/framework";
 
-export const index = defineHandler({
-  run: () => JsonRes({ message: "users" }),
-});
+export const index = () => JsonRes({ message: "users" });
 
 export default defineHttpGraph({
   prefix: "/api",
@@ -175,6 +173,82 @@ export default defineHttpGraph({
     },
   },
 });
+```
+
+### Handler DX
+
+Use a direct function when a route does not need handler metadata:
+
+```ts
+import { JsonRes } from "@warblerjs/framework";
+
+export const index = () =>
+  JsonRes({ message: "Warbler" });
+
+export const asyncIndex = async () =>
+  JsonRes({ message: "Warbler" });
+```
+
+Use a direct object when a handler needs a validator, guards, middleware, use cases, or other
+supported metadata:
+
+```ts
+import { JsonRes, defineValidator, v, type AppRequest } from "@warblerjs/framework";
+
+const validator = defineValidator({
+  paramsRules: {
+    id: v.string(),
+  },
+});
+
+export const show = {
+  validator,
+  run(request: AppRequest<typeof validator>) {
+    return JsonRes({ id: request.params.id });
+  },
+};
+```
+
+Graphs accept both forms naturally:
+
+```ts
+import { defineHttpGraph } from "@warblerjs/framework";
+import * as handlers from "./users.handlers";
+
+export default defineHttpGraph({
+  prefix: "/users",
+  routes: {
+    "GET /": {
+      name: "users.index",
+      handler: handlers.index,
+    },
+    "GET /:id": {
+      name: "users.show",
+      handler: handlers.show,
+    },
+  },
+});
+```
+
+Migration:
+
+```ts
+// Before
+export const index = defineHandler({
+  run: () => JsonRes({ message: "Warbler" }),
+});
+
+// After: simple handler
+export const index = () =>
+  JsonRes({ message: "Warbler" });
+
+// After: handler with metadata
+export const show = {
+  validator,
+  run(request: AppRequest<typeof validator>) {
+    return JsonRes(request.params);
+  },
+};
 ```
 
 Inline routes can use `defineHttpRoute()` when the route itself owns validation and you want
@@ -250,19 +324,18 @@ A handler can then use `AppRequest<typeof createUser>`:
 ```ts
 import {
   JsonRes,
-  defineHandler,
   type AppRequest,
 } from "@warblerjs/framework";
 import { createUser } from "./users.validators";
 
-export const store = defineHandler({
+export const store = {
   validator: createUser,
   run: (request: AppRequest<typeof createUser>) => JsonRes({
     accountId: request.params.accountId,
     tenant: request.headers["x-tenant"],
     email: request.body.email,
   }, { status: 201 }),
-});
+};
 ```
 
 Available field builders are `v.string()`, `v.number()`, `v.boolean()`, `v.date()`, `v.email()`,
@@ -318,11 +391,9 @@ Use `response: "text"` for simple text endpoints when you want the compiler/runt
 the lighter text response path:
 
 ```ts
-import { TextRes, defineHandler, defineHttpGraph } from "@warblerjs/framework";
+import { TextRes, defineHttpGraph } from "@warblerjs/framework";
 
-const health = defineHandler({
-  run: () => TextRes("ok"),
-});
+const health = () => TextRes("ok");
 
 export default defineHttpGraph({
   routes: {
@@ -344,7 +415,6 @@ import {
   JsonRes,
   Provider,
   Service,
-  defineHandler,
   defineHttpGraph,
   type AppRequest,
 } from "@warblerjs/framework";
@@ -356,14 +426,14 @@ class ListUsers {
   }
 }
 
-const index = defineHandler({
+const index = {
   useCase: {
     listUsers: ListUsers,
   },
   run: (_request: AppRequest, { listUsers }) => JsonRes({
     users: listUsers.execute(),
   }),
-});
+};
 
 export default defineHttpGraph({
   providers: [
@@ -620,11 +690,9 @@ hot reload, minification, script/style entries, Tailwind processing, and develop
 Use the HTTP `view()` helper rather than calling `View()` directly when rendering inside a request:
 
 ```ts
-import { defineHandler, view } from "@warblerjs/framework";
+import { view } from "@warblerjs/framework";
 
-export const page = defineHandler({
-  run: () => view("index", { title: "Warbler" }),
-});
+export const page = () => view("index", { title: "Warbler" });
 ```
 
 Mail config is read from `src/config/mail.config.ts` by `Email`. Built-in transports are `smtp`,
@@ -657,11 +725,11 @@ export default createApp({
 Declare socket events with `defineWebSocketGraph()`:
 
 ```ts
-import { defineHandler, defineWebSocketGraph } from "@warblerjs/framework";
+import { defineWebSocketGraph } from "@warblerjs/framework";
 
-const onOpen = defineHandler({
+const onOpen = {
   run: () => undefined,
-});
+};
 
 export default defineWebSocketGraph({
   prefix: "/chat",

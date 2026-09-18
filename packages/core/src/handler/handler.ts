@@ -1,52 +1,45 @@
 import type { Constructor } from "../types";
 
 export type MaybePromise<T> = T | Promise<T>;
+export type HandlerResult = Response | Promise<Response>;
 export type UseCaseMap = Readonly<Record<string, Constructor<object>>>;
 export type ResolvedUseCases<TUseCase extends UseCaseMap> = {
   readonly [TKey in keyof TUseCase]: TUseCase[TKey] extends Constructor<infer TValue> ? TValue : never;
 };
 
-interface HandlerBase {
+export interface HandlerMetadata {
   readonly validator?: unknown;
   readonly guards?: readonly unknown[];
   readonly middlewares?: readonly unknown[];
 }
 
-export type HandlerDefinitionWithoutUseCase<TContext, TResult> = HandlerBase & Readonly<{
+export type HandlerFunction<TRequest = unknown> =
+  (request: TRequest) => HandlerResult;
+
+export type HandlerObjectWithoutUseCase<TRequest = unknown> = HandlerMetadata & Readonly<{
   readonly useCase?: undefined;
-  readonly run: (context: TContext) => MaybePromise<TResult>;
+  readonly run: (request: TRequest) => HandlerResult;
 }>;
 
-export type HandlerDefinitionWithUseCase<TContext, TUseCase extends UseCaseMap, TResult> = HandlerBase & Readonly<{
+export type HandlerObjectWithUseCase<TRequest, TUseCase extends UseCaseMap> = HandlerMetadata & Readonly<{
   readonly useCase: TUseCase;
-  readonly run: (context: TContext, useCases: ResolvedUseCases<TUseCase>) => MaybePromise<TResult>;
+  readonly run: (request: TRequest, useCases: ResolvedUseCases<TUseCase>) => HandlerResult;
 }>;
 
-export type HandlerDefinition<
-  TContext = unknown,
+export type HandlerObject<
+  TRequest = unknown,
   TUseCase extends UseCaseMap | undefined = UseCaseMap | undefined,
-  TResult = unknown,
 > = TUseCase extends UseCaseMap
-  ? HandlerDefinitionWithUseCase<TContext, TUseCase, TResult>
-  : HandlerDefinitionWithoutUseCase<TContext, TResult>;
-type AnyHandlerDefinition = HandlerBase & Readonly<{
-  readonly useCase?: unknown;
-  readonly run: unknown;
-}>;
+  ? HandlerObjectWithUseCase<TRequest, TUseCase>
+  : HandlerObjectWithoutUseCase<TRequest>;
 
-/** Defines one transport-neutral handler while preserving the author's context and use-case types. */
-export function defineHandler<const TUseCase extends UseCaseMap, TContext, TResult>(
-  definition: HandlerDefinitionWithUseCase<TContext, TUseCase, TResult>,
-): Readonly<HandlerDefinitionWithUseCase<TContext, TUseCase, TResult>>;
-export function defineHandler<TContext, TResult>(
-  definition: HandlerDefinitionWithoutUseCase<TContext, TResult>,
-): Readonly<HandlerDefinitionWithoutUseCase<TContext, TResult>>;
-export function defineHandler(
-  definition: AnyHandlerDefinition,
-): Readonly<AnyHandlerDefinition> {
-  return Object.freeze({
-    ...definition,
-    ...(definition.guards === undefined ? {} : { guards: Object.freeze([...definition.guards]) }),
-    ...(definition.middlewares === undefined ? {} : { middlewares: Object.freeze([...definition.middlewares]) }),
-  });
-}
+export type Handler<TRequest = unknown> =
+  | HandlerFunction<TRequest>
+  | HandlerObject<TRequest>;
+
+/** @deprecated Use HandlerObject instead. */
+export type HandlerDefinition<TRequest = unknown> = HandlerObject<TRequest>;
+/** @deprecated Use HandlerObjectWithUseCase instead. */
+export type HandlerDefinitionWithUseCase<TRequest, TUseCase extends UseCaseMap> = HandlerObjectWithUseCase<TRequest, TUseCase>;
+/** @deprecated Use HandlerObjectWithoutUseCase instead. */
+export type HandlerDefinitionWithoutUseCase<TRequest = unknown> = HandlerObjectWithoutUseCase<TRequest>;

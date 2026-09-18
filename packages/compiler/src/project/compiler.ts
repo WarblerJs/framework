@@ -554,7 +554,6 @@ function isGraphShapingSignature(signature: string): boolean {
     signature.includes("@Injectable") ||
     signature.includes("defineHttpGraph") ||
     signature.includes("defineWebSocketGraph") ||
-    signature.includes("defineHandler") ||
     signature.includes("defineValidator") ||
     signature.includes("createApp") ||
     signature.includes("inject:");

@@ -16,6 +16,8 @@ export interface RouteWIR extends SourceLocationWIR {
   /** Logical route name (`{name: "users.show"}`) resolved by the `route()` view built-in. */
   readonly name?: string;
   readonly handler: string;
+  readonly handlerKind?: "function" | "object";
+  readonly parameterCount?: number;
   readonly handlerExpression?: CapturedExpressionWIR;
   readonly validator?: string;
   readonly middleware: readonly string[];
@@ -31,6 +33,8 @@ export interface SocketEventWIR extends SourceLocationWIR {
   readonly kind: "event" | "lifecycle";
   readonly event: string;
   readonly handler: string;
+  readonly handlerKind?: "function" | "object";
+  readonly parameterCount?: number;
   readonly validator?: string;
   readonly middleware: readonly string[];
   readonly guards: readonly string[];

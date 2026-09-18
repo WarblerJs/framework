@@ -129,7 +129,6 @@ Application templates import stable public APIs from the façade:
 ```ts
 import {
   defineHttpGraph,
-  defineHandler,
   defineValidator,
   v,
 } from "@warblerjs/framework";

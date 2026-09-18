@@ -7,7 +7,6 @@ Application code should import stable framework contracts from this package:
 ```ts
 import {
   defineHttpGraph,
-  defineHandler,
   defineValidator,
   v,
   Provider,

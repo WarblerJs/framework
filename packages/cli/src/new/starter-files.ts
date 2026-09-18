@@ -255,13 +255,11 @@ export default defineHttpGraph({
 }
 
 function homeHandlers(): string {
-  return `import { defineHandler, JsonRes } from "@warblerjs/framework";
+  return `import { JsonRes } from "@warblerjs/framework";
 
 const message = "Warbler";
 
-export const index = defineHandler({
-  run: () => JsonRes({ message }),
-});
+export const index = () => JsonRes({ message });
 `;
 }
 
@@ -322,7 +320,7 @@ import { index } from "../src/graphs/home/presentation/http/handlers/home.handle
 
 describe("starter app", () => {
   test("home handler returns the default JSON response", async () => {
-    const response = await index.run({});
+    const response = await index();
     expect(response).toBeInstanceOf(Response);
     expect(await response.json()).toEqual({ message: "Warbler" });
   });

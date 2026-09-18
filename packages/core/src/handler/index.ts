@@ -1,5 +1,11 @@
 export {
-  defineHandler,
+  type Handler,
+  type HandlerFunction,
+  type HandlerMetadata,
+  type HandlerObject,
+  type HandlerObjectWithUseCase,
+  type HandlerObjectWithoutUseCase,
+  type HandlerResult,
   type HandlerDefinition,
   type HandlerDefinitionWithUseCase,
   type HandlerDefinitionWithoutUseCase,

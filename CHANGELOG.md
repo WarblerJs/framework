@@ -4,6 +4,12 @@ All notable repository-level release changes are recorded here.
 
 This project follows Semantic Versioning as defined in [docs/VERSIONING.md](./docs/VERSIONING.md).
 
+## 0.7.0
+
+### Changed
+
+- Breaking: HTTP handlers now use direct functions for simple routes and direct objects with a callable `run` property for metadata-bearing routes. The public `defineHandler` helper has been removed.
+
 ## 0.6.0
 
 ### Added

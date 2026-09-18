@@ -116,12 +116,11 @@ describe("Phase 2 optimization", () => {
       });
     `);
     await Bun.write(join(root, "src", "handlers.ts"), `
-      import { defineHandler } from "@warblerjs/core";
       import { JsonRes, csrf, view } from "@warblerjs/http";
 
-      export const getHome = defineHandler({ run: () => view("index") });
-      export const getCsrf = defineHandler({ run: () => JsonRes({ token: csrf().token }) });
-      export const getJson = defineHandler({ run: () => JsonRes({ ok: true }) });
+      export const getHome = () => view("index");
+      export const getCsrf = () => JsonRes({ token: csrf().token });
+      export const getJson = () => JsonRes({ ok: true });
     `);
 
     const optimized = (await compileProject(root)).generatedApplication!.optimized;
@@ -130,6 +129,80 @@ describe("Phase 2 optimization", () => {
     expect(route("/csrf").flags & RouteFlag.VIEW_CONTEXT).not.toBe(0);
     expect(route("/inline").flags & RouteFlag.VIEW_CONTEXT).not.toBe(0);
     expect(route("/json").flags & RouteFlag.VIEW_CONTEXT).toBe(0);
+  }, 15_000);
+
+  test("normalizes direct function and object handlers in generated bindings", async () => {
+    const root = await phase2Project();
+    await Bun.write(join(root, "src", "application.ts"), `
+      import { createApp } from "@warblerjs/core";
+      import { defineHttpGraph } from "@warblerjs/http";
+      import * as handlers from "./handlers";
+      import { aliasedShow } from "./reexports";
+
+      const http = defineHttpGraph({
+        routes: {
+          "GET /": { handler: handlers.index, response: "json" },
+          "GET /alias/:id": { handler: aliasedShow, response: "json" },
+          "GET /object/:id": { handler: handlers.show, response: "json" },
+        },
+      });
+
+      export default createApp({ graphs: [http] });
+    `);
+    await Bun.write(join(root, "src", "handlers.ts"), `
+      throw new Error("handler module executed during analysis");
+      import { JsonRes, type AppRequest } from "@warblerjs/http";
+      import { defineValidator, v } from "@warblerjs/validators";
+
+      export const validator = defineValidator({
+        paramRules: { id: v.string() },
+      });
+
+      export const index = () => JsonRes({ ok: true });
+      export const show = {
+        validator,
+        run(request: AppRequest<typeof validator>) {
+          return JsonRes({ id: request.params.id });
+        },
+      };
+    `);
+    await Bun.write(join(root, "src", "reexports.ts"), `
+      export { show as aliasedShow } from "./handlers";
+    `);
+
+    const context = await compileProject(root, { semanticDiagnostics: false });
+    expect(context.diagnostics.filter((item) => item.code.startsWith("WARBLER_BINDING"))).toEqual([]);
+    const optimized = context.generatedApplication!.optimized;
+    expect(optimized.validators).toHaveLength(1);
+    const handlers = await Bun.file(join(root, ".warbler", "generated", "handlers.generated.ts")).text();
+    expect(handlers).toContain("Object.freeze({ run:");
+    expect(handlers).toContain(".run(...input)");
+    expect(handlers).not.toContain("typeof Handler0 ===");
+    expect(handlers).not.toContain("typeof handler ===");
+  }, 15_000);
+
+  test("reports unsupported declarative handler values without executing modules", async () => {
+    const root = await phase2Project();
+    await Bun.write(join(root, "src", "application.ts"), `
+      import { createApp } from "@warblerjs/core";
+      import { defineHttpGraph } from "@warblerjs/http";
+
+      const unsupported = 123;
+      const http = defineHttpGraph({
+        routes: {
+          "GET /bad": unsupported,
+        },
+      });
+
+      export default createApp({ graphs: [http] });
+    `);
+
+    const context = await compileProject(root, { semanticDiagnostics: false });
+    expect(context.diagnostics).toContainEqual(expect.objectContaining({
+      code: "WARBLER1008",
+      message: expect.stringContaining("Use either a direct function or an object with a callable run property"),
+    }));
+    expect(context.generatedApplication?.optimized.routes).toHaveLength(0);
   }, 15_000);
 
   test("flattens HTTP middleware scopes once in effective route order", async () => {
